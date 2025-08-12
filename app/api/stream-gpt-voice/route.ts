@@ -27,6 +27,39 @@ async function getElevenLabsClient() {
   }
 }
 
+// Helper functions for behavioral modifiers
+function getDifficultyModifier(difficulty: number): string {
+  const modifiers = {
+    1: "You are very cooperative and eager to share information. You're interested in solutions and rarely object.",
+    2: "You are somewhat cooperative but need good questions to open up. You have some concerns but are willing to listen.",
+    3: "You are moderately cooperative. You share information when asked directly and have realistic concerns about new solutions.",
+    4: "You are somewhat guarded and skeptical. You need convincing before sharing sensitive information and raise multiple objections.",
+    5: "You are very guarded and skeptical. You're protective of information and frequently challenge claims with strong objections."
+  };
+  return `COOPERATION LEVEL: ${modifiers[difficulty as keyof typeof modifiers] || modifiers[3]}`;
+}
+
+function getSeniorityModifier(seniority: string): string {
+  const modifiers = {
+    'junior': "You are early in your career. You're eager but often need to check with your manager on decisions. You focus on day-to-day operational concerns.",
+    'manager': "You manage a team and handle tactical decisions. You think about team productivity and departmental goals. You can recommend purchases but may need approval for large expenditures.",
+    'director': "You oversee multiple teams or a department. You think strategically about business impact and ROI. You have significant decision-making authority but consider how initiatives align with company goals.",
+    'vp': "You're a senior executive focused on strategic initiatives and business transformation. You think about competitive advantage and market position. Your time is very limited and valuable.",
+    'c-level': "You're an executive focused on company-wide strategy, market positioning, and shareholder value. You think in terms of business transformation and competitive differentiation. You have ultimate decision-making authority but limited time."
+  };
+  return `SENIORITY BEHAVIOR: ${modifiers[seniority as keyof typeof modifiers] || modifiers['manager']}`;
+}
+
+function getCallTypeModifier(callType: string): string {
+  const modifiers = {
+    'inbound': "You reached out or expressed interest, so you're somewhat receptive but still need to be convinced of value.",
+    'outbound': "This is a cold call or unexpected contact. You're busy and need to be quickly convinced this is worth your time.",
+    'referral': "You were referred by someone you trust, so you're more open to the conversation but still need to see value.",
+    'follow-up': "You've spoken before and have some context. You remember previous conversations and expect progression."
+  };
+  return `CALL CONTEXT: ${modifiers[callType as keyof typeof modifiers] || modifiers['outbound']}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Handle CORS
@@ -51,20 +84,39 @@ export async function POST(req: NextRequest) {
             return errorResponse('transcript and scenarioPrompt are required');
           }
 
-          // Don't respond to very short or unclear messages
+          // Enhanced transcript validation for natural conversation flow
           const cleanTranscript = transcript.trim();
-          if (cleanTranscript.length < 5) {
-            console.log('Transcript too short, not responding:', cleanTranscript);
-            return;
-          }
-
-          // Check if the user is asking a question (ends with ? or starts with question words)
-          const questionWords = ['what', 'how', 'why', 'when', 'where', 'who', 'which', 'can you', 'could you', 'would you', 'do you', 'are you'];
-          const isQuestion = cleanTranscript.includes('?') || questionWords.some(word => cleanTranscript.toLowerCase().startsWith(word));
           
-          if (isQuestion) {
-            console.log('User asked a question, ensuring AI provides a direct answer');
+          // Don't respond to very short messages
+          if (cleanTranscript.length < 4) {
+            console.log('Transcript too short, not responding:', cleanTranscript);
+            return errorResponse('Transcript too short for meaningful response');
           }
+          
+          // Filter out fragments and incomplete thoughts
+          const isValidTranscript = () => {
+            // Check for minimum word count (complete thoughts typically have 2+ words)
+            const words = cleanTranscript.split(' ');
+            if (words.length < 2) return false;
+            
+            // Filter out common filler phrases that don't warrant responses
+            const fillerPhrases = [
+              /^(um|uh|er|ah)$/i,
+              /^(hmm|mm|mhm)$/i
+            ];
+            
+            const isJustFiller = fillerPhrases.some(pattern => pattern.test(cleanTranscript));
+            if (isJustFiller) return false;
+            
+            return true;
+          };
+          
+          if (!isValidTranscript()) {
+            console.log('Transcript is fragment or filler, not responding:', cleanTranscript);
+            return errorResponse('Transcript appears to be incomplete');
+          }
+          
+          console.log('Processing valid transcript:', cleanTranscript);
 
     // Set up SSE response
     const encoder = new TextEncoder();
@@ -90,32 +142,52 @@ export async function POST(req: NextRequest) {
           console.log('Limited conversation history being sent:', convertedHistory);
           console.log('Current transcript:', transcript);
 
-          // Build conversation context
+          // Build conversation context with user scenario as primary prompt
+          const buildSystemPrompt = () => {
+            // Parse additional parameters for behavioral modifiers
+            const { difficulty = 3, seniority = 'manager', callType = 'outbound' } = persona || {};
+            
+            // Behavioral modifiers based on parameters
+            const difficultyModifier = getDifficultyModifier(difficulty);
+            const seniorityModifier = getSeniorityModifier(seniority);
+            const callTypeModifier = getCallTypeModifier(callType);
+            
+            return `YOU ARE THE PROSPECT/CUSTOMER, NOT THE SALESPERSON.
+
+You are being contacted by a sales representative. Your role is to act as the potential customer/prospect that they are trying to sell to.
+
+SCENARIO CONTEXT:
+${scenarioPrompt}
+
+${difficultyModifier}
+
+${seniorityModifier}
+
+${callTypeModifier}
+
+CRITICAL INSTRUCTIONS:
+- You are the PROSPECT/CUSTOMER being sold to
+- The human user is the SALES REP trying to sell to you
+- NEVER act as a salesperson or ask about their business strategies
+- Respond as someone who might be interested in THEIR product/service
+- Ask questions about what THEY are offering YOU
+- Stay in character as the person described in the scenario
+- React naturally to their sales pitch
+
+REMEMBER: You are the one being sold to, not the one selling!`;
+          };
+
           const messages = [
             {
               role: 'system' as const,
-              content: `You are a prospect in a sales call. The sales rep is asking YOU questions. You answer them.
-
-CRITICAL RULES:
-1. You are the CUSTOMER, not the salesperson
-2. You ANSWER questions, you don't ask them
-3. Keep responses short (1-2 sentences max)
-4. Be direct and honest
-5. Don't ask the sales rep questions
-6. Don't try to sell anything
-
-Example responses:
-- "We're a mid-size tech company with about 200 employees."
-- "Our biggest challenge is slow customer support response times."
-- "We have about $30K budgeted for this quarter."
-- "I'm the IT manager, but the VP makes final decisions."
-
-Scenario: ${scenarioPrompt}`
+              content: buildSystemPrompt()
             },
             ...convertedHistory,
             {
               role: 'user' as const,
-              content: `Latest rep message: ${transcript}`
+              content: `The sales representative calling you just said: "${transcript}"
+
+You are the prospect receiving this sales call. Respond naturally as the character described in the scenario.`
             }
           ];
 
@@ -125,11 +197,11 @@ Scenario: ${scenarioPrompt}`
           const completion = await openai.chat.completions.create({
             model: 'gpt-4o',
             messages,
-            max_tokens: 60, // Even shorter responses to prevent monologuing
-            temperature: 0.9, // More natural variation in responses
+            max_tokens: 300, // Allow for natural conversation length
+            temperature: 0.8, // Natural variation while maintaining consistency
             stream: true,
-            presence_penalty: 0.1, // Slightly discourage repetition
-            frequency_penalty: 0.1, // Slightly discourage repetitive phrases
+            presence_penalty: 0.3, // Encourage diverse responses
+            frequency_penalty: 0.2, // Prevent repetitive patterns
           });
           
           console.log('OpenAI streaming response received');
@@ -141,10 +213,7 @@ Scenario: ${scenarioPrompt}`
           // Log the full response at the end
           const logFullResponse = () => {
             console.log('FULL AI RESPONSE:', fullResponse);
-            console.log('RESPONSE ANALYSIS:');
-            console.log('- Contains question mark:', fullResponse.includes('?'));
-            console.log('- Contains question words:', questionWords.some(word => fullResponse.toLowerCase().includes(word)));
-            console.log('- Length:', fullResponse.length);
+            console.log('RESPONSE LENGTH:', fullResponse.length);
           };
 
           // Process streaming response
@@ -154,20 +223,7 @@ Scenario: ${scenarioPrompt}`
               fullResponse += content;
               currentSentence += content;
 
-              // Check if AI is trying to ask a question (which it shouldn't)
-              const questionWords = ['what', 'how', 'why', 'when', 'where', 'who', 'which', 'can you', 'could you', 'would you', 'do you', 'are you'];
-              const isAskingQuestion = questionWords.some(word => currentSentence.toLowerCase().includes(word)) && currentSentence.includes('?');
-              
-              if (isAskingQuestion) {
-                console.log('WARNING: AI is trying to ask a question, stopping response');
-                // Send error and stop
-                const errorData = {
-                  type: 'error',
-                  error: 'AI attempted to ask a question instead of answering'
-                };
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
-                return;
-              }
+              // Allow natural conversation flow - prospects can ask clarifying questions
 
               // Check if we have a complete sentence or phrase
               const sentenceEndings = ['.', '!', '?', ':', ';'];
@@ -237,12 +293,23 @@ Scenario: ${scenarioPrompt}`
                     console.log('AudioResult type:', typeof audioResult);
                     console.log('AudioResult keys:', audioResult ? Object.keys(audioResult) : 'null/undefined');
 
-                    if (audioResult.status !== 'ok') {
+                    // Fix: Check if audioResult exists and has status property
+                    if (!audioResult) {
+                      throw new Error('ElevenLabs returned empty response');
+                    }
+                    
+                    // Some ElevenLabs clients might not return a status property
+                    if (audioResult.status && audioResult.status !== 'ok') {
                       throw new Error(`ElevenLabs returned status: ${audioResult.status}`);
+                    }
+                    
+                    // Check if the file was actually created
+                    const fs = require('fs');
+                    if (!fs.existsSync(`chunk_${sentenceCount}.mp3`)) {
+                      throw new Error('Audio file was not created by ElevenLabs');
                     }
 
                     // Read the generated audio file
-                    const fs = require('fs');
                     const audioBuffer = fs.readFileSync(`chunk_${sentenceCount}.mp3`);
                     console.log('Audio file read, buffer length:', audioBuffer.length);
 
@@ -355,27 +422,40 @@ Scenario: ${scenarioPrompt}`
                   useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
                 });
 
-                if (audioResult.status === 'ok') {
-                  // Read the generated audio file
-                  const fs = require('fs');
-                  const audioBuffer = fs.readFileSync(`final_chunk_${sentenceCount}.mp3`);
-                  
-                  const audioBase64 = audioBuffer.toString('base64');
-                  const audioData = {
-                    type: 'audio_chunk',
-                    audioUrl: `data:audio/mpeg;base64,${audioBase64}`,
-                    chunkId: sentenceCount,
-                    text: currentSentence.trim()
-                  };
+                // Fix: Check if audioResult exists and has valid response
+                if (!audioResult) {
+                  throw new Error('ElevenLabs returned empty response for final chunk');
+                }
+                
+                // Some ElevenLabs clients might not return a status property
+                if (audioResult.status && audioResult.status !== 'ok') {
+                  throw new Error(`ElevenLabs returned status for final chunk: ${audioResult.status}`);
+                }
+                
+                // Check if the file was actually created
+                const fs = require('fs');
+                if (!fs.existsSync(`final_chunk_${sentenceCount}.mp3`)) {
+                  throw new Error('Final audio file was not created by ElevenLabs');
+                }
+                
+                // File exists, so we can read it
+                const audioBuffer = fs.readFileSync(`final_chunk_${sentenceCount}.mp3`);
+                
+                const audioBase64 = audioBuffer.toString('base64');
+                const audioData = {
+                  type: 'audio_chunk',
+                  audioUrl: `data:audio/mpeg;base64,${audioBase64}`,
+                  chunkId: sentenceCount,
+                  text: currentSentence.trim()
+                };
 
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
-                  
-                  // Clean up the temporary file
-                  try {
-                    fs.unlinkSync(`final_chunk_${sentenceCount}.mp3`);
-                  } catch (cleanupError) {
-                    console.warn('Failed to cleanup final audio file:', cleanupError);
-                  }
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
+                
+                // Clean up the temporary file
+                try {
+                  fs.unlinkSync(`final_chunk_${sentenceCount}.mp3`);
+                } catch (cleanupError) {
+                  console.warn('Failed to cleanup final audio file:', cleanupError);
                 }
               } catch (voiceError) {
                 console.error('Voice generation failed for final chunk:', voiceError);

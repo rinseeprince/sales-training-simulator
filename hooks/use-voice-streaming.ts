@@ -185,9 +185,54 @@ export function useVoiceStreaming() {
         break;
         
       case 'error':
-      case 'voice_error':
         setError(chunk.error || 'An error occurred during streaming');
         setStreamingState('waiting-for-rep');
+        break;
+        
+      case 'voice_error':
+        console.log('Voice error received:', chunk.error);
+        
+        // Check if we should use speech synthesis fallback
+        if (chunk.fallbackToSpeechSynthesis && chunk.text) {
+          console.log('Using speech synthesis fallback for:', chunk.text);
+          
+          // Use browser's speech synthesis as fallback
+          if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(chunk.text);
+            utterance.rate = 0.9; // Slightly slower for clarity
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+            
+            utterance.onend = () => {
+              console.log('Speech synthesis finished');
+              setStreamingState('waiting-for-rep');
+            };
+            
+            utterance.onerror = (error) => {
+              console.error('Speech synthesis error:', error);
+              setStreamingState('waiting-for-rep');
+            };
+            
+            speechSynthesis.speak(utterance);
+            setStreamingState('speaking');
+            
+            // Add AI message to conversation history
+            const aiMessage: ConversationMessage = {
+              role: 'ai',
+              content: chunk.text,
+              timestamp: new Date().toISOString()
+            };
+            setConversationHistory(prev => [...prev, aiMessage]);
+            setCurrentAIText('');
+          } else {
+            console.warn('Speech synthesis not supported in this browser');
+            setError('Voice generation failed and speech synthesis not available');
+            setStreamingState('waiting-for-rep');
+          }
+        } else {
+          setError(chunk.error || 'Voice generation failed');
+          setStreamingState('waiting-for-rep');
+        }
         break;
     }
   }, [queueAudio]);
@@ -220,7 +265,7 @@ export function useVoiceStreaming() {
 
       console.log('Starting streaming with request:', requestBody);
 
-      // Create EventSource for SSE
+      // Create EventSource for SSE - using updated API that prioritizes user prompts
       const response = await fetch('/api/stream-gpt-voice', {
         method: 'POST',
         headers: {

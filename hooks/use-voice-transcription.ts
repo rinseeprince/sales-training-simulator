@@ -18,7 +18,7 @@ export interface TranscriptionChunk {
 export function useVoiceTranscription(config: TranscriptionConfig = {}) {
   const {
     useWhisper = false,
-    chunkDuration = 5000, // 5 seconds
+    chunkDuration = 6000, // 6 seconds for more complete thoughts
     language = 'en',
     continuous = true,
     pauseDuringAISpeech = true // Default to true to prevent feedback loops

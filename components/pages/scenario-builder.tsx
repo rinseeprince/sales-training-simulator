@@ -106,6 +106,18 @@ export function ScenarioBuilder() {
             voice: scenarioData.voice,
             enableStreaming: scenarioData.enableStreaming,
             difficulty: scenarioData.difficulty[0]
+          },
+          // New AI Engine fields
+          persona_config: {
+            level: scenarioData.seniority || 'manager',
+            personalityTraits: ['professional', 'analytical']
+          },
+          difficulty_level: scenarioData.difficulty[0],
+          call_type: scenarioData.callType || 'discovery-outbound',
+          voice_settings: {
+            voiceId: scenarioData.voice || 'professional-male',
+            stability: 0.75,
+            similarityBoost: 0.75
           }
         }),
       })
@@ -150,7 +162,7 @@ export function ScenarioBuilder() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Scenario Builder</h1>
             <p className="text-muted-foreground mt-2">
-              Create custom sales training scenarios with AI-powered prospects
+              Create your sales scenario to start a live simulation with AI-powered prospects
             </p>
           </div>
           <div className="flex space-x-2">

@@ -41,6 +41,8 @@ export function LiveSimulation() {
   const [callId, setCallId] = useState<string>('')
   const [scenarioId, setScenarioId] = useState<string>('')
   const [scenarioData, setScenarioData] = useState<ScenarioData | null>(null)
+  const [isProcessingEndCall, setIsProcessingEndCall] = useState(false)
+  const [analysisProgress, setAnalysisProgress] = useState<string>('')
   
   // Load scenario data from localStorage
   useEffect(() => {
@@ -48,71 +50,37 @@ export function LiveSimulation() {
     if (savedScenario) {
       try {
         const parsed = JSON.parse(savedScenario)
-        setScenarioData(parsed)
-        console.log('Loaded scenario data:', parsed)
+        
+        // Check if scenario data is recent (within last hour)
+        const isRecent = parsed.timestamp && (Date.now() - parsed.timestamp) < 3600000
+        
+        if (isRecent) {
+          setScenarioData(parsed)
+          console.log('Loaded scenario data:', parsed)
+        } else {
+          // Scenario data is stale, clear it and redirect
+          localStorage.removeItem('currentScenario')
+          router.push('/scenario-builder')
+          return
+        }
       } catch (error) {
         console.error('Failed to parse scenario data:', error)
-        // Fallback to default scenario
-        setScenarioData({
-          title: 'Default Sales Scenario',
-          prompt: "You are a potential customer in a sales roleplay scenario. Respond naturally and realistically to the sales representative. Keep responses conversational and appropriate.",
-          callType: 'discovery-outbound',
-          difficulty: 3,
-          seniority: 'manager',
-          duration: '20',
-          voice: 'professional-male',
-          enableStreaming: true,
-          timestamp: Date.now()
-        })
+        // Clear invalid scenario data and redirect to builder
+        localStorage.removeItem('currentScenario')
+        router.push('/scenario-builder')
+        return
       }
     } else {
       // No scenario data, redirect back to builder
       router.push('/scenario-builder')
+      return
     }
   }, [router])
 
-  // Generate enhanced scenario prompt based on parameters
-  const generateEnhancedPrompt = (basePrompt: string, data: ScenarioData) => {
-    const difficultyLevels = {
-      1: 'very cooperative, shares information freely, minimal pushback',
-      2: 'somewhat cooperative, shares basic information, some hesitation',
-      3: 'moderately cooperative, shares relevant info, asks for clarification when needed',
-      4: 'somewhat guarded, shares info selectively, asks many clarifying questions',
-      5: 'very guarded, shares minimal info, requires significant trust-building'
-    }
-
-    const seniorityLevels = {
-      'junior': 'junior employee, handles day-to-day tasks, focused on immediate needs and budget constraints',
-      'manager': 'middle manager, manages team operations, focused on efficiency and departmental goals',
-      'director': 'director-level, oversees strategic initiatives, focused on ROI and team performance',
-      'vp': 'VP-level executive, manages company-wide initiatives, focused on business impact and long-term strategy',
-      'c-level': 'C-level executive, drives business transformation, focused on competitive advantage and growth'
-    }
-
-    const callTypeContexts = {
-      'discovery-outbound': 'This is an outbound discovery call. You were not expecting this call but are open to learning about solutions that might help your business.',
-      'discovery-inbound': 'This is an inbound discovery call. You showed some initial interest and are exploring if this solution fits your needs.',
-      'elevator-pitch': 'This is a brief pitch scenario. You have limited time and need to quickly understand if this is relevant.',
-      'objection-handling': 'This is an objection handling practice. You have specific concerns that need to be addressed.'
-    }
-
-    return `You are a ${data.seniority} level prospect in a sales discovery call. 
-
-YOUR ROLE: You are the CUSTOMER being called by a sales representative. You answer their discovery questions about your business, challenges, and needs.
-
-YOUR BEHAVIOR:
-- ${difficultyLevels[data.difficulty as keyof typeof difficultyLevels] || difficultyLevels[3]}
-- ${seniorityLevels[data.seniority as keyof typeof seniorityLevels] || seniorityLevels.manager}
-- ${callTypeContexts[data.callType as keyof typeof callTypeContexts] || callTypeContexts['discovery-outbound']}
-
-RESPONSE STYLE:
-- Answer questions naturally and conversationally
-- Share relevant information about your business when asked
-- Be honest about challenges, goals, and constraints
-- Keep responses concise (1-2 sentences typically)
-- Don't ask questions - just answer what you're asked
-
-REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
+  // Use the scenario prompt directly as written by the user (ChatGPT-like)
+  const generateScenarioPrompt = (basePrompt: string, data: ScenarioData) => {
+    // Return the user's prompt directly - this is the key to ChatGPT-like behavior
+    return basePrompt;
   }
   
   // Scenario configuration with enhanced prompt
@@ -143,8 +111,12 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
       };
       
       scenarioConfig.current = {
-        scenarioPrompt: generateEnhancedPrompt(scenarioData.prompt, scenarioData),
-        persona: scenarioData.seniority ? `${scenarioData.seniority} Level Prospect` : 'Potential Customer',
+        scenarioPrompt: generateScenarioPrompt(scenarioData.prompt, scenarioData),
+        persona: {
+          difficulty: scenarioData.difficulty || 3,
+          seniority: scenarioData.seniority || 'manager',
+          callType: scenarioData.callType || 'outbound'
+        },
         voiceSettings: {
           voiceId: voiceMap[scenarioData.voice] || '21m00Tcm4TlvDq8ikWAM',
           stability: 0.5,
@@ -206,7 +178,7 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
     getLatestChunk,
   } = useVoiceTranscription({
     useWhisper: true,
-    chunkDuration: 3000, // Shorter chunks for more responsive transcription
+    chunkDuration: 6000, // Longer chunks for complete thoughts
     language: 'en',
     continuous: true,
     pauseDuringAISpeech: true
@@ -244,32 +216,31 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
         setUserHasSpoken(true)
         const transcript = latestChunk.text.trim();
         
-        // Only respond to complete, meaningful sentences
-        const isCompleteSentence = transcript.length > 10 && 
-          (transcript.endsWith('.') || transcript.endsWith('?') || transcript.endsWith('!')) &&
-          !transcript.startsWith('is to') && 
-          !transcript.startsWith('and') &&
-          !transcript.startsWith('but') &&
-          !transcript.startsWith('so') &&
-          !transcript.startsWith('then') &&
-          !transcript.startsWith('well') &&
-          !transcript.startsWith('um') &&
-          !transcript.startsWith('uh');
+        // Balanced validation for natural conversation flow
+        console.log('Processing transcript:', transcript);
+        console.log('Transcript length:', transcript.length, 'words:', transcript.split(' ').length);
         
-        if (!isCompleteSentence) {
-          console.log('Skipping incomplete transcript:', transcript);
+        // Basic validation - ensure meaningful input
+        if (transcript.length < 4) {
+          console.log('Skipping short transcript:', transcript);
           return;
         }
         
-        // Check if this is actually something that needs a response
-        const questionWords = ['what', 'how', 'why', 'when', 'where', 'who', 'which', 'can you', 'could you', 'would you', 'do you', 'are you', 'tell me', 'explain', 'describe'];
-        const isQuestion = questionWords.some(word => transcript.toLowerCase().includes(word)) || transcript.includes('?');
-        const isStatement = transcript.length > 15 && !transcript.startsWith('um') && !transcript.startsWith('uh');
-        
-        if (!isQuestion && !isStatement) {
-          console.log('Skipping non-question/non-statement:', transcript);
+        // Filter out obvious filler words and incomplete thoughts
+        const words = transcript.split(' ');
+        if (words.length < 2) {
+          console.log('Skipping single word or fragment:', transcript);
           return;
         }
+        
+        // Skip obvious filler sounds 
+        const justFiller = /^(um|uh|er|ah|mm|hmm)$/i.test(transcript.trim());
+        if (justFiller) {
+          console.log('Skipping filler sound:', transcript);
+          return;
+        }
+        
+        console.log('Transcript passed validation, will attempt AI response');
         
         // CRITICAL: Only allow AI to respond if user has spoken first
         if (!userHasSpoken) {
@@ -284,10 +255,11 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
           clearTimeout(silenceTimeoutRef.current);
         }
         
-        // Wait for a brief silence period to ensure user is done speaking
+        // Wait for natural conversation pause to ensure user is done speaking
         silenceTimeoutRef.current = setTimeout(() => {
           if (isRecording && !isStreaming) {
-            console.log('Silence period ended, starting AI response with transcript:', latestChunk.text);
+            console.log('Natural conversation pause detected, starting AI response with transcript:', latestChunk.text);
+            console.log('Response timing: User finished speaking, waited for natural pause, now AI will respond');
             // Pause transcription before starting AI response
             pauseTranscription();
             // Start streaming with the transcribed text
@@ -298,7 +270,7 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
             });
           }
           silenceTimeoutRef.current = null;
-        }, 1500); // Wait 1.5 seconds of silence before responding
+        }, 3500); // Wait 3.5 seconds of silence before responding - allows for natural thinking pauses
       }
     }
   }, [transcriptionChunks, getLatestChunk, startStreaming, isStreaming, pauseTranscription, isRecording]);
@@ -358,8 +330,9 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
       console.log('Generated call ID (UUID):', newCallId)
       setCallId(newCallId)
       
-      // Generate scenario ID (for demo purposes)
-      const newScenarioId = `scenario_${Date.now()}`
+      // Generate scenario ID as UUID
+      const newScenarioId = crypto.randomUUID()
+      console.log('Generated scenario ID (UUID):', newScenarioId)
       setScenarioId(newScenarioId)
       
       // Start audio recording
@@ -391,6 +364,18 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
       conversationHistoryLength: conversationHistory.length
     });
     
+    // Prevent multiple calls - check if already processing or not recording
+    if (!isRecording || isProcessingEndCall) {
+      console.log('Call already ended, not recording, or already processing, ignoring');
+      return;
+    }
+    
+    // Immediately set states to prevent multiple calls
+    setIsProcessingEndCall(true);
+    setIsRecording(false);
+    setIsPaused(false);
+    setAnalysisProgress('Stopping recording...');
+    
     try {
       // Clear any pending silence timeout
       if (silenceTimeoutRef.current) {
@@ -421,6 +406,7 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
       
       // Upload audio if we have a call ID and audio blob
       if (callId && user) {
+        setAnalysisProgress('Processing audio recording...');
         // Wait a moment for audio recording to fully stop
         await new Promise(resolve => setTimeout(resolve, 1000));
         
@@ -457,6 +443,7 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
         
         if (hasAudioData) {
           try {
+            setAnalysisProgress('Uploading audio file...');
             console.log('Starting audio upload with metadata:', {
               userId: user.id,
               scenarioId,
@@ -522,6 +509,7 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
       // Save call data and get scoring
       if (user) {
         try {
+          setAnalysisProgress('Analyzing conversation with AI...');
           console.log('Saving call data:', {
             repId: user.id,
             scenarioName: scenarioConfig.current.scenarioPrompt.substring(0, 100),
@@ -550,9 +538,11 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
           if (saveResponse.ok) {
             const saveResult = await saveResponse.json();
             console.log('Call saved and scored:', saveResult);
+            setAnalysisProgress('Generating performance insights...');
           } else {
             const errorText = await saveResponse.text();
             console.error('Failed to save call data:', saveResponse.status, errorText);
+            setAnalysisProgress('Analysis complete with errors');
           }
         } catch (error) {
           console.error('Error saving call data:', error);
@@ -563,12 +553,11 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
         }
       }
       
-      // End simulation
-      setIsRecording(false)
-      setIsPaused(false)
-      setUserHasSpoken(false) // Reset user speech flag
+      // Reset user speech flag
+      setUserHasSpoken(false)
       
       // Wait a moment for database operations to complete
+      setAnalysisProgress('Finalizing results...');
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       console.log('=== ABOUT TO REDIRECT ===');
@@ -577,6 +566,10 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
         audioUrl,
         conversationHistoryLength: conversationHistory.length
       });
+      
+      setAnalysisProgress('Complete! Redirecting...');
+      // Small delay to show the complete message
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Redirect to review page with the call ID
       router.push(`/review?callId=${callId}`)
@@ -587,8 +580,7 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
         stack: error.stack
       });
       // Still redirect to review even if upload fails
-      setIsRecording(false)
-      setIsPaused(false)
+      setIsProcessingEndCall(false);
       router.push(`/review?callId=${callId}`)
     }
   }
@@ -598,8 +590,69 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
     console.log('Switching to text mode')
   }
 
+  // Don't render if no scenario data (redirecting to scenario builder)
+  if (!scenarioData) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-8 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Redirecting to scenario builder...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8 relative">
+      {/* Loading Overlay for Call Analysis */}
+      {isProcessingEndCall && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
+        >
+          <Card className="w-full max-w-md mx-4">
+            <CardContent className="p-8">
+              <div className="text-center space-y-6">
+                <div className="mx-auto w-16 h-16 relative">
+                  <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+                  <div className="absolute inset-2 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Zap className="w-6 h-6 text-primary" />
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold">Analyzing Your Call</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {analysisProgress || 'Processing...'}
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="w-full bg-secondary rounded-full h-2">
+                    <div 
+                      className="bg-primary h-2 rounded-full transition-all duration-500"
+                      style={{
+                        width: analysisProgress.includes('Stopping') ? '20%' :
+                               analysisProgress.includes('Processing') ? '40%' :
+                               analysisProgress.includes('Uploading') ? '60%' :
+                               analysisProgress.includes('Analyzing') ? '80%' :
+                               analysisProgress.includes('Generating') ? '90%' :
+                               analysisProgress.includes('Finalizing') ? '95%' :
+                               analysisProgress.includes('Complete') ? '100%' : '10%'
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    AI is analyzing your conversation and generating personalized feedback
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -833,11 +886,12 @@ REMEMBER: You are the PROSPECT answering discovery questions, not asking them.`
                         console.log('=== END CALL BUTTON CLICKED ===');
                         handleEndCall();
                       }}
+                      disabled={isProcessingEndCall}
                       variant="destructive"
                       className="w-full"
                     >
                       <Square className="mr-2 h-4 w-4" />
-                      End Call
+                      {isProcessingEndCall ? 'Ending Call...' : 'End Call'}
                     </Button>
                   </>
                 )}

@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils'
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['rep', 'manager', 'admin'] },
   { name: 'Scenario Builder', href: '/scenario-builder', icon: FileText, roles: ['rep', 'manager', 'admin'] },
-  { name: 'Live Simulation', href: '/simulation', icon: Phone, roles: ['rep', 'manager', 'admin'] },
   { name: 'Review', href: '/review', icon: BarChart3, roles: ['rep', 'manager', 'admin'] },
   { name: 'Admin Panel', href: '/admin', icon: Users, roles: ['manager', 'admin'] },
   { name: 'Compliance', href: '/compliance', icon: Shield, roles: ['admin'] },

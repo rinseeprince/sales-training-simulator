@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors } from '@/lib/api-utils';
 import { openai } from '@/lib/api-utils';
+import { CallScoringEngine } from '@/lib/ai-engine/core/scoring-engine';
+import { CallType } from '@/lib/ai-engine/types/prospect-types';
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,48 +42,70 @@ export async function POST(req: NextRequest) {
       return errorResponse('transcript, repId, and scenarioName are required');
     }
 
-    // Score the call using AI
+    // Score the call using the new AI Engine
     let score = 0;
     let feedback = [];
     let talkRatio = 0;
     let objectionsHandled = 0;
     let ctaUsed = false;
     let sentiment = 'neutral';
+    let detailedMetrics = {};
+    let coachingFeedback = {};
 
     try {
-      const scoringPrompt = `
-        Analyze this sales call transcript and provide a score from 0-100 and detailed feedback.
-        
-        Transcript: ${JSON.stringify(transcript)}
-        
-        Provide your response in this exact JSON format:
-        {
-          "score": 85,
-          "feedback": ["Good opening", "Could improve objection handling"],
-          "talkRatio": 65,
-          "objectionsHandled": 2,
-          "ctaUsed": true,
-          "sentiment": "friendly"
-        }
-        
-        Scoring criteria:
-        - Opening and value proposition (20 points)
-        - Discovery and qualification (20 points)
-        - Objection handling (25 points)
-        - Closing and next steps (20 points)
-        - Overall communication (15 points)
-      `;
+      // Use the new scoring engine
+      const callType: CallType = 'discovery-outbound'; // Default, can be enhanced based on scenario
+      const scoringEngine = new CallScoringEngine(transcript, callType);
+      const callScore = await scoringEngine.scoreCall();
+      
+      // Extract values for backward compatibility
+      score = callScore.overallScore;
+      feedback = [
+        callScore.coachingFeedback.summary,
+        ...callScore.strengths.slice(0, 2),
+        ...callScore.improvements.slice(0, 2)
+      ];
+      talkRatio = callScore.detailedAnalysis.talkRatio.repTalkPercentage;
+      objectionsHandled = callScore.detailedAnalysis.objectionHandling.handledSuccessfully;
+      ctaUsed = callScore.detailedAnalysis.cta.ctaPresent;
+      sentiment = callScore.detailedAnalysis.sentiment?.overall || 'neutral';
+      
+      // Store detailed metrics for the new schema
+      detailedMetrics = {
+        breakdown: callScore.breakdown,
+        detailedAnalysis: callScore.detailedAnalysis
+      };
+      coachingFeedback = callScore.coachingFeedback;
+      
+    } catch (scoringError) {
+      console.error('Call scoring failed:', scoringError);
+      // Fall back to basic scoring if new engine fails
+      try {
+        const scoringPrompt = `
+          Analyze this sales call transcript and provide a score from 0-100 and detailed feedback.
+          
+          Transcript: ${JSON.stringify(transcript)}
+          
+          Provide your response in this exact JSON format:
+          {
+            "score": 85,
+            "feedback": ["Good opening", "Could improve objection handling"],
+            "talkRatio": 65,
+            "objectionsHandled": 2,
+            "ctaUsed": true,
+            "sentiment": "friendly"
+          }
+        `;
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: scoringPrompt }],
-        max_tokens: 500,
-        temperature: 0.3,
-      });
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: scoringPrompt }],
+          max_tokens: 500,
+          temperature: 0.3,
+        });
 
-      const scoringResult = completion.choices[0]?.message?.content;
-      if (scoringResult) {
-        try {
+        const scoringResult = completion.choices[0]?.message?.content;
+        if (scoringResult) {
           const parsed = JSON.parse(scoringResult);
           score = parsed.score || 0;
           feedback = parsed.feedback || [];
@@ -89,13 +113,10 @@ export async function POST(req: NextRequest) {
           objectionsHandled = parsed.objectionsHandled || 0;
           ctaUsed = parsed.ctaUsed || false;
           sentiment = parsed.sentiment || 'neutral';
-        } catch (parseError) {
-          console.error('Failed to parse scoring result:', parseError);
         }
+      } catch (fallbackError) {
+        console.error('Fallback scoring also failed:', fallbackError);
       }
-    } catch (scoringError) {
-      console.error('Call scoring failed:', scoringError);
-      // Continue without scoring if it fails
     }
 
     // Save to database
@@ -112,6 +133,9 @@ export async function POST(req: NextRequest) {
       feedback: feedback,
       duration: duration,
       audio_url: audioUrl,
+      detailed_metrics: detailedMetrics, // New field
+      coaching_feedback: coachingFeedback, // New field
+      call_type: 'discovery-outbound', // New field
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -126,7 +150,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
       .from('calls')
-      .insert(callData)
+      .upsert(callData)
       .select()
       .single();
 
