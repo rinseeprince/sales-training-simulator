@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +32,67 @@ export function ScenarioBuilder() {
     saveReuse: false,
     enableStreaming: false
   })
+  const [savedScenarios, setSavedScenarios] = useState([])
+
+  // Load saved scenarios and check for edit mode
+  useEffect(() => {
+    loadSavedScenarios()
+    
+    // Check if we're editing a scenario
+    const editScenario = localStorage.getItem('editScenario')
+    if (editScenario) {
+      try {
+        const parsed = JSON.parse(editScenario)
+        setScenarioData(parsed)
+        localStorage.removeItem('editScenario')
+      } catch (error) {
+        console.error('Failed to load edit scenario:', error)
+      }
+    }
+  }, [user])
+
+  const loadSavedScenarios = async () => {
+    if (!user) return
+    
+    try {
+      const response = await fetch(`/api/scenarios?userId=${user.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSavedScenarios(data.scenarios || [])
+      }
+    } catch (error) {
+      console.error('Error loading saved scenarios:', error)
+    }
+  }
+
+  const handleLoadScenario = (scenario: any) => {
+    setScenarioData({
+      title: scenario.title,
+      prompt: scenario.prompt,
+      callType: scenario.settings.callType || '',
+      difficulty: [getDifficultyNumber(scenario.difficulty)],
+      seniority: scenario.settings.seniority || '',
+      duration: scenario.settings.duration || '',
+      voice: scenario.settings.voice || '',
+      saveReuse: true,
+      enableStreaming: scenario.settings.enableStreaming !== false
+    })
+    
+    toast({
+      title: "Scenario Loaded",
+      description: `Loaded "${scenario.title}" successfully`,
+    })
+  }
+
+  const getDifficultyNumber = (difficulty: string): number => {
+    const map: Record<string, number> = {
+      'easy': 2,
+      'medium': 3,
+      'hard': 4,
+      'expert': 5
+    }
+    return map[difficulty] || 3
+  }
 
   const handleStartSimulation = async () => {
     // Validate required fields
@@ -177,6 +238,56 @@ export function ScenarioBuilder() {
           </div>
         </div>
       </motion.div>
+
+      {/* Load Saved Scenario Section */}
+      {savedScenarios.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.05 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Load Saved Scenario</CardTitle>
+              <CardDescription>
+                Start with a previously saved scenario template
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label htmlFor="saved-scenario-select">Choose a saved scenario</Label>
+                <Select onValueChange={(value) => {
+                  if (value && value !== 'none') {
+                    const scenario = savedScenarios.find((s: any) => s.id === value)
+                    if (scenario) {
+                      handleLoadScenario(scenario)
+                    }
+                  }
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a saved scenario to load..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select a scenario...</SelectItem>
+                    {savedScenarios.map((scenario: any) => (
+                      <SelectItem key={scenario.id} value={scenario.id}>
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex-1">
+                            <div className="font-medium">{scenario.title}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {scenario.difficulty} • {scenario.industry}
+                            </div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       <div className="grid gap-8 md:grid-cols-3">
         {/* Main Form */}

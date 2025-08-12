@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
       scenarioName, 
       duration, 
       audioUrl,
-      conversationHistory = []
+      conversationHistory = [],
+      scoreOnly = false
     } = body;
 
     console.log('Received save call request:', { 
@@ -119,55 +120,61 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Save to database
-    const callData = {
-      id: callId, // Use the provided call ID
-      rep_id: repId,
-      scenario_name: scenarioName,
-      transcript: transcript,
-      score: score,
+    // Save to database only if not scoreOnly
+    let data = null;
+    if (!scoreOnly) {
+      const callData = {
+        id: callId, // Use the provided call ID
+        rep_id: repId,
+        scenario_name: scenarioName,
+        transcript: transcript,
+        score: score,
+        talk_ratio: talkRatio,
+        objections_handled: objectionsHandled,
+        cta_used: ctaUsed,
+        sentiment: sentiment,
+        feedback: feedback,
+        duration: duration,
+        audio_url: audioUrl,
+        detailed_metrics: detailedMetrics, // New field
+        coaching_feedback: coachingFeedback, // New field
+        call_type: 'discovery-outbound', // New field
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('Inserting call data:', {
+        id: callData.id,
+        rep_id: callData.rep_id,
+        scenario_name: callData.scenario_name?.substring(0, 50) + '...',
+        audio_url: callData.audio_url ? 'PRESENT' : 'MISSING',
+        duration: callData.duration
+      });
+
+      const { data: dbData, error } = await supabase
+        .from('calls')
+        .upsert(callData)
+        .select()
+        .single();
+
+      console.log('Database response:', { data: dbData, error });
+
+        if (error) {
+          console.error('Database insert error:', error);
+          return errorResponse(`Failed to save call data: ${error.message}`);
+        }
+        data = dbData;
+      } else {
+        console.log('Score-only mode: skipping database save');
+      }
+
+    return successResponse({
+      callId: callId,
+      score,
+      feedback,
       talk_ratio: talkRatio,
       objections_handled: objectionsHandled,
       cta_used: ctaUsed,
-      sentiment: sentiment,
-      feedback: feedback,
-      duration: duration,
-      audio_url: audioUrl,
-      detailed_metrics: detailedMetrics, // New field
-      coaching_feedback: coachingFeedback, // New field
-      call_type: 'discovery-outbound', // New field
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    console.log('Inserting call data:', {
-      id: callData.id,
-      rep_id: callData.rep_id,
-      scenario_name: callData.scenario_name?.substring(0, 50) + '...',
-      audio_url: callData.audio_url ? 'PRESENT' : 'MISSING',
-      duration: callData.duration
-    });
-
-    const { data, error } = await supabase
-      .from('calls')
-      .upsert(callData)
-      .select()
-      .single();
-
-    console.log('Database response:', { data, error });
-
-    if (error) {
-      console.error('Database insert error:', error);
-      return errorResponse(`Failed to save call data: ${error.message}`);
-    }
-
-    return successResponse({
-      callId: data.id,
-      score,
-      feedback,
-      talkRatio,
-      objectionsHandled,
-      ctaUsed,
       sentiment,
       success: true
     }, 200, corsHeaders);

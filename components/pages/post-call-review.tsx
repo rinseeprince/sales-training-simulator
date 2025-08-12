@@ -7,9 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CheckCircle, XCircle, TrendingUp, Clock, MessageSquare, ThumbsUp, ThumbsDown, Play, Award, RotateCcw, Headphones } from 'lucide-react'
+import { CheckCircle, XCircle, TrendingUp, Clock, MessageSquare, ThumbsUp, ThumbsDown, Play, Award, RotateCcw, Headphones, Edit2, Save, X } from 'lucide-react'
 import { AudioPlayer } from '@/components/ui/audio-player'
 import { useCallData } from '@/hooks/use-call-data'
 import { useAuth } from '@/components/auth-provider'
@@ -55,6 +56,136 @@ export function PostCallReview() {
   
   const [managerComments, setManagerComments] = useState('')
   const [certificationLevel, setCertificationLevel] = useState('')
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [simulationName, setSimulationName] = useState('')
+  const [isSavingName, setIsSavingName] = useState(false)
+  const [tempCallData, setTempCallData] = useState(null)
+  const [isSavingCall, setIsSavingCall] = useState(false)
+  const [callSaved, setCallSaved] = useState(false)
+
+  // Check for temporary call data on mount
+  useEffect(() => {
+    if (callId) {
+      // Check for temporary call data in session storage
+      const tempData = sessionStorage.getItem(`temp_call_${callId}`)
+      console.log('Checking for temp call data:', { callId, hasTempData: !!tempData })
+      if (tempData) {
+        try {
+          const parsedTempData = JSON.parse(tempData)
+          console.log('Loaded temp call data:', parsedTempData)
+          setTempCallData(parsedTempData)
+          setSimulationName(parsedTempData.scenarioName || 'Unnamed Simulation')
+          setCallSaved(false)
+        } catch (error) {
+          console.error('Error parsing temp call data:', error)
+        }
+      }
+    }
+  }, [callId]) // Only depend on callId
+
+  // Handle regular call data separately
+  useEffect(() => {
+    // Only update if we don't have temp data and we have call data
+    if (call?.scenario_name && tempCallData === null) {
+      setSimulationName(call.scenario_name)
+      setCallSaved(true) // Call is already saved if it comes from database
+    } else if (tempCallData === null && !call) {
+      setSimulationName('Enterprise Software Demo') // Default fallback
+    }
+  }, [call?.scenario_name, tempCallData]) // More specific dependencies
+
+  const handleSaveSimulationName = async () => {
+    if (!callId || !simulationName.trim()) return
+    
+    setIsSavingName(true)
+    try {
+      // If we have temp call data, just update it in session storage
+      if (tempCallData) {
+        const updatedTempData = {
+          ...tempCallData,
+          scenarioName: simulationName.trim()
+        }
+        sessionStorage.setItem(`temp_call_${callId}`, JSON.stringify(updatedTempData))
+        setTempCallData(updatedTempData)
+        setIsEditingName(false)
+      } else {
+        // If it's a saved call, update in database
+        const response = await fetch('/api/update-simulation-name', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            callId,
+            simulationName: simulationName.trim()
+          })
+        })
+        
+        if (response.ok) {
+          setIsEditingName(false)
+          // Optionally refresh call data
+        } else {
+          console.error('Failed to save simulation name')
+        }
+      }
+    } catch (error) {
+      console.error('Error saving simulation name:', error)
+    } finally {
+      setIsSavingName(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditingName(false)
+    // Reset to original name
+    if (call?.scenario_name) {
+      setSimulationName(call.scenario_name)
+    } else if (tempCallData?.scenarioName) {
+      setSimulationName(tempCallData.scenarioName)
+    }
+  }
+
+  const handleSaveCall = async () => {
+    if (!tempCallData || callSaved) return
+    
+    setIsSavingCall(true)
+    try {
+      const saveResponse = await fetch('/api/save-call', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          callId: tempCallData.callId,
+          transcript: tempCallData.transcript,
+          repId: tempCallData.repId,
+          scenarioName: tempCallData.scenarioName || simulationName.trim(),
+          duration: tempCallData.duration,
+          audioUrl: tempCallData.audioUrl,
+          conversationHistory: tempCallData.conversationHistory
+        }),
+      })
+      
+      if (saveResponse.ok) {
+        const saveResult = await saveResponse.json()
+        console.log('Call saved successfully:', saveResult)
+        setCallSaved(true)
+        // Remove temp data from session storage
+        sessionStorage.removeItem(`temp_call_${callId}`)
+        // Optionally refresh the page to show saved data
+        window.location.reload()
+      } else {
+        const errorText = await saveResponse.text()
+        console.error('Failed to save call:', saveResponse.status, errorText)
+        alert('Failed to save call. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error saving call:', error)
+      alert('Error saving call. Please try again.')
+    } finally {
+      setIsSavingCall(false)
+    }
+  }
 
   const handleApprove = () => {
     console.log('Call approved')
@@ -64,9 +195,9 @@ export function PostCallReview() {
     console.log('Retry requested')
   }
 
-  // Use real call data or fallback to demo data
-  const displayData = call || callData
-  const hasAudio = call?.audio_url || callData.audioUrl
+  // Use temp call data, then real call data, or fallback to demo data
+  const displayData = tempCallData || call || callData
+  const hasAudio = tempCallData?.audioUrl || call?.audio_url || callData.audioUrl
   
   console.log('Review page data:', {
     callId,
@@ -82,12 +213,16 @@ export function PostCallReview() {
     } : null
   });
 
-  // Type guard to check if we have real call data
+  // Type guard to check if we have real call data vs temp data
   const isRealCall = (data: any): data is typeof call => {
-    return data && typeof data === 'object' && 'id' in data
+    return data && typeof data === 'object' && 'id' in data && !data.isSaved === undefined
+  }
+  
+  const isTempCall = (data: any) => {
+    return data && typeof data === 'object' && data.isSaved === false
   }
 
-  if (loading) {
+  if (loading && !tempCallData) {
     return (
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-center h-64">
@@ -97,12 +232,28 @@ export function PostCallReview() {
     )
   }
 
-  if (error) {
+  if (error && !tempCallData) {
     return (
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <p className="text-red-500 mb-4">Error loading call data: {error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // If we have neither call data nor temp data, show error
+  if (!call && !tempCallData && !loading) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <p className="text-red-500 mb-4">Call data not found</p>
             <Button onClick={() => window.location.reload()}>
               Retry
             </Button>
@@ -122,9 +273,64 @@ export function PostCallReview() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Post-Call Review</h1>
-            <p className="text-muted-foreground mt-2">
-              Enterprise Software Demo - Completed {isRealCall(displayData) && displayData.created_at ? new Date(displayData.created_at).toLocaleDateString() : callData.date}
-            </p>
+            <div className="flex items-center mt-2 space-x-2">
+              {isEditingName ? (
+                <div className="flex items-center space-x-2">
+                  <Input
+                    value={simulationName}
+                    onChange={(e) => setSimulationName(e.target.value)}
+                    className="text-muted-foreground"
+                    placeholder="Enter simulation name"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveSimulationName()
+                      } else if (e.key === 'Escape') {
+                        handleCancelEdit()
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSaveSimulationName}
+                    disabled={isSavingName || !simulationName.trim()}
+                  >
+                    {isSavingName ? 'Saving...' : <Save className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancelEdit}
+                    disabled={isSavingName}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <p className="text-muted-foreground">
+                    {simulationName} - {callSaved ? 'Completed' : 'Not Saved'} {isRealCall(displayData) && displayData.created_at ? new Date(displayData.created_at).toLocaleDateString() : tempCallData?.created_at ? new Date(tempCallData.created_at).toLocaleDateString() : callData.date}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setIsEditingName(true)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                  {!callSaved && tempCallData && (
+                    <Button
+                      size="sm"
+                      onClick={handleSaveCall}
+                      disabled={isSavingCall || !simulationName.trim()}
+                      className="ml-2"
+                    >
+                      {isSavingCall ? 'Saving...' : <><Save className="h-4 w-4 mr-1" />Save Call</>}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex space-x-2">
             <Button variant="outline" onClick={handleRequestRetry}>
@@ -152,8 +358,8 @@ export function PostCallReview() {
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{displayData.score}/100</div>
-            <Progress value={displayData.score} className="mt-2" />
+            <div className="text-2xl font-bold text-green-600">{displayData.score || 0}/100</div>
+            <Progress value={displayData.score || 0} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -163,7 +369,10 @@ export function PostCallReview() {
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{isRealCall(displayData) && displayData.talk_ratio ? displayData.talk_ratio : callData.talkRatio.rep}% / {100 - (isRealCall(displayData) && displayData.talk_ratio ? displayData.talk_ratio : callData.talkRatio.rep)}%</div>
+            <div className="text-2xl font-bold">
+              {displayData.talk_ratio ? `${displayData.talk_ratio}% / ${100 - displayData.talk_ratio}%` : 
+               `${callData.talkRatio.rep}% / ${callData.talkRatio.ai}%`}
+            </div>
             <p className="text-xs text-muted-foreground">Rep / Prospect</p>
           </CardContent>
         </Card>
@@ -179,7 +388,7 @@ export function PostCallReview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isRealCall(displayData) && displayData.cta_used !== undefined ? (displayData.cta_used ? 'Yes' : 'No') : (callData.ctaUsed ? 'Yes' : 'No')}
+              {displayData.cta_used !== undefined ? (displayData.cta_used ? 'Yes' : 'No') : (callData.ctaUsed ? 'Yes' : 'No')}
             </div>
             <p className="text-xs text-muted-foreground">
               Clear next steps provided
@@ -219,7 +428,7 @@ export function PostCallReview() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {(isRealCall(displayData) && displayData.objections_handled ? Array(displayData.objections_handled).fill('Objection handled') : callData.objections).map((objection: string, index: number) => (
+                {(displayData.objections_handled ? Array(displayData.objections_handled).fill('Objection handled') : callData.objections).map((objection: string, index: number) => (
                   <div key={index} className="flex items-center space-x-3 p-3 bg-accent/50 rounded-lg">
                     <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
                     <span className="text-sm">{objection}</span>
@@ -239,7 +448,7 @@ export function PostCallReview() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {(isRealCall(displayData) && displayData.feedback ? displayData.feedback : feedback).map((item: string, index: number) => (
+                {(displayData.feedback || feedback).map((item: string, index: number) => (
                   <div key={index} className="flex items-start space-x-3">
                     {index < 2 ? (
                       <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
@@ -266,9 +475,9 @@ export function PostCallReview() {
             </CardHeader>
             <CardContent>
               <AudioPlayer 
-                audioUrl={call?.audio_url || callData.audioUrl}
+                audioUrl={hasAudio}
                 title="Call Recording"
-                duration={isRealCall(displayData) && displayData.duration ? displayData.duration : 0}
+                duration={displayData.duration || 0}
                 showWaveform={true}
                 className="w-full"
               />
@@ -285,22 +494,41 @@ export function PostCallReview() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4 max-h-96 overflow-y-auto">
-                {transcript.map((entry, index) => (
-                  <div key={index} className="flex items-start space-x-3">
-                    <Button variant="ghost" size="sm" className="flex-shrink-0">
-                      <Play className="h-3 w-3" />
-                    </Button>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span className="text-xs text-muted-foreground">{entry.timestamp}</span>
-                        <Badge variant={entry.speaker === 'Rep' ? 'default' : 'secondary'}>
-                          {entry.speaker}
-                        </Badge>
+                {displayData.transcript ? (
+                  displayData.transcript.map((entry, index) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      <Button variant="ghost" size="sm" className="flex-shrink-0">
+                        <Play className="h-3 w-3" />
+                      </Button>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="text-xs text-muted-foreground">{entry.timestamp || `${Math.floor(index * 30 / 60)}:${(index * 30 % 60).toString().padStart(2, '0')}`}</span>
+                          <Badge variant={entry.speaker === 'rep' ? 'default' : 'secondary'}>
+                            {entry.speaker === 'rep' ? 'Rep' : 'AI'}
+                          </Badge>
+                        </div>
+                        <p className="text-sm">{entry.text}</p>
                       </div>
-                      <p className="text-sm">{entry.text}</p>
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  transcript.map((entry, index) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      <Button variant="ghost" size="sm" className="flex-shrink-0">
+                        <Play className="h-3 w-3" />
+                      </Button>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="text-xs text-muted-foreground">{entry.timestamp}</span>
+                          <Badge variant={entry.speaker === 'Rep' ? 'default' : 'secondary'}>
+                            {entry.speaker}
+                          </Badge>
+                        </div>
+                        <p className="text-sm">{entry.text}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -369,11 +597,23 @@ export function PostCallReview() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Duration:</span>
-                <span>{isRealCall(displayData) && displayData.duration ? `${Math.floor(displayData.duration / 60)}:${(displayData.duration % 60).toString().padStart(2, '0')}` : callData.duration}</span>
+                <span>
+                  {displayData.duration ? 
+                    `${Math.floor(displayData.duration / 60)}:${(displayData.duration % 60).toString().padStart(2, '0')}` : 
+                    callData.duration}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Date:</span>
-                <span>{isRealCall(displayData) && displayData.created_at ? new Date(displayData.created_at).toLocaleDateString() : callData.date}</span>
+                <span>
+                  {displayData.created_at ? 
+                    new Date(displayData.created_at).toLocaleDateString() : 
+                    callData.date}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status:</span>
+                <span>{callSaved ? 'Saved' : 'Not Saved'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Type:</span>

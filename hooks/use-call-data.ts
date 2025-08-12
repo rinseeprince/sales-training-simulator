@@ -17,6 +17,22 @@ export function useCallData({ callId, userId }: UseCallDataProps) {
       return
     }
 
+    // Check for temporary call data first
+    const tempData = sessionStorage.getItem(`temp_call_${callId}`)
+    if (tempData) {
+      try {
+        const parsedTempData = JSON.parse(tempData)
+        // Don't fetch from API if we have temp data
+        setCall(null) // We'll handle temp data separately in the component
+        setLoading(false)
+        setError(null)
+        return
+      } catch (error) {
+        console.error('Error parsing temp call data:', error)
+        // Continue to fetch from API if temp data is invalid
+      }
+    }
+
     const fetchCall = async () => {
       setLoading(true)
       setError(null)
@@ -31,6 +47,12 @@ export function useCallData({ callId, userId }: UseCallDataProps) {
         
         if (!response.ok) {
           const errorData = await response.json()
+          // If call not found and we might have temp data, don't treat as error
+          if (response.status === 404) {
+            setCall(null)
+            setError(null) // Don't set error for not found calls
+            return
+          }
           throw new Error(errorData.error || 'Failed to fetch call data')
         }
 

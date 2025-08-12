@@ -506,13 +506,24 @@ export function LiveSimulation() {
         }
       }
       
-      // Save call data and get scoring
+      // Analyze and score call data with loading modal (don't save to database yet)
       if (user) {
         try {
           setAnalysisProgress('Analyzing conversation with AI...');
+          console.log('Scoring call data:', {
+            repId: user.id,
+            scenarioName: scenarioData?.title || 'Unnamed Simulation',
+            duration: currentTime,
+            transcriptLength: conversationHistory.length,
+            audioUrl: audioUrl,
+            conversationHistory: conversationHistory
+          });
+          
+          // Save call data and get scoring - EXACTLY as it was working before
+          setAnalysisProgress('Analyzing conversation with AI...');
           console.log('Saving call data:', {
             repId: user.id,
-            scenarioName: scenarioConfig.current.scenarioPrompt.substring(0, 100),
+            scenarioName: scenarioData?.title || 'Unnamed Simulation',
             duration: currentTime,
             transcriptLength: conversationHistory.length,
             audioUrl: audioUrl,
@@ -528,28 +539,85 @@ export function LiveSimulation() {
               callId: callId, // Add the call ID
               transcript: conversationHistory,
               repId: user.id,
-              scenarioName: scenarioConfig.current.scenarioPrompt.substring(0, 100),
+              scenarioName: scenarioData?.title || 'Unnamed Simulation',
               duration: currentTime,
               audioUrl: audioUrl,
-              conversationHistory: conversationHistory
+              conversationHistory: conversationHistory,
+              scoreOnly: true // Flag to only score, not save
             }),
           });
+          
+          let scoringResult = {
+            score: 0,
+            feedback: [],
+            talkRatio: 0,
+            objectionsHandled: 0,
+            ctaUsed: false,
+            sentiment: 'neutral'
+          };
           
           if (saveResponse.ok) {
             const saveResult = await saveResponse.json();
             console.log('Call saved and scored:', saveResult);
+            
+            // Extract scoring results from the save response
+            scoringResult = {
+              score: saveResult.score || 0,
+              feedback: saveResult.feedback || [],
+              talkRatio: saveResult.talk_ratio || 0,
+              objectionsHandled: saveResult.objections_handled || 0,
+              ctaUsed: saveResult.cta_used || false,
+              sentiment: saveResult.sentiment || 'neutral'
+            };
+            
             setAnalysisProgress('Generating performance insights...');
           } else {
             const errorText = await saveResponse.text();
             console.error('Failed to save call data:', saveResponse.status, errorText);
             setAnalysisProgress('Analysis complete with errors');
           }
+          
+          const tempCallData = {
+            callId: callId,
+            transcript: conversationHistory,
+            repId: user.id,
+            scenarioName: scenarioData?.title || 'Unnamed Simulation',
+            duration: currentTime,
+            audioUrl: audioUrl,
+            conversationHistory: conversationHistory,
+            created_at: new Date().toISOString(),
+            isSaved: false,
+            // Include scoring results
+            score: scoringResult.score,
+            feedback: scoringResult.feedback,
+            talk_ratio: scoringResult.talkRatio,
+            objections_handled: scoringResult.objectionsHandled,
+            cta_used: scoringResult.ctaUsed,
+            sentiment: scoringResult.sentiment
+          };
+          
+          // Store in session storage for the review page
+          sessionStorage.setItem(`temp_call_${callId}`, JSON.stringify(tempCallData));
+          
+          console.log('Call data analyzed and prepared for review (not saved yet):', {
+            callId,
+            repId: user.id,
+            scenarioName: scenarioData?.title || 'Unnamed Simulation',
+            duration: currentTime,
+            transcriptLength: conversationHistory.length,
+            audioUrl: audioUrl,
+            sessionStorageKey: `temp_call_${callId}`,
+            score: scoringResult.score
+          });
+          
+          setAnalysisProgress('Analysis complete! Preparing review...');
         } catch (error) {
-          console.error('Error saving call data:', error);
-          console.error('Save error details:', {
+          console.error('Error analyzing call data:', error);
+          console.error('Analysis error details:', {
             message: error.message,
             stack: error.stack
           });
+          setAnalysisProgress('Analysis complete with errors');
         }
       }
       

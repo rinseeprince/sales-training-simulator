@@ -17,8 +17,26 @@ import {
   Calendar,
   Phone,
   Target,
-  ArrowLeft
+  ArrowLeft,
+  Trash2,
+  MoreVertical
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useAuth } from '@/components/auth-provider'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -44,6 +62,9 @@ export default function SimulationsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterScore, setFilterScore] = useState('all')
   const [sortBy, setSortBy] = useState('date')
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [simulationToDelete, setSimulationToDelete] = useState<Simulation | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Fetch simulations
   useEffect(() => {
@@ -105,6 +126,36 @@ export default function SimulationsPage() {
 
   const handleSimulationClick = (simulationId: string) => {
     router.push(`/review?callId=${simulationId}`)
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, simulation: Simulation) => {
+    e.stopPropagation() // Prevent card click
+    setSimulationToDelete(simulation)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!simulationToDelete) return
+    
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/calls/${simulationToDelete.id}`, {
+        method: 'DELETE',
+      })
+      
+      if (response.ok) {
+        // Remove from local state
+        setSimulations(prev => prev.filter(sim => sim.id !== simulationToDelete.id))
+        setDeleteDialogOpen(false)
+        setSimulationToDelete(null)
+      } else {
+        console.error('Failed to delete simulation')
+      }
+    } catch (error) {
+      console.error('Error deleting simulation:', error)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   if (loading) {
@@ -239,7 +290,30 @@ export default function SimulationsPage() {
                       </CardDescription>
                     </div>
                     <div className="flex flex-col items-end space-y-2">
-                      {getScoreBadge(simulation.score)}
+                      <div className="flex items-center space-x-2">
+                        {getScoreBadge(simulation.score)}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="text-red-600 focus:text-red-600"
+                              onClick={(e) => handleDeleteClick(e, simulation)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                       {simulation.audio_url && (
                         <Badge variant="outline" className="text-xs">
                           <Play className="mr-1 h-3 w-3" />
@@ -306,6 +380,29 @@ export default function SimulationsPage() {
           ))
         )}
       </motion.div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Simulation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{simulationToDelete?.scenario_name}"? 
+              This action cannot be undone and will permanently remove the simulation and its data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 } 
