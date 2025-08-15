@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -8,13 +8,14 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Mic, MicOff, Pause, Play, Square, MessageSquare, Wifi, WifiOff, Volume2, VolumeX, AlertCircle, Zap, RotateCcw } from 'lucide-react'
+import { Mic, MicOff, Pause, Play, Square, MessageSquare, Wifi, WifiOff, Volume2, VolumeX, AlertCircle, Zap, RotateCcw, Send } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useAudioRecorder } from '@/hooks/use-audio-recorder'
 import { useVoiceStreaming } from '@/hooks/use-voice-streaming'
-import { useVoiceTranscription } from '@/hooks/use-voice-transcription'
+
 import { useAuth } from '@/components/auth-provider'
 import { AudioWaveform } from '@/components/ui/audio-waveform'
+import { useToast } from '@/hooks/use-toast'
 
 interface ScenarioData {
   title: string
@@ -31,18 +32,23 @@ interface ScenarioData {
 export function LiveSimulation() {
   const router = useRouter()
   const { user } = useAuth()
+  const { toast } = useToast()
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [showSubtitles, setShowSubtitles] = useState(true)
   const [currentTime, setCurrentTime] = useState(0)
   const [highLatency, setHighLatency] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'poor'>('connected')
-  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [callId, setCallId] = useState<string>('')
   const [scenarioId, setScenarioId] = useState<string>('')
   const [scenarioData, setScenarioData] = useState<ScenarioData | null>(null)
   const [isProcessingEndCall, setIsProcessingEndCall] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState<string>('')
+  
+  // Push-to-talk state
+  const [isUserRecording, setIsUserRecording] = useState(false)
+  const [currentUserMessage, setCurrentUserMessage] = useState('')
+  const [canSendMessage, setCanSendMessage] = useState(false)
   
   // Load scenario data from localStorage
   useEffect(() => {
@@ -116,7 +122,7 @@ export function LiveSimulation() {
           difficulty: scenarioData.difficulty || 3,
           seniority: scenarioData.seniority || 'manager',
           callType: scenarioData.callType || 'outbound'
-        },
+        } as any,
         voiceSettings: {
           voiceId: voiceMap[scenarioData.voice] || '21m00Tcm4TlvDq8ikWAM',
           stability: 0.5,
@@ -159,30 +165,212 @@ export function LiveSimulation() {
     resetConversation,
   } = useVoiceStreaming()
 
-  // CRITICAL: Track if user has spoken first
-  const [userHasSpoken, setUserHasSpoken] = useState(false)
+  // Simple audio recording for push-to-talk (no chunking transcription)
+  const [isTranscribingMessage, setIsTranscribingMessage] = useState(false)
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null)
+  const recordingStreamRef = useRef<MediaStream | null>(null)
+  const recordingRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordingChunksRef = useRef<Blob[]>([])
+  
+  // Simple transcription function for one-shot recording
+  const transcribeAudioBlob = useCallback(async (audioBlob: Blob): Promise<string> => {
+    setIsTranscribingMessage(true)
+    setTranscriptionError(null)
+    
+    try {
+      console.log('Transcribing audio blob with Whisper, size:', audioBlob.size)
+      
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'recording.webm')
+      formData.append('language', 'en')
 
-  // Voice transcription hook
-  const {
-    isTranscribing,
-    isListening,
-    isPaused: isTranscriptionPaused,
-    currentTranscript,
-    transcriptionChunks,
-    error: transcriptionError,
-    startTranscription,
-    stopTranscription,
-    resetTranscription,
-    pauseTranscription,
-    resumeTranscription,
-    getLatestChunk,
-  } = useVoiceTranscription({
-    useWhisper: true,
-    chunkDuration: 6000, // Longer chunks for complete thoughts
-    language: 'en',
-    continuous: true,
-    pauseDuringAISpeech: true
-  })
+      const response = await fetch('/api/transcribe-audio', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Transcription failed: ${response.status}`)
+      }
+
+      const result = await response.json()
+      console.log('Whisper transcription result:', result)
+      
+      if (result.text) {
+        return result.text.trim()
+      } else {
+        throw new Error('No transcription text received')
+      }
+    } catch (err) {
+      console.error('Transcription error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Transcription failed'
+      setTranscriptionError(errorMessage)
+      throw err
+    } finally {
+      setIsTranscribingMessage(false)
+    }
+  }, [])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Spacebar to start/stop recording
+      if (event.code === 'Space' && isRecording && !isAISpeaking) {
+        event.preventDefault()
+        if (isUserRecording) {
+          handleStopUserRecording()
+        } else {
+          handleStartUserRecording()
+        }
+      }
+      
+      // Enter key no longer needed - auto-send after recording
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isRecording, isUserRecording, isAISpeaking])
+
+  // Start user recording
+  const handleStartUserRecording = useCallback(async () => {
+    if (isAISpeaking || !isRecording) return
+    
+    try {
+      console.log('Starting user recording...')
+      setIsUserRecording(true)
+      setCurrentUserMessage('')
+      setCanSendMessage(false)
+      setTranscriptionError(null)
+      
+      // Get microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000,
+        } 
+      })
+      
+      recordingStreamRef.current = stream
+      recordingChunksRef.current = []
+      
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      })
+      
+      recordingRecorderRef.current = mediaRecorder
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data)
+        }
+      }
+      
+      // Start recording
+      mediaRecorder.start()
+      console.log('User recording started')
+    } catch (error) {
+      console.error('Failed to start user recording:', error)
+      setIsUserRecording(false)
+      setTranscriptionError('Failed to access microphone')
+    }
+  }, [isAISpeaking, isRecording])
+
+  // Stop user recording
+  const handleStopUserRecording = useCallback(async () => {
+    if (!isUserRecording || !recordingRecorderRef.current) return
+    
+    try {
+      console.log('Stopping user recording...')
+      setIsUserRecording(false)
+      
+      // Stop the MediaRecorder
+      const mediaRecorder = recordingRecorderRef.current
+      
+      // Wait for the recording to stop and process audio
+      const audioBlob = await new Promise<Blob>((resolve) => {
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordingChunksRef.current, { type: 'audio/webm' })
+          resolve(blob)
+        }
+        mediaRecorder.stop()
+      })
+      
+      // Stop the stream
+      if (recordingStreamRef.current) {
+        recordingStreamRef.current.getTracks().forEach(track => track.stop())
+        recordingStreamRef.current = null
+      }
+      
+      console.log('Audio recorded, size:', audioBlob.size)
+      
+      // Transcribe the audio and automatically send
+      if (audioBlob.size > 0) {
+        const transcribedText = await transcribeAudioBlob(audioBlob)
+        if (transcribedText && transcribedText.trim()) {
+          console.log('Auto-sending transcribed message:', transcribedText)
+          
+          // Automatically send to AI
+          await startStreaming(transcribedText.trim(), {
+            scenarioPrompt: scenarioConfig.current.scenarioPrompt,
+            persona: scenarioConfig.current.persona,
+            voiceSettings: scenarioConfig.current.voiceSettings,
+          })
+          
+          console.log('Message auto-sent successfully')
+        } else {
+          console.log('No transcription received')
+          setCurrentUserMessage('No speech detected. Try recording again.')
+          setCanSendMessage(false)
+        }
+      } else {
+        console.log('No audio data recorded')
+        setCurrentUserMessage('No audio recorded. Try again.')
+        setCanSendMessage(false)
+      }
+    } catch (error) {
+      console.error('Failed to stop recording or transcribe:', error)
+      setCurrentUserMessage('')
+      setCanSendMessage(false)
+      setTranscriptionError('Failed to transcribe audio')
+    }
+  }, [isUserRecording, transcribeAudioBlob, startStreaming])
+
+  // Send message to AI
+  const handleSendMessage = useCallback(async () => {
+    if (!canSendMessage || !currentUserMessage.trim() || isAISpeaking) return
+    
+    try {
+      console.log('=== SENDING MESSAGE TO AI ===')
+      console.log('Message:', currentUserMessage)
+      
+      setCanSendMessage(false)
+      
+      // Send to AI streaming
+      await startStreaming(currentUserMessage, {
+        scenarioPrompt: scenarioConfig.current.scenarioPrompt,
+        persona: scenarioConfig.current.persona,
+        voiceSettings: scenarioConfig.current.voiceSettings,
+      })
+      
+      // Clear the message
+      setCurrentUserMessage('')
+      console.log('Message sent successfully')
+      
+    } catch (error) {
+      console.error('Failed to send message:', error)
+      setCanSendMessage(true) // Re-enable if failed
+    }
+  }, [canSendMessage, currentUserMessage, isAISpeaking, startStreaming])
+
+  // Show transcription status during recording
+  useEffect(() => {
+    if (isUserRecording) {
+      setCurrentUserMessage('Recording your message...')
+    }
+  }, [isUserRecording])
 
   // Simulate timer
   useEffect(() => {
@@ -195,109 +383,6 @@ export function LiveSimulation() {
     return () => clearInterval(interval)
   }, [isRecording, isPaused])
 
-  // Handle transcription chunks and trigger streaming
-  useEffect(() => {
-    const latestChunk = getLatestChunk();
-    console.log('Transcription chunks changed:', {
-      chunksLength: transcriptionChunks.length,
-      isStreaming,
-      enableStreaming: scenarioConfig.current.enableStreaming,
-      latestChunk: latestChunk,
-      latestText: latestChunk?.text,
-      isFinal: latestChunk?.isFinal
-    });
-
-    // CRITICAL: Only process new chunks if we're still recording and not currently streaming
-    // AND only if there's actually a meaningful transcript from the user
-    if (isRecording && scenarioConfig.current.enableStreaming && transcriptionChunks.length > 0 && !isStreaming) {
-      const latestChunk = getLatestChunk();
-      if (latestChunk && latestChunk.isFinal && latestChunk.text.trim()) {
-        // Mark that user has spoken
-        setUserHasSpoken(true)
-        const transcript = latestChunk.text.trim();
-        
-        // Balanced validation for natural conversation flow
-        console.log('Processing transcript:', transcript);
-        console.log('Transcript length:', transcript.length, 'words:', transcript.split(' ').length);
-        
-        // Basic validation - ensure meaningful input
-        if (transcript.length < 4) {
-          console.log('Skipping short transcript:', transcript);
-          return;
-        }
-        
-        // Filter out obvious filler words and incomplete thoughts
-        const words = transcript.split(' ');
-        if (words.length < 2) {
-          console.log('Skipping single word or fragment:', transcript);
-          return;
-        }
-        
-        // Skip obvious filler sounds 
-        const justFiller = /^(um|uh|er|ah|mm|hmm)$/i.test(transcript.trim());
-        if (justFiller) {
-          console.log('Skipping filler sound:', transcript);
-          return;
-        }
-        
-        console.log('Transcript passed validation, will attempt AI response');
-        
-        // CRITICAL: Only allow AI to respond if user has spoken first
-        if (!userHasSpoken) {
-          console.log('User has not spoken yet, ignoring transcript:', transcript);
-          return;
-        }
-        
-        console.log('Complete transcript received:', transcript);
-        
-        // Clear any existing silence timeout
-        if (silenceTimeoutRef.current) {
-          clearTimeout(silenceTimeoutRef.current);
-        }
-        
-        // Wait for natural conversation pause to ensure user is done speaking
-        silenceTimeoutRef.current = setTimeout(() => {
-          if (isRecording && !isStreaming) {
-            console.log('Natural conversation pause detected, starting AI response with transcript:', latestChunk.text);
-            console.log('Response timing: User finished speaking, waited for natural pause, now AI will respond');
-            // Pause transcription before starting AI response
-            pauseTranscription();
-            // Start streaming with the transcribed text
-            startStreaming(latestChunk.text, {
-              scenarioPrompt: scenarioConfig.current.scenarioPrompt,
-              persona: scenarioConfig.current.persona,
-              voiceSettings: scenarioConfig.current.voiceSettings,
-            });
-          }
-          silenceTimeoutRef.current = null;
-        }, 3500); // Wait 3.5 seconds of silence before responding - allows for natural thinking pauses
-      }
-    }
-  }, [transcriptionChunks, getLatestChunk, startStreaming, isStreaming, pauseTranscription, isRecording]);
-
-  // Handle AI speaking state changes
-  useEffect(() => {
-    if (isAISpeaking) {
-      console.log('AI started speaking, pausing transcription');
-      pauseTranscription();
-    } else if (!isStreaming && !isAISpeaking && isRecording) {
-      console.log('AI stopped speaking, resuming transcription');
-      resumeTranscription();
-    }
-  }, [isAISpeaking, isStreaming, pauseTranscription, resumeTranscription, isRecording]);
-
-  // Prevent AI from responding to its own speech
-  useEffect(() => {
-    if (isAISpeaking || isStreaming) {
-      // Clear any pending silence timeout when AI is speaking
-      if (silenceTimeoutRef.current) {
-        console.log('Clearing silence timeout because AI is speaking');
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
-      }
-    }
-  }, [isAISpeaking, isStreaming]);
-
   // Simulate occasional high latency
   useEffect(() => {
     const interval = setInterval(() => {
@@ -305,15 +390,6 @@ export function LiveSimulation() {
     }, 5000)
     return () => clearInterval(interval)
   }, [])
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -340,15 +416,12 @@ export function LiveSimulation() {
       await startAudioRecording()
       console.log('Audio recording started successfully')
       
-      // Start transcription if streaming is enabled
-      if (scenarioConfig.current.enableStreaming) {
-        await startTranscription()
-      }
-      
       // Start simulation
       setIsRecording(true)
       setCurrentTime(0)
-      setUserHasSpoken(false) // Reset user speech flag
+      setIsUserRecording(false)
+      setCurrentUserMessage('')
+      setCanSendMessage(false)
       resetConversation() // Clear any previous conversation history
     } catch (error) {
       console.error('Failed to start recording:', error)
@@ -374,13 +447,19 @@ export function LiveSimulation() {
     setIsProcessingEndCall(true);
     setIsRecording(false);
     setIsPaused(false);
+    setIsUserRecording(false);
+    setCurrentUserMessage('');
+    setCanSendMessage(false);
     setAnalysisProgress('Stopping recording...');
     
     try {
-      // Clear any pending silence timeout
-      if (silenceTimeoutRef.current) {
-        clearTimeout(silenceTimeoutRef.current);
-        silenceTimeoutRef.current = null;
+      // Clean up any ongoing recordings
+      if (recordingStreamRef.current) {
+        recordingStreamRef.current.getTracks().forEach(track => track.stop())
+        recordingStreamRef.current = null
+      }
+      if (recordingRecorderRef.current && recordingRecorderRef.current.state === 'recording') {
+        recordingRecorderRef.current.stop()
       }
       
       // Stop audio recording
@@ -388,9 +467,8 @@ export function LiveSimulation() {
       stopAudioRecording()
       console.log('Audio recording stopped')
       
-      // Stop transcription and streaming
+      // Stop streaming
       if (scenarioConfig.current.enableStreaming) {
-        stopTranscription()
         stopStreaming()
       }
       
@@ -398,9 +476,6 @@ export function LiveSimulation() {
       if ('speechSynthesis' in window) {
         speechSynthesis.cancel()
       }
-      
-      // Clear any pending transcription chunks to prevent further AI responses
-      resetTranscription()
       
       let audioUrl = null;
       
@@ -469,8 +544,8 @@ export function LiveSimulation() {
                   } catch (error) {
           console.error('Error uploading audio:', error)
           console.error('Upload error details:', {
-            message: error.message,
-            stack: error.stack
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : 'No stack trace'
           });
         }
         } else {
@@ -614,15 +689,12 @@ export function LiveSimulation() {
         } catch (error) {
           console.error('Error analyzing call data:', error);
           console.error('Analysis error details:', {
-            message: error.message,
-            stack: error.stack
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : 'No stack trace'
           });
           setAnalysisProgress('Analysis complete with errors');
         }
       }
-      
-      // Reset user speech flag
-      setUserHasSpoken(false)
       
       // Wait a moment for database operations to complete
       setAnalysisProgress('Finalizing results...');
@@ -644,8 +716,8 @@ export function LiveSimulation() {
     } catch (error) {
       console.error('Error ending call:', error)
       console.error('End call error details:', {
-        message: error.message,
-        stack: error.stack
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace'
       });
       // Still redirect to review even if upload fails
       setIsProcessingEndCall(false);
@@ -799,8 +871,8 @@ export function LiveSimulation() {
               {/* Voice Waveform Visualization */}
               <div className="flex items-center justify-center space-x-2 mb-8">
                 <AudioWaveform 
-                  isRecording={isAudioRecording}
-                  isPaused={isAudioPaused}
+                  isRecording={isUserRecording}
+                  isPaused={false}
                   className="h-20"
                 />
               </div>
@@ -814,22 +886,24 @@ export function LiveSimulation() {
                     <VolumeX className="h-5 w-5 text-muted-foreground" />
                   )}
                   <span className="text-lg font-medium">
-                    {isAISpeaking ? `${scenarioData?.seniority ? scenarioData.seniority.charAt(0).toUpperCase() + scenarioData.seniority.slice(1) : 'Prospect'} Speaking...` : 'Listening...'}
+                    {isAISpeaking ? `${scenarioData?.seniority ? scenarioData.seniority.charAt(0).toUpperCase() + scenarioData.seniority.slice(1) : 'Prospect'} Speaking...` : 'Waiting for your message...'}
                   </span>
-                  {scenarioConfig.current.enableStreaming && (
-                    <Badge variant="secondary" className="ml-2">
-                      <Zap className="mr-1 h-3 w-3" />
-                      Streaming
-                    </Badge>
-                  )}
+                  <Badge variant="secondary" className="ml-2">
+                    <Zap className="mr-1 h-3 w-3" />
+                    Push-to-Talk
+                  </Badge>
                 </div>
                 {showSubtitles && (
                   <p className="text-muted-foreground max-w-md">
                     {isAISpeaking 
                       ? (currentAIText || "Hello, this is Sarah Johnson. I appreciate you taking the time to call. We're always looking for ways to improve our operations.")
-                      : isTranscriptionPaused
-                      ? "Transcription paused during AI speech..."
-                      : (currentTranscript || "Waiting for your response...")
+                      : isTranscribingMessage
+                      ? "Transcribing and sending your message..."
+                      : isUserRecording
+                      ? "Recording your message..."
+                      : currentUserMessage && currentUserMessage !== 'Recording your message...'
+                      ? currentUserMessage
+                      : "Press Space or click Record to speak"
                     }
                   </p>
                 )}
@@ -838,59 +912,90 @@ export function LiveSimulation() {
                     <span className="animate-pulse">●</span> AI is thinking...
                   </p>
                 )}
-                {streamingState === 'transcribing' && (
-                  <p className="text-sm text-orange-600 mt-2">
-                    <span className="animate-pulse">●</span> Transcribing your speech...
+                {isUserRecording && (
+                  <p className="text-sm text-green-600 mt-2">
+                    <span className="animate-pulse">●</span> Recording your message...
+                  </p>
+                )}
+                {isTranscribingMessage && (
+                  <p className="text-sm text-blue-600 mt-2">
+                    <span className="animate-pulse">●</span> Transcribing and sending...
                   </p>
                 )}
               </div>
 
-              {/* Microphone Indicator */}
+              {/* Push-to-Talk Controls */}
               <div className="flex items-center space-x-4">
                 <motion.div
                   className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                    isAudioRecording 
+                    isUserRecording 
                       ? 'bg-red-100 dark:bg-red-900' 
+                      : canSendMessage
+                      ? 'bg-green-100 dark:bg-green-900'
                       : 'bg-gray-100 dark:bg-gray-800'
                   }`}
                   animate={{
-                    scale: isAudioRecording && canRepSpeak ? [1, 1.1, 1] : 1,
+                    scale: isUserRecording ? [1, 1.1, 1] : 1,
                   }}
                   transition={{
                     duration: 1,
-                    repeat: isAudioRecording && canRepSpeak ? Infinity : 0,
+                    repeat: isUserRecording ? Infinity : 0,
                   }}
                 >
-                  {isAudioRecording ? (
+                  {isUserRecording ? (
                     <Mic className="h-8 w-8 text-red-600" />
+                  ) : isTranscribingMessage ? (
+                    <Send className="h-8 w-8 text-blue-600" />
                   ) : (
                     <MicOff className="h-8 w-8 text-gray-400" />
                   )}
                 </motion.div>
                 <div className="text-center">
                   <p className="font-medium">
-                    {isAudioRecording ? 'Recording' : 'Not Recording'}
+                    {isUserRecording ? 'Recording' : isTranscribingMessage ? 'Sending...' : 'Ready to Record'}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Your microphone
+                    {isUserRecording ? 'Press Space to stop and send' : isTranscribingMessage ? 'Processing...' : 'Press Space to record'}
                   </p>
-                  {isAudioRecording && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formatTime(audioDuration)}
-                    </p>
-                  )}
-                  {scenarioConfig.current.enableStreaming && (
-                    <div className="mt-2 space-y-1">
-                      <Badge variant={isListening && !isTranscriptionPaused ? "default" : "outline"} className="text-xs">
-                        {isTranscriptionPaused ? 'Paused' : isListening ? 'Listening' : 'Not Listening'}
-                      </Badge>
-                      <Badge variant={isStreaming ? "default" : "outline"} className="text-xs ml-1">
-                        {isStreaming ? 'Processing' : 'Ready'}
-                      </Badge>
-                    </div>
-                  )}
                 </div>
               </div>
+
+              {/* Push-to-Talk Buttons */}
+              {isRecording && (
+                <div className="flex space-x-3 mt-6">
+                  {!isUserRecording && !isTranscribingMessage ? (
+                    <Button
+                      onClick={handleStartUserRecording}
+                      disabled={isAISpeaking}
+                      className="flex items-center space-x-2"
+                      size="lg"
+                    >
+                      <Mic className="h-4 w-4" />
+                      <span>Record Message</span>
+                    </Button>
+                  ) : isUserRecording ? (
+                    <Button
+                      onClick={handleStopUserRecording}
+                      variant="destructive"
+                      className="flex items-center space-x-2"
+                      size="lg"
+                    >
+                      <Square className="h-4 w-4" />
+                      <span>Stop & Send</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled
+                      variant="outline"
+                      className="flex items-center space-x-2"
+                      size="lg"
+                    >
+                      <Send className="h-4 w-4" />
+                      <span>Sending...</span>
+                    </Button>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -967,6 +1072,26 @@ export function LiveSimulation() {
             </CardContent>
           </Card>
 
+          {/* Push-to-Talk Instructions */}
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <h3 className="font-semibold text-center">Push-to-Talk Controls</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center space-x-3">
+                  <Badge variant="outline" className="text-xs">Space</Badge>
+                  <span>Start/Stop & auto-send</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-3 p-2 bg-muted rounded">
+                  <p>• Press Space to start recording</p>
+                  <p>• Speak your complete message</p>
+                  <p>• Press Space to stop</p>
+                  <p>• Message automatically sends to AI!</p>
+                  <p>• No extra buttons needed!</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Settings */}
           <Card>
             <CardContent className="p-6 space-y-4">
@@ -990,121 +1115,22 @@ export function LiveSimulation() {
                 onClick={() => {
                   console.log('Resetting conversation...');
                   resetConversation();
-                  resetTranscription();
+                  setCurrentUserMessage('');
+                  setCanSendMessage(false);
+                  setIsUserRecording(false);
+                  setTranscriptionError(null);
+                  // Clean up any ongoing recordings
+                  if (recordingStreamRef.current) {
+                    recordingStreamRef.current.getTracks().forEach(track => track.stop())
+                    recordingStreamRef.current = null
+                  }
+                  if (recordingRecorderRef.current && recordingRecorderRef.current.state === 'recording') {
+                    recordingRecorderRef.current.stop()
+                  }
                 }}
               >
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Reset Conversation
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={() => {
-                  console.log('Manual test: Starting streaming with test message');
-                  startStreaming("Hello, this is a test message", {
-                    scenarioPrompt: scenarioConfig.current.scenarioPrompt,
-                    persona: scenarioConfig.current.persona,
-                    voiceSettings: scenarioConfig.current.voiceSettings,
-                  });
-                }}
-              >
-                Test AI Response
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={() => {
-                  console.log('Testing speech synthesis');
-                  if ('speechSynthesis' in window) {
-                    const utterance = new SpeechSynthesisUtterance('Hello, this is a test of the speech synthesis system.');
-                    utterance.rate = 0.9;
-                    utterance.pitch = 1.0;
-                    utterance.volume = 0.8;
-                    speechSynthesis.speak(utterance);
-                    console.log('Speech synthesis test started');
-                  } else {
-                    console.error('Speech synthesis not supported in this browser');
-                  }
-                }}
-              >
-                Test Speech Synthesis
-              </Button>
-              
-              <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
-                <p><strong>Voice System:</strong></p>
-                <p>• ElevenLabs: Premium AI voices (requires credits)</p>
-                <p>• Speech Synthesis: Free browser voices (fallback)</p>
-                <p>• Auto-fallback when credits exhausted</p>
-              </div>
-              
-              <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={async () => {
-                  console.log('Testing ElevenLabs API...');
-                  try {
-                    const response = await fetch('/api/test-elevenlabs', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({}),
-                    });
-                    
-                    const result = await response.json();
-                    console.log('ElevenLabs test result:', result);
-                    
-                    if (result.success) {
-                      toast({
-                        title: "ElevenLabs Test Successful",
-                        description: "Voice generation is working correctly.",
-                        variant: "default",
-                      });
-                    } else {
-                      toast({
-                        title: "ElevenLabs Test Failed",
-                        description: result.error || "Unknown error occurred.",
-                        variant: "destructive",
-                      });
-                    }
-                  } catch (error) {
-                    console.error('ElevenLabs test error:', error);
-                    toast({
-                      title: "ElevenLabs Test Error",
-                      description: error instanceof Error ? error.message : "Unknown error occurred.",
-                      variant: "destructive",
-                    });
-                  }
-                }}
-              >
-                Test ElevenLabs
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={() => {
-                  console.log('=== AUDIO RECORDING DEBUG ===');
-                  console.log('Audio recording state:', {
-                    isRecording: isAudioRecording,
-                    isPaused: isAudioPaused,
-                    audioBlob: !!audioBlob,
-                    audioBlobSize: audioBlob?.size,
-                    audioUrl: !!audioUrl,
-                    duration: audioDuration,
-                    error: audioError
-                  });
-                  console.log('Call state:', {
-                    isRecording,
-                    callId,
-                    currentTime
-                  });
-                  console.log('=== END AUDIO DEBUG ===');
-                }}
-              >
-                Debug Audio Recording
               </Button>
             </CardContent>
           </Card>
@@ -1139,9 +1165,9 @@ export function LiveSimulation() {
                   <span>{scenarioData?.voice ? scenarioData.voice.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not set'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Streaming:</span>
-                  <Badge variant={scenarioData?.enableStreaming ? "default" : "outline"} className="text-xs">
-                    {scenarioData?.enableStreaming ? 'Enabled' : 'Disabled'}
+                  <span className="text-muted-foreground">Mode:</span>
+                  <Badge variant="default" className="text-xs">
+                    Push-to-Talk
                   </Badge>
                 </div>
               </div>

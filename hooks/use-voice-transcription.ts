@@ -228,17 +228,24 @@ export function useVoiceTranscription(config: TranscriptionConfig = {}) {
         const success = await initializeWhisperTranscription();
         if (success && mediaRecorderRef.current) {
           console.log('MediaRecorder started successfully');
-          mediaRecorderRef.current.start(chunkDuration);
+          // In continuous mode, use chunking. In manual mode, record until manually stopped
+          if (continuous) {
+            mediaRecorderRef.current.start(chunkDuration);
+          } else {
+            mediaRecorderRef.current.start(); // No time slice - record until manually stopped
+          }
           lastChunkTimeRef.current = Date.now();
           
-          // Set up periodic chunking
-          chunkTimerRef.current = setInterval(() => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-              console.log('Stopping and restarting MediaRecorder for new chunk');
-              mediaRecorderRef.current.stop();
-              mediaRecorderRef.current.start(chunkDuration);
-            }
-          }, chunkDuration);
+          // Set up periodic chunking only if continuous mode is enabled
+          if (continuous) {
+            chunkTimerRef.current = setInterval(() => {
+              if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                console.log('Stopping and restarting MediaRecorder for new chunk');
+                mediaRecorderRef.current.stop();
+                mediaRecorderRef.current.start(chunkDuration);
+              }
+            }, chunkDuration);
+          }
         } else {
           console.error('Failed to initialize Whisper transcription');
         }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai, errorResponse, successResponse, validateEnvVars, validateStreamingEnvVars, corsHeaders, handleCors } from '@/lib/api-utils';
+import { compileProspectPrompt, serializeHistory, validateProspectReply } from '@/lib/prompt-compiler';
+import { AI_CONFIG, LEGACY_MODE } from '@/lib/ai-config';
 
 // Initialize ElevenLabs client dynamically
 let elevenlabs: any = null;
@@ -60,7 +62,8 @@ function getCallTypeModifier(callType: string): string {
   return `CALL CONTEXT: ${modifiers[callType as keyof typeof modifiers] || modifiers['outbound']}`;
 }
 
-export async function POST(req: NextRequest) {
+// Keep legacy handler for rollback
+async function legacyStreamingHandler(req: NextRequest) {
   try {
     // Handle CORS
     const corsResponse = handleCors(req);
@@ -530,6 +533,220 @@ You are the prospect receiving this sales call. Respond naturally as the charact
         'Connection': 'keep-alive',
         ...corsHeaders
       }
+    });
+
+  } catch (error) {
+    console.error('Stream GPT voice error:', error);
+    return errorResponse(
+      error instanceof Error ? error.message : 'Internal server error',
+      500
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  if (LEGACY_MODE) {
+    // Keep existing logic for rollback
+    return legacyStreamingHandler(req);
+  }
+
+  try {
+    // Handle CORS
+    const corsResponse = handleCors(req);
+    if (corsResponse) return corsResponse;
+
+    // New compiled-prompt engine
+    const body = await req.json();
+    const { transcript, scenarioPrompt, persona, conversationHistory = [], voiceSettings, ...context } = body;
+
+    // Validate required fields
+    if (!transcript || !scenarioPrompt) {
+      return errorResponse('transcript and scenarioPrompt are required');
+    }
+
+    // Enhanced transcript validation for natural conversation flow
+    const cleanTranscript = transcript.trim();
+    
+    // Don't respond to very short messages
+    if (cleanTranscript.length < 4) {
+      console.log('Transcript too short, not responding:', cleanTranscript);
+      return errorResponse('Transcript too short for meaningful response');
+    }
+    
+    // Filter out fragments and incomplete thoughts
+    const isValidTranscript = () => {
+      // Check for minimum word count (complete thoughts typically have 2+ words)
+      const words = cleanTranscript.split(' ');
+      if (words.length < 2) return false;
+      
+      // Filter out common filler phrases that don't warrant responses
+      const fillerPhrases = [
+        /^(um|uh|er|ah)$/i,
+        /^(hmm|mm|mhm)$/i
+      ];
+      
+      const isJustFiller = fillerPhrases.some(pattern => pattern.test(cleanTranscript));
+      if (isJustFiller) return false;
+      
+      return true;
+    };
+    
+    if (!isValidTranscript()) {
+      console.log('Transcript is fragment or filler, not responding:', cleanTranscript);
+      return errorResponse('Transcript appears to be incomplete');
+    }
+
+    const compiledPrompt = compileProspectPrompt({
+      seniority: context.seniority || persona?.seniority || 'manager',
+      callType: context.callType || persona?.callType || 'discovery-outbound',
+      scenario: scenarioPrompt,
+      difficulty: context.difficulty || persona?.difficulty || 3,
+      conversationHistory: serializeHistory(conversationHistory)
+    });
+
+    console.log('Using compiled prompt with model:', AI_CONFIG.SIM_MODEL);
+
+    // Set up SSE response
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Validate required environment variables
+          if (!process.env.OPENAI_API_KEY) {
+            throw new Error('OpenAI API key is not configured');
+          }
+          
+          // Check if ElevenLabs is available (but don't fail if not)
+          const hasElevenLabs = !!process.env.ELEVENLABS_API_KEY;
+          if (!hasElevenLabs) {
+            console.log('ElevenLabs API key not configured, will use speech synthesis fallback');
+          }
+
+          // Generate GPT response
+          console.log('Generating AI response...');
+          const completion = await openai.chat.completions.create({
+            model: AI_CONFIG.SIM_MODEL,
+            messages: [
+              { role: 'system', content: compiledPrompt },
+              { role: 'user', content: cleanTranscript }
+            ],
+            temperature: AI_CONFIG.temperature,
+            presence_penalty: AI_CONFIG.presence_penalty,
+            frequency_penalty: AI_CONFIG.frequency_penalty,
+            max_tokens: AI_CONFIG.max_tokens,
+            seed: AI_CONFIG.seed,
+            stream: true
+          });
+
+          let fullResponse = '';
+          
+          // Stream the text response
+          for await (const chunk of completion) {
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+              fullResponse += content;
+              // Send text chunk
+              const textData = JSON.stringify({ type: 'text', content });
+              controller.enqueue(encoder.encode(`data: ${textData}\n\n`));
+            }
+          }
+
+          console.log('Full AI response:', fullResponse);
+
+          // Validate response
+          const validation = validateProspectReply(fullResponse, context.difficulty || persona?.difficulty || 3);
+          if (!validation.isValid && validation.nudge) {
+            // Log nudge for next turn improvement
+            console.log('Validation nudge:', validation.nudge);
+          }
+
+          // Generate voice response with fallback to speech synthesis
+          if (hasElevenLabs) {
+            try {
+              const elevenlabs = await getElevenLabsClient();
+              const settings = voiceSettings || {};
+              
+              console.log('Attempting ElevenLabs voice generation...');
+              const audioStream = await elevenlabs.textToSpeechStream({
+                textInput: fullResponse,
+                voiceId: settings.voiceId || '21m00Tcm4TlvDq8ikWAM',
+                modelId: 'eleven_multilingual_v2',
+                outputFormat: 'mp3_44100_128',
+                voiceSettings: {
+                  stability: settings.stability || 0.75,
+                  similarityBoost: settings.similarityBoost || 0.75,
+                }
+              });
+
+              // Stream audio chunks
+              for await (const chunk of audioStream) {
+                const base64Audio = Buffer.from(chunk).toString('base64');
+                const audioData = JSON.stringify({ type: 'audio', content: base64Audio });
+                controller.enqueue(encoder.encode(`data: ${audioData}\n\n`));
+              }
+            } catch (voiceError) {
+              console.error('ElevenLabs voice generation error:', voiceError);
+              
+              // Check if it's a credits/quota error
+              const errorMessage = voiceError instanceof Error ? voiceError.message : 'Unknown error';
+              const isCreditsError = errorMessage.toLowerCase().includes('credits') || 
+                                   errorMessage.toLowerCase().includes('quota') || 
+                                   errorMessage.toLowerCase().includes('limit') ||
+                                   errorMessage.toLowerCase().includes('insufficient') ||
+                                   errorMessage.toLowerCase().includes('payment') ||
+                                   errorMessage.toLowerCase().includes('subscription') ||
+                                   errorMessage.toLowerCase().includes('unauthorized') ||
+                                   errorMessage.includes('401') ||
+                                   errorMessage.includes('402') ||
+                                   errorMessage.includes('403');
+              
+              console.log(`ElevenLabs failed (${isCreditsError ? 'credits/quota issue' : 'API error'}), falling back to speech synthesis`);
+              
+              // Send speech synthesis fallback signal
+              const fallbackData = JSON.stringify({ 
+                type: 'speech_synthesis_fallback', 
+                text: fullResponse,
+                reason: isCreditsError ? 'credits_exhausted' : 'api_error',
+                message: 'Using browser speech synthesis due to ElevenLabs unavailability'
+              });
+              controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
+            }
+          } else {
+            // No ElevenLabs API key, use speech synthesis directly
+            console.log('Using speech synthesis (no ElevenLabs API key)');
+            const fallbackData = JSON.stringify({ 
+              type: 'speech_synthesis_fallback', 
+              text: fullResponse,
+              reason: 'no_api_key',
+              message: 'Using browser speech synthesis'
+            });
+            controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
+          }
+
+          // Send completion signal
+          const doneData = JSON.stringify({ type: 'done' });
+          controller.enqueue(encoder.encode(`data: ${doneData}\n\n`));
+          
+        } catch (error) {
+          console.error('Streaming error:', error);
+          const errorData = JSON.stringify({ 
+            type: 'error', 
+            content: error instanceof Error ? error.message : 'Unknown error occurred' 
+          });
+          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+        } finally {
+          controller.close();
+        }
+      }
+    });
+
+    return new NextResponse(stream, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
 
   } catch (error) {

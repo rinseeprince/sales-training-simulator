@@ -3,7 +3,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 export type StreamingState = 'idle' | 'recording' | 'transcribing' | 'thinking' | 'speaking' | 'waiting-for-rep';
 
 export interface VoiceChunk {
-  type: 'text_chunk' | 'audio_chunk' | 'completion' | 'error' | 'voice_error';
+  type: 'text_chunk' | 'audio_chunk' | 'completion' | 'error' | 'voice_error' | 'speech_synthesis_fallback' | 'text' | 'audio' | 'done';
   content?: string;
   audioUrl?: string;
   chunkId?: number;
@@ -14,9 +14,10 @@ export interface VoiceChunk {
   totalChunks?: number;
   timestamp?: string;
   useSpeechSynthesis?: boolean;
-  fallbackReason?: 'credits_exhausted' | 'api_error';
+  fallbackReason?: 'credits_exhausted' | 'api_error' | 'no_api_key';
   fallbackToSpeechSynthesis?: boolean;
-  reason?: 'credits_exhausted' | 'api_error';
+  reason?: 'credits_exhausted' | 'api_error' | 'no_api_key';
+  message?: string;
 }
 
 export interface StreamingConfig {
@@ -234,8 +235,82 @@ export function useVoiceStreaming() {
           setStreamingState('waiting-for-rep');
         }
         break;
+        
+      case 'speech_synthesis_fallback':
+        console.log('Speech synthesis fallback triggered:', chunk.reason, chunk.message);
+        
+        if (chunk.text && 'speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(chunk.text);
+          utterance.rate = 0.9;
+          utterance.pitch = 1.0;
+          utterance.volume = 0.8;
+          
+          utterance.onend = () => {
+            console.log('Speech synthesis finished');
+            setStreamingState('waiting-for-rep');
+          };
+          
+          utterance.onerror = (error) => {
+            console.error('Speech synthesis error:', error);
+            setStreamingState('waiting-for-rep');
+          };
+          
+          speechSynthesis.speak(utterance);
+          setStreamingState('speaking');
+          
+          // Add AI message to conversation history
+          const aiMessage: ConversationMessage = {
+            role: 'ai',
+            content: chunk.text,
+            timestamp: new Date().toISOString()
+          };
+          setConversationHistory(prev => [...prev, aiMessage]);
+          setCurrentAIText('');
+          
+          // Show notification about fallback if credits exhausted
+          if (chunk.reason === 'credits_exhausted') {
+            console.info('Using speech synthesis: ElevenLabs credits exhausted');
+          }
+        } else if (!('speechSynthesis' in window)) {
+          console.error('Speech synthesis not supported in this browser');
+          setError('Voice generation failed and speech synthesis not available');
+          setStreamingState('waiting-for-rep');
+        }
+        break;
+        
+      case 'text':
+        // Handle new compiled-prompt engine text chunks
+        if (chunk.content) {
+          console.log('Adding text chunk to AI response:', chunk.content);
+          setCurrentAIText(prev => prev + chunk.content);
+        }
+        break;
+        
+      case 'audio':
+        // Handle new compiled-prompt engine audio chunks
+        if (chunk.content) {
+          const audioUrl = `data:audio/mpeg;base64,${chunk.content}`;
+          console.log('Received audio chunk, queueing for playback');
+          queueAudio(audioUrl);
+        }
+        break;
+        
+      case 'done':
+        // Handle new compiled-prompt engine completion
+        console.log('Stream completed');
+        if (currentAIText) {
+          const aiMessage: ConversationMessage = {
+            role: 'ai',
+            content: currentAIText,
+            timestamp: new Date().toISOString()
+          };
+          setConversationHistory(prev => [...prev, aiMessage]);
+          setCurrentAIText('');
+        }
+        setStreamingState('speaking');
+        break;
     }
-  }, [queueAudio]);
+  }, [queueAudio, currentAIText]);
 
   // Start streaming conversation
   const startStreaming = useCallback(async (transcript: string, config: StreamingConfig) => {
@@ -244,26 +319,29 @@ export function useVoiceStreaming() {
       setStreamingState('transcribing');
       setIsStreaming(true);
 
-      // Add rep message to conversation history
-      setConversationHistory(prev => [
-        ...prev,
-        {
-          role: 'rep', // Use 'rep' for consistency with our interface
-          content: transcript,
-          timestamp: new Date().toISOString()
-        }
-      ]);
+      // Prepare the updated conversation history with the new message
+      const newMessage = {
+        role: 'rep', // Use 'rep' for consistency with our interface
+        content: transcript,
+        timestamp: new Date().toISOString()
+      };
+      
+      const updatedHistory = [...conversationHistory, newMessage];
+      
+      // Update conversation history state
+      setConversationHistory(updatedHistory);
 
-      // Prepare request body
+      // Prepare request body with the UPDATED conversation history
       const requestBody = {
         transcript,
         scenarioPrompt: config.scenarioPrompt,
         persona: config.persona,
         voiceSettings: config.voiceSettings,
-        conversationHistory: conversationHistory.slice(-10) // Keep last 10 messages for context
+        conversationHistory: updatedHistory.slice(-10) // Keep last 10 messages for context INCLUDING the current one
       };
 
       console.log('Starting streaming with request:', requestBody);
+      console.log('Updated conversation history:', updatedHistory);
 
       // Create EventSource for SSE - using updated API that prioritizes user prompts
       const response = await fetch('/api/stream-gpt-voice', {

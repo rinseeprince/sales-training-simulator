@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ import { Play, Save, Settings, Clock, Users, TrendingUp, Mic } from 'lucide-reac
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/auth-provider'
 import { useToast } from '@/hooks/use-toast'
+import { compileProspectPrompt } from '@/lib/prompt-compiler'
 
 export function ScenarioBuilder() {
   const router = useRouter()
@@ -33,6 +34,8 @@ export function ScenarioBuilder() {
     enableStreaming: false
   })
   const [savedScenarios, setSavedScenarios] = useState([])
+  const [showPromptPreview, setShowPromptPreview] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   // Load saved scenarios and check for edit mode
   useEffect(() => {
@@ -517,6 +520,84 @@ export function ScenarioBuilder() {
                 </p>
               </div>
             </CardContent>
+          </Card>
+
+          {/* Prompt Preview UI */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>AI Engine Settings</CardTitle>
+                  <CardDescription>
+                    Configure advanced AI behavior and preview compiled prompts
+                  </CardDescription>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={showPromptPreview}
+                    onCheckedChange={setShowPromptPreview}
+                  />
+                  <Label>Show Prompt Preview</Label>
+                </div>
+              </div>
+            </CardHeader>
+            {showPromptPreview && (
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium">Compiled System Prompt</Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      This is the exact prompt that will be sent to {process.env.NEXT_PUBLIC_AI_SIM_MODEL || 'gpt-4o'}
+                    </p>
+                    <pre className="text-xs bg-muted p-4 rounded overflow-auto max-h-96 whitespace-pre-wrap">
+                      {useMemo(() => {
+                        return compileProspectPrompt({
+                          seniority: scenarioData.seniority || 'manager',
+                          callType: scenarioData.callType || 'discovery-outbound',
+                          scenario: scenarioData.prompt || 'Sample scenario',
+                          difficulty: scenarioData.difficulty[0] || 3,
+                          conversationHistory: []
+                        });
+                      }, [scenarioData])}
+                    </pre>
+                  </div>
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div className="text-xs text-muted-foreground">
+                      Using model: <span className="font-mono">{process.env.NEXT_PUBLIC_AI_SIM_MODEL || 'gpt-4o'}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                    >
+                      {showAdvanced ? 'Hide' : 'Show'} Advanced Options
+                    </Button>
+                  </div>
+                  {showAdvanced && (
+                    <div className="space-y-4 p-4 border rounded">
+                      <div>
+                        <Label>Custom System Prompt Additions</Label>
+                        <Textarea 
+                          placeholder="Add custom instructions that will be appended to the compiled prompt..."
+                          className="mt-2"
+                          rows={4}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm">Temperature</Label>
+                          <Input type="number" defaultValue="0.7" step="0.1" min="0" max="2" />
+                        </div>
+                        <div>
+                          <Label className="text-sm">Max Tokens</Label>
+                          <Input type="number" defaultValue="180" min="50" max="500" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            )}
           </Card>
         </motion.div>
       </div>

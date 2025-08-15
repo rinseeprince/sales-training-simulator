@@ -62,6 +62,8 @@ export function PostCallReview() {
   const [tempCallData, setTempCallData] = useState(null)
   const [isSavingCall, setIsSavingCall] = useState(false)
   const [callSaved, setCallSaved] = useState(false)
+  const [coachingFeedback, setCoachingFeedback] = useState<any>(null)
+  const [isLoadingCoaching, setIsLoadingCoaching] = useState(false)
 
   // Check for temporary call data on mount
   useEffect(() => {
@@ -198,6 +200,37 @@ export function PostCallReview() {
   // Use temp call data, then real call data, or fallback to demo data
   const displayData = tempCallData || call || callData
   const hasAudio = tempCallData?.audioUrl || call?.audio_url || callData.audioUrl
+
+  // Load coaching feedback when we have a transcript
+  useEffect(() => {
+    const loadCoachingFeedback = async () => {
+      if (!displayData?.transcript || isLoadingCoaching || coachingFeedback) return;
+      
+      setIsLoadingCoaching(true);
+      try {
+        const response = await fetch('/api/coach-call', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            transcript: displayData.transcript || transcript
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setCoachingFeedback(data.data);
+        }
+      } catch (error) {
+        console.error('Error loading coaching feedback:', error);
+      } finally {
+        setIsLoadingCoaching(false);
+      }
+    };
+    
+    loadCoachingFeedback();
+  }, [displayData?.transcript]);
   
   console.log('Review page data:', {
     callId,
@@ -438,27 +471,118 @@ export function PostCallReview() {
             </CardContent>
           </Card>
 
-          {/* AI Feedback */}
+          {/* AI Coaching Feedback */}
           <Card>
             <CardHeader>
-              <CardTitle>AI-Generated Feedback</CardTitle>
+              <CardTitle>AI-Generated Coaching Feedback</CardTitle>
               <CardDescription>
-                Detailed analysis of your performance with actionable insights
+                Detailed performance analysis with category-based scoring
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {(displayData.feedback || feedback).map((item: string, index: number) => (
-                  <div key={index} className="flex items-start space-x-3">
-                    {index < 2 ? (
-                      <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <ThumbsDown className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-                    )}
-                    <p className="text-sm">{item}</p>
+              {isLoadingCoaching ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : coachingFeedback ? (
+                <div className="space-y-6">
+                  {/* Category Scores */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-3">Performance Breakdown</h4>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Opening</span>
+                          <span className="font-medium">{coachingFeedback.categoryScores?.opening || 0}/20</span>
+                        </div>
+                        <Progress value={(coachingFeedback.categoryScores?.opening || 0) / 20 * 100} />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Discovery</span>
+                          <span className="font-medium">{coachingFeedback.categoryScores?.discovery || 0}/25</span>
+                        </div>
+                        <Progress value={(coachingFeedback.categoryScores?.discovery || 0) / 25 * 100} />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Objection Handling</span>
+                          <span className="font-medium">{coachingFeedback.categoryScores?.objectionHandling || 0}/20</span>
+                        </div>
+                        <Progress value={(coachingFeedback.categoryScores?.objectionHandling || 0) / 20 * 100} />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Value Demo</span>
+                          <span className="font-medium">{coachingFeedback.categoryScores?.valueDemonstration || 0}/20</span>
+                        </div>
+                        <Progress value={(coachingFeedback.categoryScores?.valueDemonstration || 0) / 20 * 100} />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Closing</span>
+                          <span className="font-medium">{coachingFeedback.categoryScores?.closing || 0}/15</span>
+                        </div>
+                        <Progress value={(coachingFeedback.categoryScores?.closing || 0) / 15 * 100} />
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* Structured Feedback Sections */}
+                  <Tabs defaultValue="strengths" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="strengths">Strengths</TabsTrigger>
+                      <TabsTrigger value="improvements">Improvements</TabsTrigger>
+                      <TabsTrigger value="next-steps">Next Steps</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="strengths" className="space-y-3 mt-4">
+                      {coachingFeedback.strengths?.map((strength: string, index: number) => (
+                        <div key={index} className="flex items-start space-x-3">
+                          <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm">{strength}</p>
+                        </div>
+                      )) || <p className="text-sm text-muted-foreground">No strengths identified</p>}
+                    </TabsContent>
+                    
+                    <TabsContent value="improvements" className="space-y-3 mt-4">
+                      {coachingFeedback.improvements?.map((improvement: string, index: number) => (
+                        <div key={index} className="flex items-start space-x-3">
+                          <TrendingUp className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm">{improvement}</p>
+                        </div>
+                      )) || <p className="text-sm text-muted-foreground">No improvements identified</p>}
+                    </TabsContent>
+                    
+                    <TabsContent value="next-steps" className="space-y-3 mt-4">
+                      {coachingFeedback.nextSteps?.map((step: string, index: number) => (
+                        <div key={index} className="flex items-start space-x-3">
+                          <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm">{step}</p>
+                        </div>
+                      )) || <p className="text-sm text-muted-foreground">No next steps identified</p>}
+                    </TabsContent>
+                  </Tabs>
+
+                  {/* Model Info */}
+                  <div className="text-xs text-muted-foreground pt-4 border-t">
+                    Analysis by {coachingFeedback.model || 'AI Coach'} • {new Date(coachingFeedback.timestamp || Date.now()).toLocaleString()}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {(displayData.feedback || feedback).map((item: string, index: number) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      {index < 2 ? (
+                        <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <ThumbsDown className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                      )}
+                      <p className="text-sm">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
