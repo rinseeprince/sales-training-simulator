@@ -596,13 +596,26 @@ export async function POST(req: NextRequest) {
       return errorResponse('Transcript appears to be incomplete');
     }
 
-    const compiledPrompt = compileProspectPrompt({
-      seniority: context.seniority || persona?.seniority || 'manager',
-      callType: context.callType || persona?.callType || 'discovery-outbound',
-      scenario: scenarioPrompt,
-      difficulty: context.difficulty || persona?.difficulty || 3,
-      conversationHistory: serializeHistory(conversationHistory)
-    });
+    // Use simple, direct prompt approach - much more human
+    const compiledPrompt = `You are playing the role of a prospect in a sales simulation.
+
+SCENARIO CONTEXT:
+${scenarioPrompt}
+
+INSTRUCTIONS:
+- Respond naturally as the person described in the scenario
+- Stay true to the personality, motivations, and context provided
+- React authentically based on the situation described
+- Don't break character or reveal you are an AI
+- Let the scenario description guide your level of interest, skepticism, or cooperation
+- Respond with the depth and detail that this person would naturally provide
+
+${conversationHistory.length > 0 ? `
+RECENT CONVERSATION:
+${serializeHistory(conversationHistory, 10).map(msg => `${msg.role}: ${msg.content}`).join('\n')}
+` : ''}
+
+Remember: You are this specific person in this specific situation. Be human, be authentic, be consistent with the character described.`;
 
     console.log('Using compiled prompt with model:', AI_CONFIG.SIM_MODEL);
 
@@ -630,11 +643,10 @@ export async function POST(req: NextRequest) {
               { role: 'system', content: compiledPrompt },
               { role: 'user', content: cleanTranscript }
             ],
-            temperature: AI_CONFIG.temperature,
-            presence_penalty: AI_CONFIG.presence_penalty,
-            frequency_penalty: AI_CONFIG.frequency_penalty,
-            max_tokens: AI_CONFIG.max_tokens,
-            seed: AI_CONFIG.seed,
+            temperature: 0.8, // Higher for more natural, varied responses
+            presence_penalty: 0.1, // Lower to allow natural conversation patterns
+            frequency_penalty: 0.1, // Lower to allow consistent terminology
+            max_tokens: 600, // Increased for richer responses when natural
             stream: true
           });
 
@@ -653,12 +665,8 @@ export async function POST(req: NextRequest) {
 
           console.log('Full AI response:', fullResponse);
 
-          // Validate response
-          const validation = validateProspectReply(fullResponse, context.difficulty || persona?.difficulty || 3);
-          if (!validation.isValid && validation.nudge) {
-            // Log nudge for next turn improvement
-            console.log('Validation nudge:', validation.nudge);
-          }
+          // Log response for debugging
+          console.log('Full AI response generated, length:', fullResponse.length);
 
           // Generate voice response with fallback to speech synthesis
           if (hasElevenLabs) {

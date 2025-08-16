@@ -25,9 +25,6 @@ export function ScenarioBuilder() {
   const [scenarioData, setScenarioData] = useState({
     title: '',
     prompt: '',
-    callType: '',
-    difficulty: [3],
-    seniority: '',
     duration: '',
     voice: '',
     saveReuse: false,
@@ -72,9 +69,6 @@ export function ScenarioBuilder() {
     setScenarioData({
       title: scenario.title,
       prompt: scenario.prompt,
-      callType: scenario.settings.callType || '',
-      difficulty: [getDifficultyNumber(scenario.difficulty)],
-      seniority: scenario.settings.seniority || '',
       duration: scenario.settings.duration || '',
       voice: scenario.settings.voice || '',
       saveReuse: true,
@@ -87,15 +81,7 @@ export function ScenarioBuilder() {
     })
   }
 
-  const getDifficultyNumber = (difficulty: string): number => {
-    const map: Record<string, number> = {
-      'easy': 2,
-      'medium': 3,
-      'hard': 4,
-      'expert': 5
-    }
-    return map[difficulty] || 3
-  }
+
 
   const handleStartSimulation = async () => {
     // Validate required fields
@@ -118,8 +104,11 @@ export function ScenarioBuilder() {
 
     // Save scenario data to localStorage for simulation page
     const simulationData = {
-      ...scenarioData,
-      difficulty: scenarioData.difficulty[0],
+      title: scenarioData.title,
+      prompt: scenarioData.prompt,
+      duration: scenarioData.duration,
+      voice: scenarioData.voice,
+      enableStreaming: scenarioData.enableStreaming,
       timestamp: Date.now()
     }
     localStorage.setItem('currentScenario', JSON.stringify(simulationData))
@@ -159,25 +148,16 @@ export function ScenarioBuilder() {
           title: scenarioData.title,
           prompt: scenarioData.prompt,
           userId: user.id,
-          persona: scenarioData.seniority ? `${scenarioData.seniority} Level Prospect` : 'Potential Customer',
-          difficulty: scenarioData.difficulty[0] <= 2 ? 'easy' : scenarioData.difficulty[0] <= 4 ? 'medium' : 'hard',
+          persona: 'Custom Prospect', // Simplified since it's defined in the prompt
+          difficulty: 'custom', // No longer using difficulty levels
           industry: 'General',
-          tags: [scenarioData.callType, scenarioData.seniority].filter(Boolean),
+          tags: ['custom-scenario'],
           settings: {
-            callType: scenarioData.callType,
-            seniority: scenarioData.seniority,
             duration: scenarioData.duration,
             voice: scenarioData.voice,
-            enableStreaming: scenarioData.enableStreaming,
-            difficulty: scenarioData.difficulty[0]
+            enableStreaming: scenarioData.enableStreaming
           },
-          // New AI Engine fields
-          persona_config: {
-            level: scenarioData.seniority || 'manager',
-            personalityTraits: ['professional', 'analytical']
-          },
-          difficulty_level: scenarioData.difficulty[0],
-          call_type: scenarioData.callType || 'discovery-outbound',
+          // Simplified AI Engine fields
           voice_settings: {
             voiceId: scenarioData.voice || 'professional-male',
             stability: 0.75,
@@ -319,69 +299,29 @@ export function ScenarioBuilder() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="prompt">Scenario Description</Label>
+                <Label htmlFor="prompt">Prospect & Scenario Description</Label>
                 <Textarea
                   id="prompt"
-                  placeholder="Describe the rep, product, target company, persona, and situation in detail..."
-                  className="min-h-[120px]"
+                  placeholder="Describe your prospect and scenario naturally...
+
+Example: You're Sarah, a marketing director at a mid-size SaaS company. You filled out a form on our website last week asking about marketing automation solutions. You're busy but genuinely interested, have budget approval but need to see clear ROI. You've been burned by overpromising vendors before, so you're cautiously optimistic but need to see proof.
+
+Be specific about:
+- Who they are (name, role, company type)
+- How this conversation came about (inbound/outbound/referral)
+- Their current situation and challenges
+- Their personality and communication style
+- What they care about most"
+                  className="min-h-[200px]"
                   value={scenarioData.prompt}
                   onChange={(e) => setScenarioData(prev => ({ ...prev, prompt: e.target.value }))}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Be specific about the context, objectives, and challenges for the best AI simulation
+                  Write this as if you're briefing a human actor on who to play. The more specific and human you are, the better the AI will perform.
                 </p>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Call Type</Label>
-                  <Select value={scenarioData.callType} onValueChange={(value) => setScenarioData(prev => ({ ...prev, callType: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select call type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="discovery-outbound">Discovery Call (Outbound Generated)</SelectItem>
-                      <SelectItem value="discovery-inbound">Discovery Call (Inbound Generated)</SelectItem>
-                      <SelectItem value="elevator-pitch">Elevator Pitch</SelectItem>
-                      <SelectItem value="objection-handling">Objection Handling</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Prospect Seniority</Label>
-                  <Select value={scenarioData.seniority} onValueChange={(value) => setScenarioData(prev => ({ ...prev, seniority: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select seniority" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="junior">Junior</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="director">Director</SelectItem>
-                      <SelectItem value="vp">VP</SelectItem>
-                      <SelectItem value="c-level">C-Level</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Prospect Difficulty: {scenarioData.difficulty[0]}/5</Label>
-                  <Slider
-                    value={scenarioData.difficulty}
-                    onValueChange={(value) => setScenarioData(prev => ({ ...prev, difficulty: value }))}
-                    max={5}
-                    min={1}
-                    step={1}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Easy</span>
-                    <span>Hard</span>
-                  </div>
-                </div>
-
                 <div className="space-y-2">
                   <Label>Call Duration</Label>
                   <Select value={scenarioData.duration} onValueChange={(value) => setScenarioData(prev => ({ ...prev, duration: value }))}>
@@ -413,6 +353,9 @@ export function ScenarioBuilder() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-4">
 
                 <div className="flex items-center space-x-2">
                   <Switch
@@ -462,28 +405,10 @@ export function ScenarioBuilder() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm">Call Type</span>
-                <Badge variant="outline">{scenarioData.callType || 'Not set'}</Badge>
-              </div>
-              <div className="flex items-center justify-between">
                 <span className="text-sm">Duration</span>
                 <Badge variant="outline">
                   <Clock className="mr-1 h-3 w-3" />
                   {scenarioData.duration ? `${scenarioData.duration} min` : 'Not set'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Seniority</span>
-                <Badge variant="outline">
-                  <Users className="mr-1 h-3 w-3" />
-                  {scenarioData.seniority || 'Not set'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Difficulty</span>
-                <Badge variant="outline">
-                  <TrendingUp className="mr-1 h-3 w-3" />
-                  {scenarioData.difficulty[0]}/5
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
@@ -499,6 +424,12 @@ export function ScenarioBuilder() {
                   {scenarioData.enableStreaming ? 'Enabled' : 'Disabled'}
                 </Badge>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Save for Reuse</span>
+                <Badge variant={scenarioData.saveReuse ? "default" : "outline"}>
+                  {scenarioData.saveReuse ? 'Yes' : 'No'}
+                </Badge>
+              </div>
             </CardContent>
           </Card>
 
@@ -508,15 +439,21 @@ export function ScenarioBuilder() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                <p className="font-medium text-blue-900 dark:text-blue-100">Pro Tip</p>
+                <p className="font-medium text-blue-900 dark:text-blue-100">Write Human Scenarios</p>
                 <p className="text-blue-700 dark:text-blue-300">
-                  Include specific objections you want to practice handling in your scenario description.
+                  Describe the prospect like a real person with specific motivations, challenges, and personality traits.
                 </p>
               </div>
               <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg">
-                <p className="font-medium text-green-900 dark:text-green-100">Best Practice</p>
+                <p className="font-medium text-green-900 dark:text-green-100">Include Context</p>
                 <p className="text-green-700 dark:text-green-300">
-                  Start with easier scenarios and gradually increase difficulty as you improve.
+                  Explain how this conversation came about - was it inbound, outbound, referral? This context shapes everything.
+                </p>
+              </div>
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
+                <p className="font-medium text-yellow-900 dark:text-yellow-100">Be Specific</p>
+                <p className="text-yellow-700 dark:text-yellow-300">
+                  "Busy but interested" is better than difficulty levels. "Burned by vendors before" sets clear expectations.
                 </p>
               </div>
             </CardContent>
@@ -551,14 +488,25 @@ export function ScenarioBuilder() {
                     </p>
                     <pre className="text-xs bg-muted p-4 rounded overflow-auto max-h-96 whitespace-pre-wrap">
                       {useMemo(() => {
-                        return compileProspectPrompt({
-                          seniority: scenarioData.seniority || 'manager',
-                          callType: scenarioData.callType || 'discovery-outbound',
-                          scenario: scenarioData.prompt || 'Sample scenario',
-                          difficulty: scenarioData.difficulty[0] || 3,
-                          conversationHistory: []
-                        });
-                      }, [scenarioData])}
+                        if (!scenarioData.prompt) {
+                          return "Enter a scenario description to see the AI prompt preview..."
+                        }
+                        
+                        return `You are playing the role of a prospect in a sales simulation.
+
+SCENARIO CONTEXT:
+${scenarioData.prompt}
+
+INSTRUCTIONS:
+- Respond naturally as the person described in the scenario
+- Stay true to the personality, motivations, and context provided
+- React authentically based on the situation described
+- Don't break character or reveal you are an AI
+- Let the scenario description guide your level of interest, skepticism, or cooperation
+- Respond with the depth and detail that this person would naturally provide
+
+Remember: You are this specific person in this specific situation. Be human, be authentic, be consistent with the character described.`;
+                      }, [scenarioData.prompt])}
                     </pre>
                   </div>
                   <div className="flex items-center justify-between pt-4 border-t">
