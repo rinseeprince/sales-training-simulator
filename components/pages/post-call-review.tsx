@@ -236,13 +236,26 @@ export function PostCallReview() {
     callId,
     call: call ? {
       id: call.id,
+      score: call.score,
+      talk_ratio: call.talk_ratio,
+      objections_handled: call.objections_handled,
+      cta_used: call.cta_used,
       audio_url: call.audio_url,
       hasAudioUrl: !!call.audio_url
     } : null,
     hasAudio,
     displayData: displayData ? {
       id: displayData.id,
+      score: displayData.score,
+      talk_ratio: displayData.talk_ratio,
+      objections_handled: displayData.objections_handled,
       audio_url: displayData.audio_url
+    } : null,
+    coachingFeedback: coachingFeedback ? {
+      overallScore: coachingFeedback.overallScore,
+      talkRatio: coachingFeedback.metrics?.talkRatio,
+      objectionHandling: coachingFeedback.categoryScores?.objectionHandling,
+      objectionsRaised: coachingFeedback.metrics?.objectionsRaised
     } : null
   });
 
@@ -391,8 +404,8 @@ export function PostCallReview() {
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{displayData.score || 0}/100</div>
-            <Progress value={displayData.score || 0} className="mt-2" />
+            <div className="text-2xl font-bold text-green-600">{coachingFeedback?.overallScore || displayData.score || 0}/100</div>
+            <Progress value={coachingFeedback?.overallScore || displayData.score || 0} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -403,7 +416,8 @@ export function PostCallReview() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {displayData.talk_ratio ? `${displayData.talk_ratio}% / ${100 - displayData.talk_ratio}%` : 
+              {coachingFeedback?.metrics?.talkRatio ? `${coachingFeedback.metrics.talkRatio}% / ${100 - coachingFeedback.metrics.talkRatio}%` :
+               displayData.talk_ratio ? `${displayData.talk_ratio}% / ${100 - displayData.talk_ratio}%` : 
                `${callData.talkRatio.rep}% / ${callData.talkRatio.ai}%`}
             </div>
             <p className="text-xs text-muted-foreground">Rep / Prospect</p>
@@ -413,15 +427,23 @@ export function PostCallReview() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">CTA Used</CardTitle>
-            {callData.ctaUsed ? (
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            ) : (
-              <XCircle className="h-4 w-4 text-red-500" />
-            )}
+            {(() => {
+              const ctaUsed = coachingFeedback?.categoryScores?.closing > 0 || 
+                             displayData.cta_used !== undefined ? displayData.cta_used : callData.ctaUsed;
+              return ctaUsed ? (
+                <CheckCircle className="h-4 w-4 text-green-500" />
+              ) : (
+                <XCircle className="h-4 w-4 text-red-500" />
+              );
+            })()}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {displayData.cta_used !== undefined ? (displayData.cta_used ? 'Yes' : 'No') : (callData.ctaUsed ? 'Yes' : 'No')}
+              {(() => {
+                const ctaUsed = coachingFeedback?.categoryScores?.closing > 0 || 
+                               displayData.cta_used !== undefined ? displayData.cta_used : callData.ctaUsed;
+                return ctaUsed ? 'Yes' : 'No';
+              })()}
             </div>
             <p className="text-xs text-muted-foreground">
               Clear next steps provided
@@ -461,12 +483,44 @@ export function PostCallReview() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {(displayData.objections_handled ? Array(displayData.objections_handled).fill('Objection handled') : callData.objections).map((objection: string, index: number) => (
-                  <div key={index} className="flex items-center space-x-3 p-3 bg-accent/50 rounded-lg">
-                    <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                    <span className="text-sm">{objection}</span>
-                  </div>
-                ))}
+                {(() => {
+                  // Check if there were actually objections raised based on coaching feedback
+                  const objectionsRaised = coachingFeedback?.metrics?.objectionsRaised || 0;
+                  const objectionHandlingScore = coachingFeedback?.categoryScores?.objectionHandling || 0;
+                  
+                  // If no objections were raised at all, show that
+                  if (objectionsRaised === 0) {
+                    return (
+                      <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg">
+                        <XCircle className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        <span className="text-sm text-muted-foreground">No objections were raised during this call</span>
+                      </div>
+                    );
+                  }
+                  
+                  // If objections were raised, show how many were handled based on the score
+                  const handledCount = objectionHandlingScore > 0 ? 
+                    Math.min(objectionsRaised, Math.ceil(objectionHandlingScore / 5)) : 0;
+                  
+                  if (handledCount === 0 && objectionsRaised > 0) {
+                    return (
+                      <div className="flex items-center space-x-3 p-3 bg-red-50 rounded-lg">
+                        <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                        <span className="text-sm text-red-600">
+                          {objectionsRaised} objection(s) raised but not handled effectively
+                        </span>
+                      </div>
+                    );
+                  }
+                  
+                  // Show handled objections
+                  return Array(handledCount).fill(0).map((_, index) => (
+                    <div key={index} className="flex items-center space-x-3 p-3 bg-accent/50 rounded-lg">
+                      <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
+                      <span className="text-sm">Objection {index + 1} handled effectively</span>
+                    </div>
+                  ));
+                })()}
               </div>
             </CardContent>
           </Card>

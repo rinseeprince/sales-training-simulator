@@ -44,7 +44,13 @@ export class CallScoringEngine {
 
   private formatTranscript(): string {
     return this.transcript
-      .map(turn => `${turn.speaker.toUpperCase()}: ${turn.message}`)
+      .map(turn => {
+        // Handle different transcript formats safely
+        const speaker = turn.speaker || 'UNKNOWN';
+        const message = turn.message || turn.text || '';
+        return `${speaker.toUpperCase()}: ${message}`;
+      })
+      .filter(line => line.trim() !== ': ') // Remove empty entries
       .join('\n\n');
   }
 
@@ -190,7 +196,7 @@ export class CallScoringEngine {
 
   // Manual analysis methods for when AI is unavailable
   analyzeTalkRatio(): TalkRatioAnalysis {
-    const repMessages = this.transcript.filter(t => t.speaker === 'rep');
+    const repMessages = this.transcript.filter(t => (t.speaker || '').toLowerCase() === 'rep');
     const totalMessages = this.transcript.length;
     const repTalkPercentage = totalMessages > 0 ? (repMessages.length / totalMessages) * 100 : 0;
     const prospectTalkPercentage = 100 - repTalkPercentage;
@@ -259,7 +265,7 @@ export class CallScoringEngine {
           speaker: segment.speaker,
           startTime: segment.startTime,
           duration: segment.duration,
-          content: messages.map(m => m.message).join(' ')
+          content: messages.map(m => m.message || m.text || '').join(' ')
         });
       }
     }
@@ -268,12 +274,12 @@ export class CallScoringEngine {
   }
 
   analyzeDiscoveryQuality(): DiscoveryQualityAnalysis {
-    const repMessages = this.transcript.filter(t => t.speaker === 'rep');
-    const questions = repMessages.filter(m => m.message.includes('?'));
+    const repMessages = this.transcript.filter(t => (t.speaker || '').toLowerCase() === 'rep');
+    const questions = repMessages.filter(m => (m.message || m.text || '').includes('?'));
     
     // Categorize questions
-    const openQuestions = questions.filter(q => this.isOpenQuestion(q.message));
-    const closedQuestions = questions.filter(q => !this.isOpenQuestion(q.message));
+    const openQuestions = questions.filter(q => this.isOpenQuestion(q.message || q.text || ''));
+    const closedQuestions = questions.filter(q => !this.isOpenQuestion(q.message || q.text || ''));
     
     // Analyze question categories (SPIN methodology)
     const categories = this.categorizeQuestions(questions);
@@ -314,7 +320,7 @@ export class CallScoringEngine {
     };
     
     questions.forEach(q => {
-      const lower = q.message.toLowerCase();
+      const lower = (q.message || q.text || '').toLowerCase();
       
       if (lower.includes('tell me about') || lower.includes('currently') || lower.includes('describe')) {
         categories.situation++;
@@ -333,11 +339,10 @@ export class CallScoringEngine {
   }
 
   private assessDiscoveryDepth(questions: CallTranscript[], categories: any): 'surface' | 'moderate' | 'deep' {
-    const hasBusinessImpact = questions.some(q => 
-      q.message.toLowerCase().includes('revenue') ||
-      q.message.toLowerCase().includes('cost') ||
-      q.message.toLowerCase().includes('roi')
-    );
+    const hasBusinessImpact = questions.some(q => {
+      const msg = (q.message || q.text || '').toLowerCase();
+      return msg.includes('revenue') || msg.includes('cost') || msg.includes('roi');
+    });
     
     const hasPainExploration = categories.problem > 0 && categories.implication > 0;
     const hasVisionBuilding = categories.needPayoff > 0;
@@ -351,28 +356,29 @@ export class CallScoringEngine {
     }
   }
 
-  private evaluateQuestions(questions: CallTranscript[]): any {
-    const strongQuestions = [];
-    const weakQuestions = [];
+  private evaluateQuestions(questions: CallTranscript[]): { strongQuestions: any[], weakQuestions: any[] } {
+    const strongQuestions: any[] = [];
+    const weakQuestions: any[] = [];
     
     questions.forEach(q => {
+      const questionText = q.message || q.text || '';
       const isStrong = QUESTION_QUALITY.highValue.some(phrase => 
-        q.message.toLowerCase().includes(phrase)
+        questionText.toLowerCase().includes(phrase)
       );
       
       const isWeak = QUESTION_QUALITY.lowValue.some(phrase => 
-        q.message.toLowerCase().startsWith(phrase)
+        questionText.toLowerCase().startsWith(phrase)
       );
       
       if (isStrong) {
         strongQuestions.push({
-          question: q.message,
+          question: questionText,
           category: 'discovery',
           impact: 'Uncovers valuable business information'
         });
       } else if (isWeak) {
         weakQuestions.push({
-          question: q.message,
+          question: questionText,
           issue: 'Closed question limits information gathering',
           suggestion: 'Rephrase as open question starting with "What" or "How"'
         });
@@ -383,25 +389,32 @@ export class CallScoringEngine {
   }
 
   private findMissedOpportunities(): string[] {
-    const opportunities = [];
-    const prospectMessages = this.transcript.filter(t => t.speaker === 'ai' || t.speaker === 'prospect');
+    const opportunities: string[] = [];
+    const prospectMessages = this.transcript.filter(t => {
+      const speaker = (t.speaker || '').toLowerCase();
+      return speaker === 'ai' || speaker === 'prospect';
+    });
     
     // Look for unexplored pain points
     prospectMessages.forEach((msg, index) => {
-      const lower = msg.message.toLowerCase();
+      const lower = (msg.message || msg.text || '').toLowerCase();
       
       if (lower.includes('struggle') || lower.includes('challenge') || lower.includes('difficult')) {
         // Check if rep followed up
-        const nextRepMessage = this.transcript.slice(index + 1).find(t => t.speaker === 'rep');
-        if (!nextRepMessage || !nextRepMessage.message.includes('?')) {
+        const nextRepMessage = this.transcript.slice(index + 1).find(t => 
+          (t.speaker || '').toLowerCase() === 'rep'
+        );
+        if (!nextRepMessage || !(nextRepMessage.message || nextRepMessage.text || '').includes('?')) {
           opportunities.push('Prospect mentioned a challenge but rep didn\'t explore it');
         }
       }
       
       if (lower.includes('budget') || lower.includes('cost')) {
-        const hasROIDiscussion = this.transcript.slice(index).some(t => 
-          t.speaker === 'rep' && (t.message.includes('roi') || t.message.includes('value'))
-        );
+        const hasROIDiscussion = this.transcript.slice(index).some(t => {
+          const speaker = (t.speaker || '').toLowerCase();
+          const text = (t.message || t.text || '').toLowerCase();
+          return speaker === 'rep' && (text.includes('roi') || text.includes('value'));
+        });
         if (!hasROIDiscussion) {
           opportunities.push('Budget mentioned but ROI/value not discussed');
         }
@@ -428,7 +441,7 @@ export class CallScoringEngine {
   }
 
   private identifyObjections(): Array<{ index: number; objection: string }> {
-    const objections = [];
+    const objections: Array<{ index: number; objection: string }> = [];
     const objectionPhrases = [
       'too expensive', 'don\'t have budget', 'not interested',
       'already have', 'not the right time', 'need to think',
@@ -436,10 +449,11 @@ export class CallScoringEngine {
     ];
     
     this.transcript.forEach((turn, index) => {
-      if (turn.speaker === 'ai' || turn.speaker === 'prospect') {
-        const lower = turn.message.toLowerCase();
+      const speaker = (turn.speaker || '').toLowerCase();
+      if (speaker === 'ai' || speaker === 'prospect') {
+        const lower = (turn.message || turn.text || '').toLowerCase();
         if (objectionPhrases.some(phrase => lower.includes(phrase))) {
-          objections.push({ index, objection: turn.message });
+          objections.push({ index, objection: turn.message || turn.text || '' });
         }
       }
     });
@@ -452,7 +466,7 @@ export class CallScoringEngine {
       // Find rep's response
       const response = this.transcript
         .slice(obj.index + 1)
-        .find(t => t.speaker === 'rep');
+        .find(t => (t.speaker || '').toLowerCase() === 'rep');
       
       if (!response) {
         return {
@@ -466,13 +480,14 @@ export class CallScoringEngine {
       }
       
       // Evaluate response quality
-      const technique = this.identifyObjectionTechnique(response.message);
-      const effectiveness = this.evaluateObjectionResponse(obj.objection, response.message);
+      const responseText = response.message || response.text || '';
+      const technique = this.identifyObjectionTechnique(responseText);
+      const effectiveness = this.evaluateObjectionResponse(obj.objection, responseText);
       
       return {
         type: this.categorizeObjection(obj.objection),
         objection: obj.objection,
-        response: response.message,
+        response: responseText,
         handled: effectiveness !== 'poor',
         technique,
         effectiveness

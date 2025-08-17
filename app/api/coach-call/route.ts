@@ -59,44 +59,46 @@ export async function POST(req: NextRequest) {
       .map((turn: any) => `${turn.speaker}: ${turn.message}`)
       .join('\n');
 
-    // Use GPT-5 to evaluate the call with structured output
+    // Use GPT to evaluate the call with structured output
     const evaluationPrompt = `
-Analyze the following sales call transcript and provide structured feedback.
+You are a sales coach analyzing a call transcript. Provide a structured evaluation in valid JSON format.
 
 TRANSCRIPT:
 ${transcriptText}
 
-Provide your evaluation in the following JSON format:
+Analyze this call and respond with ONLY valid JSON in this exact format (no additional text, no markdown, no explanations):
+
 {
-  "overallScore": number (0-100),
+  "overallScore": 75,
   "categoryScores": {
-    "opening": number (0-20),
-    "discovery": number (0-25),
-    "objectionHandling": number (0-20),
-    "valueDemonstration": number (0-20),
-    "closing": number (0-15)
+    "opening": 15,
+    "discovery": 20,
+    "objectionHandling": 0,
+    "valueDemonstration": 18,
+    "closing": 12
   },
   "strengths": [
-    "Specific strength example 1 with context from the call",
-    "Specific strength example 2 with context from the call",
-    "Specific strength example 3 with context from the call"
+    "Strong opening with clear value proposition",
+    "Effective discovery questions about current challenges"
   ],
   "improvements": [
-    "Actionable improvement 1 with specific example of what to do differently",
-    "Actionable improvement 2 with specific example of what to do differently",
-    "Actionable improvement 3 with specific example of what to do differently"
+    "Ask more follow-up questions to deepen discovery",
+    "Provide more specific examples when demonstrating value"
   ],
   "nextSteps": [
-    "Concrete action for next call",
-    "Concrete action for skill development"
+    "Practice asking deeper discovery questions",
+    "Prepare specific case studies for value demonstration"
   ]
 }
 
-IMPORTANT: 
-- Reference specific moments from the transcript
-- Make feedback actionable and behavioral
-- Be constructive but honest about areas for improvement
-- Respond ONLY with valid JSON, no additional text`;
+SCORING GUIDELINES:
+- Opening (0-20): Professional greeting, value proposition clarity
+- Discovery (0-25): Question quality, listening, pain identification  
+- Objection Handling (0-20): Only score if objections were raised and addressed
+- Value Demonstration (0-20): Benefit articulation, feature-to-benefit conversion
+- Closing (0-15): Clear next steps, commitment gained
+
+IMPORTANT: Return ONLY the JSON object. No other text.`;
 
     const completion = await openai.chat.completions.create({
       model: AI_CONFIG.COACH_MODEL,
@@ -120,14 +122,55 @@ IMPORTANT:
       return errorResponse('Failed to generate evaluation');
     }
 
-    // Parse AI response
+    // Parse AI response with better error handling
     let evaluation;
     try {
-      evaluation = JSON.parse(aiEvaluation);
+      // Clean the response - remove any markdown formatting or extra text
+      let cleanedResponse = aiEvaluation.trim();
+      
+      // Extract JSON if it's wrapped in markdown
+      const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch) {
+        cleanedResponse = jsonMatch[1];
+      }
+      
+      // Try to find the JSON object if there's extra text
+      const jsonStart = cleanedResponse.indexOf('{');
+      const jsonEnd = cleanedResponse.lastIndexOf('}') + 1;
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        cleanedResponse = cleanedResponse.substring(jsonStart, jsonEnd);
+      }
+      
+      evaluation = JSON.parse(cleanedResponse);
+      
+      // Validate the structure
+      if (!evaluation.overallScore && evaluation.overallScore !== 0) {
+        throw new Error('Missing overallScore');
+      }
+      if (!evaluation.categoryScores) {
+        throw new Error('Missing categoryScores');
+      }
+      
     } catch (parseError) {
       console.error('Failed to parse AI evaluation:', parseError);
       console.error('Raw AI response:', aiEvaluation);
-      return errorResponse('Failed to parse evaluation response');
+      
+      // Create fallback evaluation
+      evaluation = {
+        overallScore: 50,
+        categoryScores: {
+          opening: 10,
+          discovery: 12,
+          objectionHandling: objectionCount > 0 ? 10 : 0,
+          valueDemonstration: 10,
+          closing: 8
+        },
+        strengths: ['Call completed successfully'],
+        improvements: ['Unable to generate detailed feedback due to analysis error'],
+        nextSteps: ['Review call recording for self-assessment']
+      };
+      
+      console.log('Using fallback evaluation due to parsing error');
     }
 
     // Calculate basic metrics from transcript
@@ -135,6 +178,17 @@ IMPORTANT:
     const aiMessages = transcript.filter((turn: any) => turn.speaker === 'ai');
     const totalMessages = transcript.length;
     const talkRatio = totalMessages > 0 ? (repMessages.length / totalMessages) * 100 : 0;
+    
+    // Analyze objections more accurately
+    const objectionCount = transcript.filter((turn: any) => {
+      if (turn.speaker === 'ai' || turn.speaker === 'prospect') {
+        const lower = turn.message.toLowerCase();
+        return lower.includes('too expensive') || lower.includes('not interested') || 
+               lower.includes('already have') || lower.includes('not the right time') ||
+               lower.includes('need to think') || lower.includes('budget');
+      }
+      return false;
+    }).length;
 
     // Compile the full feedback response
     const result: CoachingFeedback = {
@@ -142,7 +196,7 @@ IMPORTANT:
       categoryScores: {
         opening: evaluation.categoryScores?.opening || 0,
         discovery: evaluation.categoryScores?.discovery || 0,
-        objectionHandling: evaluation.categoryScores?.objectionHandling || 0,
+        objectionHandling: objectionCount > 0 ? evaluation.categoryScores?.objectionHandling || 0 : 0,
         valueDemonstration: evaluation.categoryScores?.valueDemonstration || 0,
         closing: evaluation.categoryScores?.closing || 0
       },
@@ -162,6 +216,7 @@ IMPORTANT:
         repMessages: repMessages.length,
         aiMessages: aiMessages.length,
         talkRatio: Math.round(talkRatio),
+        objectionsRaised: objectionCount,
         duration: transcript.length * 30, // Rough estimate: 30 seconds per message
       }
     };

@@ -27,6 +27,7 @@ export interface Scenario {
 export interface CallTranscript {
   speaker: 'rep' | 'ai';
   message: string;
+  text?: string; // Alternative field name for message content
   timestamp?: string;
 }
 

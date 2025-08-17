@@ -588,21 +588,23 @@ export function LiveSimulation() {
           console.log('Scoring call data:', {
             repId: user.id,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
+            scenarioPrompt: scenarioData?.prompt || '',
             duration: currentTime,
             transcriptLength: conversationHistory.length,
             audioUrl: audioUrl,
             conversationHistory: conversationHistory
           });
           
-          // Save call data and get scoring - EXACTLY as it was working before
+          // Save call data and get scenario-aware scoring
           setAnalysisProgress('Analyzing conversation with AI...');
-          console.log('Saving call data:', {
+          console.log('Saving call data with scenario context:', {
             repId: user.id,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
+            scenarioPrompt: scenarioData?.prompt || '',
             duration: currentTime,
             transcriptLength: conversationHistory.length,
             audioUrl: audioUrl,
-            conversationHistory: conversationHistory // Debug conversation history
+            conversationHistory: conversationHistory
           });
           
           const saveResponse = await fetch('/api/save-call', {
@@ -611,10 +613,11 @@ export function LiveSimulation() {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              callId: callId, // Add the call ID
+              callId: callId,
               transcript: conversationHistory,
               repId: user.id,
               scenarioName: scenarioData?.title || 'Unnamed Simulation',
+              scenarioPrompt: scenarioData?.prompt || '', // Add scenario prompt for context-aware scoring
               duration: currentTime,
               audioUrl: audioUrl,
               conversationHistory: conversationHistory,
@@ -633,7 +636,7 @@ export function LiveSimulation() {
           
           if (saveResponse.ok) {
             const saveResult = await saveResponse.json();
-            console.log('Call saved and scored:', saveResult);
+            console.log('Call saved and scored with scenario context:', saveResult);
             
             // Extract scoring results from the save response
             scoringResult = {
@@ -657,6 +660,7 @@ export function LiveSimulation() {
             transcript: conversationHistory,
             repId: user.id,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
+            scenarioPrompt: scenarioData?.prompt || '', // Include scenario prompt in temp data
             duration: currentTime,
             audioUrl: audioUrl,
             conversationHistory: conversationHistory,
@@ -678,6 +682,7 @@ export function LiveSimulation() {
             callId,
             repId: user.id,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
+            scenarioPrompt: scenarioData?.prompt || '',
             duration: currentTime,
             transcriptLength: conversationHistory.length,
             audioUrl: audioUrl,
