@@ -5,6 +5,7 @@ declare module 'elevenlabs-node' {
     textToSpeech(request: {
       text: string;
       voiceId: string;
+      model_id?: string;
       stability?: number;
       similarityBoost?: number;
       style?: number;

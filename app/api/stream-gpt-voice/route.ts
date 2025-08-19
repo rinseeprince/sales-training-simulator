@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { openai, errorResponse, successResponse, validateEnvVars, validateStreamingEnvVars, corsHeaders, handleCors } from '@/lib/api-utils';
 import { compileProspectPrompt, serializeHistory, validateProspectReply } from '@/lib/prompt-compiler';
 import { AI_CONFIG, LEGACY_MODE } from '@/lib/ai-config';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 // Initialize ElevenLabs client dynamically
 let elevenlabs: any = null;
@@ -16,7 +19,6 @@ async function getElevenLabsClient() {
         throw new Error('ELEVENLABS_API_KEY is not configured');
       }
       console.log('Creating ElevenLabs client with API key:', apiKey.substring(0, 10) + '...');
-      // Use the ElevenLabs constructor correctly
       elevenlabs = new (ElevenLabs as any)({
         apiKey: apiKey,
         voiceId: '21m00Tcm4TlvDq8ikWAM' // Default voice ID
@@ -26,6 +28,115 @@ async function getElevenLabsClient() {
   } catch (error) {
     console.error('Failed to initialize ElevenLabs client:', error);
     throw error;
+  }
+}
+
+// Helper function to generate unique temporary file paths
+function getTempFilePath(prefix: string, extension: string = 'mp3'): string {
+  const tempDir = os.tmpdir();
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 15);
+  return path.join(tempDir, `${prefix}_${timestamp}_${random}.${extension}`);
+}
+
+// Helper function to safely read and delete audio file
+async function readAndDeleteAudioFile(filePath: string): Promise<Buffer | null> {
+  try {
+    if (!fs.existsSync(filePath)) {
+      console.warn(`Audio file not found: ${filePath}`);
+      return null;
+    }
+    
+    const audioBuffer = fs.readFileSync(filePath);
+    console.log(`Audio file read successfully: ${filePath}, size: ${audioBuffer.length} bytes`);
+    
+    // Clean up the file
+    try {
+      fs.unlinkSync(filePath);
+      console.log(`Audio file cleaned up: ${filePath}`);
+    } catch (cleanupError) {
+      console.warn(`Failed to cleanup audio file ${filePath}:`, cleanupError);
+    }
+    
+    return audioBuffer;
+  } catch (error) {
+    console.error(`Error reading audio file ${filePath}:`, error);
+    return null;
+  }
+}
+
+// Helper function to generate ElevenLabs audio with proper error handling
+async function generateElevenLabsAudio(
+  text: string, 
+  voiceSettings: any, 
+  chunkId?: number
+): Promise<{ success: boolean; audioBase64?: string; error?: string; fallbackReason?: string }> {
+  try {
+    console.log(`Generating ElevenLabs audio for chunk ${chunkId || 'full'}, text: "${text.substring(0, 50)}..."`);
+    
+    const elevenlabsClient = await getElevenLabsClient();
+    const voiceId = voiceSettings.voiceId || process.env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+    
+    // Generate unique temporary file path
+    const tempFilePath = getTempFilePath(`audio_${chunkId || 'full'}`);
+    console.log('Using temporary file path:', tempFilePath);
+    
+    const audioResult = await elevenlabsClient.textToSpeech({
+      fileName: tempFilePath,
+      textInput: text,
+      voiceId: voiceId,
+      model_id: 'eleven_turbo_v2',
+      stability: voiceSettings.stability || 0.5,
+      similarityBoost: voiceSettings.similarityBoost || 0.5,
+      style: voiceSettings.style || 0.0,
+      useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
+    });
+
+    console.log('ElevenLabs API response:', audioResult);
+
+    // Check if audioResult exists and has valid status
+    if (!audioResult) {
+      throw new Error('ElevenLabs returned empty response');
+    }
+    
+    if (audioResult.status && audioResult.status !== 'ok') {
+      throw new Error(`ElevenLabs returned status: ${audioResult.status}`);
+    }
+    
+    // Read the generated audio file
+    const audioBuffer = await readAndDeleteAudioFile(tempFilePath);
+    
+    if (!audioBuffer) {
+      throw new Error('Failed to read generated audio file');
+    }
+
+    // Convert audio buffer to base64
+    const audioBase64 = audioBuffer.toString('base64');
+    console.log(`Audio generated successfully, base64 length: ${audioBase64.length}`);
+    
+    return { success: true, audioBase64 };
+    
+  } catch (error) {
+    console.error('ElevenLabs audio generation failed:', error);
+    
+    // Determine if it's a credits/quota error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const isCreditsError = errorMessage.toLowerCase().includes('credits') || 
+                         errorMessage.toLowerCase().includes('quota') || 
+                         errorMessage.toLowerCase().includes('limit') ||
+                         errorMessage.toLowerCase().includes('insufficient') ||
+                         errorMessage.toLowerCase().includes('payment') ||
+                         errorMessage.toLowerCase().includes('subscription') ||
+                         errorMessage.toLowerCase().includes('unauthorized') ||
+                         errorMessage.includes('401') ||
+                         errorMessage.includes('402') ||
+                         errorMessage.includes('403');
+    
+    return { 
+      success: false, 
+      error: errorMessage,
+      fallbackReason: isCreditsError ? 'credits_exhausted' : 'api_error'
+    };
   }
 }
 
@@ -250,136 +361,82 @@ You are the prospect receiving this sales call. Respond naturally as the charact
                 // Generate audio for this chunk if voice settings are provided
                 // Always try to generate audio, but fallback to speech synthesis if ElevenLabs fails
                 if (voiceSettings) {
-                  let elevenlabsClient = null;
-                  let voiceId = null;
-                  let textToSpeech = null;
-                  
                   try {
-                    console.log('Generating voice for chunk:', sentenceCount, 'Text:', currentSentence.trim());
+                    const audioResult = await generateElevenLabsAudio(
+                      currentSentence.trim(), 
+                      voiceSettings, 
+                      sentenceCount
+                    );
                     
-                    voiceId = voiceSettings.voiceId || process.env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
-                    console.log('Using voice ID:', voiceId);
-                    
-                    // Only try ElevenLabs if API key is available
-                    if (process.env.ELEVENLABS_API_KEY) {
-                      elevenlabsClient = await getElevenLabsClient();
-                      console.log('ElevenLabs client obtained successfully');
+                    if (audioResult.success && audioResult.audioBase64) {
+                      // ElevenLabs audio generated successfully
+                      // Chunk the base64 audio data to avoid SSE message size limits
+                      const base64Data = audioResult.audioBase64;
+                      const chunkSize = 16384; // 16KB chunks
+                      
+                      for (let i = 0; i < base64Data.length; i += chunkSize) {
+                        const chunk = base64Data.slice(i, i + chunkSize);
+                        const isLastChunk = i + chunkSize >= base64Data.length;
+                        
+                        const audioData = {
+                          type: 'audio_chunk',
+                          audioUrl: `data:audio/mpeg;base64,${chunk}`,
+                          chunkId: sentenceCount,
+                          text: currentSentence.trim(),
+                          isPartial: !isLastChunk,
+                          chunkIndex: Math.floor(i / chunkSize),
+                          totalChunks: Math.ceil(base64Data.length / chunkSize)
+                        };
+                        controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
+                      }
                     } else {
-                      console.log('No ElevenLabs API key, using speech synthesis fallback');
-                      throw new Error('No ElevenLabs API key configured');
+                      // ElevenLabs failed, use speech synthesis fallback
+                      console.log(`ElevenLabs failed for chunk ${sentenceCount}, using speech synthesis fallback:`, audioResult.fallbackReason);
+                      
+                      const fallbackAudioData = {
+                        type: 'audio_chunk',
+                        audioUrl: null, // No audio URL - will use speech synthesis
+                        chunkId: sentenceCount,
+                        text: currentSentence.trim(),
+                        useSpeechSynthesis: true, // Explicitly flag for speech synthesis
+                        fallbackReason: audioResult.fallbackReason
+                      };
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackAudioData)}\n\n`));
+                      
+                      // Also send error notification with more context
+                      const errorData = {
+                        type: 'voice_error',
+                        chunkId: sentenceCount,
+                        error: `Voice generation failed: ${audioResult.error}`,
+                        fallbackToSpeechSynthesis: true,
+                        reason: audioResult.fallbackReason
+                      };
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
                     }
-                    
-                    textToSpeech = currentSentence.trim();
-                    console.log('Text to speech:', textToSpeech);
-                    
-                    console.log('About to call ElevenLabs API with params:', {
-                      fileName: `chunk_${sentenceCount}.mp3`,
-                      textInput: textToSpeech,
-                      voiceId: voiceId,
-                      stability: voiceSettings.stability || 0.5,
-                      similarityBoost: voiceSettings.similarityBoost || 0.5,
-                      style: voiceSettings.style || 0.0,
-                      useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
-                    });
-
-                    const audioResult = await elevenlabsClient.textToSpeech({
-                      fileName: `chunk_${sentenceCount}.mp3`,
-                      textInput: textToSpeech,
-                      voiceId: voiceId,
-                      stability: voiceSettings.stability || 0.5,
-                      similarityBoost: voiceSettings.similarityBoost || 0.5,
-                      style: voiceSettings.style || 0.0,
-                      useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
-                    });
-
-                    console.log('Voice generated successfully for chunk:', sentenceCount, 'Result:', audioResult);
-                    console.log('AudioResult type:', typeof audioResult);
-                    console.log('AudioResult keys:', audioResult ? Object.keys(audioResult) : 'null/undefined');
-
-                    // Fix: Check if audioResult exists and has status property
-                    if (!audioResult) {
-                      throw new Error('ElevenLabs returned empty response');
+                                      } catch (voiceError) {
+                      console.error('Voice generation failed for chunk:', sentenceCount, voiceError);
+                      
+                      // Send fallback audio chunk with speech synthesis flag
+                      const fallbackAudioData = {
+                        type: 'audio_chunk',
+                        audioUrl: null, // No audio URL - will use speech synthesis
+                        chunkId: sentenceCount,
+                        text: currentSentence.trim(),
+                        useSpeechSynthesis: true, // Explicitly flag for speech synthesis
+                        fallbackReason: 'api_error'
+                      };
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackAudioData)}\n\n`));
+                      
+                      // Also send error notification with more context
+                      const errorData = {
+                        type: 'voice_error',
+                        chunkId: sentenceCount,
+                        error: `Voice generation failed: ${voiceError instanceof Error ? voiceError.message : 'Unknown error'}`,
+                        fallbackToSpeechSynthesis: true,
+                        reason: 'api_error'
+                      };
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
                     }
-                    
-                    // Some ElevenLabs clients might not return a status property
-                    if (audioResult.status && audioResult.status !== 'ok') {
-                      throw new Error(`ElevenLabs returned status: ${audioResult.status}`);
-                    }
-                    
-                    // Check if the file was actually created
-                    const fs = require('fs');
-                    if (!fs.existsSync(`chunk_${sentenceCount}.mp3`)) {
-                      throw new Error('Audio file was not created by ElevenLabs');
-                    }
-
-                    // Read the generated audio file
-                    const audioBuffer = fs.readFileSync(`chunk_${sentenceCount}.mp3`);
-                    console.log('Audio file read, buffer length:', audioBuffer.length);
-
-                    // Convert audio buffer to base64
-                    const audioBase64 = audioBuffer.toString('base64');
-                    console.log('Audio converted to base64, length:', audioBase64.length);
-                    
-                    const audioData = {
-                      type: 'audio_chunk',
-                      audioUrl: `data:audio/mpeg;base64,${audioBase64}`,
-                      chunkId: sentenceCount,
-                      text: currentSentence.trim()
-                    };
-
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
-                    
-                    // Clean up the temporary file
-                    try {
-                      fs.unlinkSync(`chunk_${sentenceCount}.mp3`);
-                    } catch (cleanupError) {
-                      console.warn('Failed to cleanup audio file:', cleanupError);
-                    }
-                  } catch (voiceError) {
-                    console.error('Voice generation failed for chunk:', sentenceCount, voiceError);
-                    console.error('Voice error details:', {
-                      error: voiceError,
-                      message: voiceError instanceof Error ? voiceError.message : 'Unknown error',
-                      stack: voiceError instanceof Error ? voiceError.stack : undefined,
-                      elevenlabsClient: !!elevenlabsClient,
-                      voiceId: voiceId,
-                      textToSpeech: textToSpeech
-                    });
-                    
-                    // Check if it's a credits/API limit error
-                    const errorMessage = voiceError instanceof Error ? voiceError.message : 'Unknown error';
-                    const isCreditsError = errorMessage.includes('credits') || 
-                                         errorMessage.includes('quota') || 
-                                         errorMessage.includes('limit') ||
-                                         errorMessage.includes('insufficient') ||
-                                         errorMessage.includes('payment') ||
-                                         errorMessage.includes('subscription');
-                    
-                    if (isCreditsError) {
-                      console.log('Detected credits/quota error, using speech synthesis fallback');
-                    }
-                    
-                    // Send fallback audio chunk with speech synthesis flag
-                    const fallbackAudioData = {
-                      type: 'audio_chunk',
-                      audioUrl: null, // No audio URL - will use speech synthesis
-                      chunkId: sentenceCount,
-                      text: currentSentence.trim(),
-                      useSpeechSynthesis: true, // Explicitly flag for speech synthesis
-                      fallbackReason: isCreditsError ? 'credits_exhausted' : 'api_error'
-                    };
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackAudioData)}\n\n`));
-                    
-                    // Also send error notification with more context
-                    const errorData = {
-                      type: 'voice_error',
-                      chunkId: sentenceCount,
-                      error: `Voice generation failed: ${errorMessage}`,
-                      fallbackToSpeechSynthesis: true,
-                      reason: isCreditsError ? 'credits_exhausted' : 'api_error'
-                    };
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
-                  }
                 }
 
                 // Reset current sentence
@@ -402,101 +459,82 @@ You are the prospect receiving this sales call. Respond naturally as the charact
 
             // Generate audio for final chunk
             if (voiceSettings) {
-              let elevenlabsClient = null;
-              let voiceId = null;
-              
               try {
-                voiceId = voiceSettings.voiceId || process.env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
-                // Only try ElevenLabs if API key is available
-                if (process.env.ELEVENLABS_API_KEY) {
-                  elevenlabsClient = await getElevenLabsClient();
+                const audioResult = await generateElevenLabsAudio(
+                  currentSentence.trim(), 
+                  voiceSettings, 
+                  sentenceCount
+                );
+                
+                if (audioResult.success && audioResult.audioBase64) {
+                  // ElevenLabs audio generated successfully
+                  // Chunk the base64 audio data to avoid SSE message size limits
+                  const base64Data = audioResult.audioBase64;
+                  const chunkSize = 16384; // 16KB chunks
+                  
+                  for (let i = 0; i < base64Data.length; i += chunkSize) {
+                    const chunk = base64Data.slice(i, i + chunkSize);
+                    const isLastChunk = i + chunkSize >= base64Data.length;
+                    
+                    const audioData = {
+                      type: 'audio_chunk',
+                      audioUrl: `data:audio/mpeg;base64,${chunk}`,
+                      chunkId: sentenceCount,
+                      text: currentSentence.trim(),
+                      isPartial: !isLastChunk,
+                      chunkIndex: Math.floor(i / chunkSize),
+                      totalChunks: Math.ceil(base64Data.length / chunkSize)
+                    };
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
+                  }
                 } else {
-                  console.log('No ElevenLabs API key for final chunk, using speech synthesis fallback');
-                  throw new Error('No ElevenLabs API key configured');
+                  // ElevenLabs failed, use speech synthesis fallback
+                  console.log(`ElevenLabs failed for final chunk ${sentenceCount}, using speech synthesis fallback:`, audioResult.fallbackReason);
+                  
+                  const fallbackAudioData = {
+                    type: 'audio_chunk',
+                    audioUrl: null, // No audio URL - will use speech synthesis
+                    chunkId: sentenceCount,
+                    text: currentSentence.trim(),
+                    useSpeechSynthesis: true, // Explicitly flag for speech synthesis
+                    fallbackReason: audioResult.fallbackReason
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackAudioData)}\n\n`));
+                  
+                  // Also send error notification with more context
+                  const errorData = {
+                    type: 'voice_error',
+                    chunkId: sentenceCount,
+                    error: `Voice generation failed: ${audioResult.error}`,
+                    fallbackToSpeechSynthesis: true,
+                    reason: audioResult.fallbackReason
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
                 }
-                
-                const audioResult = await elevenlabsClient.textToSpeech({
-                  fileName: `final_chunk_${sentenceCount}.mp3`,
-                  textInput: currentSentence.trim(),
-                  voiceId: voiceId,
-                  stability: voiceSettings.stability || 0.5,
-                  similarityBoost: voiceSettings.similarityBoost || 0.5,
-                  style: voiceSettings.style || 0.0,
-                  useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
-                });
-
-                // Fix: Check if audioResult exists and has valid response
-                if (!audioResult) {
-                  throw new Error('ElevenLabs returned empty response for final chunk');
+                              } catch (voiceError) {
+                  console.error('Voice generation failed for final chunk:', voiceError);
+                  
+                  // Send fallback audio chunk with speech synthesis flag
+                  const fallbackAudioData = {
+                    type: 'audio_chunk',
+                    audioUrl: null, // No audio URL - will use speech synthesis
+                    chunkId: sentenceCount,
+                    text: currentSentence.trim(),
+                    useSpeechSynthesis: true, // Explicitly flag for speech synthesis
+                    fallbackReason: 'api_error'
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackAudioData)}\n\n`));
+                  
+                  // Also send error notification with more context
+                  const errorData = {
+                    type: 'voice_error',
+                    chunkId: sentenceCount,
+                    error: `Voice generation failed: ${voiceError instanceof Error ? voiceError.message : 'Unknown error'}`,
+                    fallbackToSpeechSynthesis: true,
+                    reason: 'api_error'
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
                 }
-                
-                // Some ElevenLabs clients might not return a status property
-                if (audioResult.status && audioResult.status !== 'ok') {
-                  throw new Error(`ElevenLabs returned status for final chunk: ${audioResult.status}`);
-                }
-                
-                // Check if the file was actually created
-                const fs = require('fs');
-                if (!fs.existsSync(`final_chunk_${sentenceCount}.mp3`)) {
-                  throw new Error('Final audio file was not created by ElevenLabs');
-                }
-                
-                // File exists, so we can read it
-                const audioBuffer = fs.readFileSync(`final_chunk_${sentenceCount}.mp3`);
-                
-                const audioBase64 = audioBuffer.toString('base64');
-                const audioData = {
-                  type: 'audio_chunk',
-                  audioUrl: `data:audio/mpeg;base64,${audioBase64}`,
-                  chunkId: sentenceCount,
-                  text: currentSentence.trim()
-                };
-
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
-                
-                // Clean up the temporary file
-                try {
-                  fs.unlinkSync(`final_chunk_${sentenceCount}.mp3`);
-                } catch (cleanupError) {
-                  console.warn('Failed to cleanup final audio file:', cleanupError);
-                }
-              } catch (voiceError) {
-                console.error('Voice generation failed for final chunk:', voiceError);
-                
-                // Check if it's a credits/API limit error
-                const errorMessage = voiceError instanceof Error ? voiceError.message : 'Unknown error';
-                const isCreditsError = errorMessage.includes('credits') || 
-                                     errorMessage.includes('quota') || 
-                                     errorMessage.includes('limit') ||
-                                     errorMessage.includes('insufficient') ||
-                                     errorMessage.includes('payment') ||
-                                     errorMessage.includes('subscription');
-                
-                if (isCreditsError) {
-                  console.log('Detected credits/quota error for final chunk, using speech synthesis fallback');
-                }
-                
-                // Send fallback audio chunk with speech synthesis flag
-                const fallbackAudioData = {
-                  type: 'audio_chunk',
-                  audioUrl: null, // No audio URL - will use speech synthesis
-                  chunkId: sentenceCount,
-                  text: currentSentence.trim(),
-                  useSpeechSynthesis: true, // Explicitly flag for speech synthesis
-                  fallbackReason: isCreditsError ? 'credits_exhausted' : 'api_error'
-                };
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackAudioData)}\n\n`));
-                
-                // Also send error notification with more context
-                const errorData = {
-                  type: 'voice_error',
-                  chunkId: sentenceCount,
-                  error: `Voice generation failed: ${errorMessage}`,
-                  fallbackToSpeechSynthesis: true,
-                  reason: isCreditsError ? 'credits_exhausted' : 'api_error'
-                };
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
-              }
             }
           }
 
@@ -671,54 +709,54 @@ Remember: You are this specific person in this specific situation. Be human, be 
           // Generate voice response with fallback to speech synthesis
           if (hasElevenLabs) {
             try {
-              const elevenlabs = await getElevenLabsClient();
               const settings = voiceSettings || {};
-              
               console.log('Attempting ElevenLabs voice generation...');
-              const audioStream = await elevenlabs.textToSpeechStream({
-                textInput: fullResponse,
-                voiceId: settings.voiceId || '21m00Tcm4TlvDq8ikWAM',
-                modelId: 'eleven_multilingual_v2',
-                outputFormat: 'mp3_44100_128',
-                voiceSettings: {
-                  stability: settings.stability || 0.75,
-                  similarityBoost: settings.similarityBoost || 0.75,
+              
+              const audioResult = await generateElevenLabsAudio(fullResponse, settings);
+              
+              if (audioResult.success && audioResult.audioBase64) {
+                // ElevenLabs audio generated successfully
+                // Chunk the base64 audio data to avoid SSE message size limits
+                const base64Data = audioResult.audioBase64;
+                const chunkSize = 16384; // 16KB chunks
+                
+                for (let i = 0; i < base64Data.length; i += chunkSize) {
+                  const chunk = base64Data.slice(i, i + chunkSize);
+                  const isLastChunk = i + chunkSize >= base64Data.length;
+                  
+                  const audioData = JSON.stringify({ 
+                    type: 'audio', 
+                    content: chunk,
+                    isPartial: !isLastChunk,
+                    chunkIndex: Math.floor(i / chunkSize),
+                    totalChunks: Math.ceil(base64Data.length / chunkSize)
+                  });
+                  controller.enqueue(encoder.encode(`data: ${audioData}\n\n`));
                 }
-              });
-
-              // Stream audio chunks
-              for await (const chunk of audioStream) {
-                const base64Audio = Buffer.from(chunk).toString('base64');
-                const audioData = JSON.stringify({ type: 'audio', content: base64Audio });
-                controller.enqueue(encoder.encode(`data: ${audioData}\n\n`));
+              } else {
+                // ElevenLabs failed, use speech synthesis fallback
+                console.log(`ElevenLabs failed, using speech synthesis fallback:`, audioResult.fallbackReason);
+                
+                const fallbackData = JSON.stringify({ 
+                  type: 'speech_synthesis_fallback', 
+                  text: fullResponse,
+                  reason: audioResult.fallbackReason,
+                  message: 'Using browser speech synthesis due to ElevenLabs unavailability'
+                });
+                controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
               }
-            } catch (voiceError) {
-              console.error('ElevenLabs voice generation error:', voiceError);
-              
-              // Check if it's a credits/quota error
-              const errorMessage = voiceError instanceof Error ? voiceError.message : 'Unknown error';
-              const isCreditsError = errorMessage.toLowerCase().includes('credits') || 
-                                   errorMessage.toLowerCase().includes('quota') || 
-                                   errorMessage.toLowerCase().includes('limit') ||
-                                   errorMessage.toLowerCase().includes('insufficient') ||
-                                   errorMessage.toLowerCase().includes('payment') ||
-                                   errorMessage.toLowerCase().includes('subscription') ||
-                                   errorMessage.toLowerCase().includes('unauthorized') ||
-                                   errorMessage.includes('401') ||
-                                   errorMessage.includes('402') ||
-                                   errorMessage.includes('403');
-              
-              console.log(`ElevenLabs failed (${isCreditsError ? 'credits/quota issue' : 'API error'}), falling back to speech synthesis`);
-              
-              // Send speech synthesis fallback signal
-              const fallbackData = JSON.stringify({ 
-                type: 'speech_synthesis_fallback', 
-                text: fullResponse,
-                reason: isCreditsError ? 'credits_exhausted' : 'api_error',
-                message: 'Using browser speech synthesis due to ElevenLabs unavailability'
-              });
-              controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
-            }
+                          } catch (voiceError) {
+                console.error('ElevenLabs voice generation error:', voiceError);
+                
+                // Send speech synthesis fallback signal
+                const fallbackData = JSON.stringify({ 
+                  type: 'speech_synthesis_fallback', 
+                  text: fullResponse,
+                  reason: 'api_error',
+                  message: 'Using browser speech synthesis due to ElevenLabs unavailability'
+                });
+                controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
+              }
           } else {
             // No ElevenLabs API key, use speech synthesis directly
             console.log('Using speech synthesis (no ElevenLabs API key)');
@@ -768,4 +806,4 @@ Remember: You are this specific person in this specific situation. Be human, be 
 
 export async function OPTIONS(req: NextRequest) {
   return new NextResponse(null, { status: 200, headers: corsHeaders });
-} 
+}

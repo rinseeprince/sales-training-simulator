@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
         fileName: 'test_voice.mp3',
         textInput: testText,
         voiceId: '21m00Tcm4TlvDq8ikWAM',
+        model_id: 'eleven_turbo_v2',
         stability: 0.5,
         similarityBoost: 0.5,
         style: 0.0,

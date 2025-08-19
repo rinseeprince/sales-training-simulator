@@ -310,7 +310,7 @@ export function PostCallReview() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="w-full space-y-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -465,13 +465,13 @@ export function PostCallReview() {
         </Card>
       </motion.div>
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Main Content */}
+      <div className="grid gap-6 lg:grid-cols-4">
+        {/* Main Content - Takes up more space */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="lg:col-span-2 space-y-6"
+          className="lg:col-span-3 space-y-6"
         >
           {/* Objections Handled */}
           <Card>
@@ -640,27 +640,71 @@ export function PostCallReview() {
             </CardContent>
           </Card>
 
-          {/* Call Recording */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Headphones className="h-5 w-5" />
-                Call Recording
-              </CardTitle>
-              <CardDescription>
-                Listen to the full call recording with waveform visualization and seeking controls
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AudioPlayer 
-                audioUrl={hasAudio}
-                title="Call Recording"
-                duration={displayData.duration || 0}
-                showWaveform={true}
-                className="w-full"
-              />
-            </CardContent>
-          </Card>
+          {/* Call Recording and Transcript in a grid */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Call Recording */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Headphones className="h-5 w-5" />
+                  Call Recording
+                </CardTitle>
+                <CardDescription>
+                  Listen to the full call recording with waveform visualization
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AudioPlayer 
+                  audioUrl={hasAudio}
+                  title="Call Recording"
+                  duration={displayData.duration || 0}
+                  showWaveform={true}
+                  className="w-full"
+                />
+              </CardContent>
+            </Card>
+
+            {/* Call Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Call Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Duration:</span>
+                  <span>
+                    {displayData.duration ? 
+                      `${Math.floor(displayData.duration / 60)}:${(displayData.duration % 60).toString().padStart(2, '0')}` : 
+                      callData.duration}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date:</span>
+                  <span>
+                    {displayData.created_at ? 
+                      new Date(displayData.created_at).toLocaleDateString() : 
+                      callData.date}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status:</span>
+                  <span>{callSaved ? 'Saved' : 'Not Saved'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Type:</span>
+                  <span>Discovery Call (Outbound Generated)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Prospect:</span>
+                  <span>C-Level</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Difficulty:</span>
+                  <span>Hard (4/5)</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Transcript */}
           <Card>
@@ -712,7 +756,7 @@ export function PostCallReview() {
           </Card>
         </motion.div>
 
-        {/* Sidebar */}
+        {/* Sidebar - Takes up less space */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -764,47 +808,6 @@ export function PostCallReview() {
                 <Award className="mr-2 h-4 w-4" />
                 Certify Performance
               </Button>
-            </CardContent>
-          </Card>
-
-          {/* Call Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Call Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Duration:</span>
-                <span>
-                  {displayData.duration ? 
-                    `${Math.floor(displayData.duration / 60)}:${(displayData.duration % 60).toString().padStart(2, '0')}` : 
-                    callData.duration}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Date:</span>
-                <span>
-                  {displayData.created_at ? 
-                    new Date(displayData.created_at).toLocaleDateString() : 
-                    callData.date}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Status:</span>
-                <span>{callSaved ? 'Saved' : 'Not Saved'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Type:</span>
-                <span>Discovery Call (Outbound Generated)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Prospect:</span>
-                <span>C-Level</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Difficulty:</span>
-                <span>Hard (4/5)</span>
-              </div>
             </CardContent>
           </Card>
         </motion.div>

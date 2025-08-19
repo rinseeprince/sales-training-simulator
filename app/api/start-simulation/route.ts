@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
         const audio = await elevenlabsClient.textToSpeech({
           text: aiResponse,
           voiceId: voiceId,
+          model_id: 'eleven_turbo_v2',
           stability: voiceSettings.stability || 0.5,
           similarityBoost: voiceSettings.similarityBoost || 0.5,
           style: voiceSettings.style || 0.0,

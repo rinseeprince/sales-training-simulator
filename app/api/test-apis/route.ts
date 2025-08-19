@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
       const audio = await elevenlabs.textToSpeech({
         text: 'Hello',
         voiceId: '21m00Tcm4TlvDq8ikWAM',
+        model_id: 'eleven_turbo_v2',
       });
       results.elevenlabs = true;
     } catch (error) {

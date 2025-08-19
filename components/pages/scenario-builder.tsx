@@ -27,8 +27,7 @@ export function ScenarioBuilder() {
     prompt: '',
     duration: '',
     voice: '',
-    saveReuse: false,
-    enableStreaming: false
+    saveReuse: false
   })
   const [savedScenarios, setSavedScenarios] = useState([])
   const [showPromptPreview, setShowPromptPreview] = useState(false)
@@ -71,8 +70,7 @@ export function ScenarioBuilder() {
       prompt: scenario.prompt,
       duration: scenario.settings.duration || '',
       voice: scenario.settings.voice || '',
-      saveReuse: true,
-      enableStreaming: scenario.settings.enableStreaming !== false
+      saveReuse: true
     })
     
     toast({
@@ -80,8 +78,6 @@ export function ScenarioBuilder() {
       description: `Loaded "${scenario.title}" successfully`,
     })
   }
-
-
 
   const handleStartSimulation = async () => {
     // Validate required fields
@@ -108,7 +104,6 @@ export function ScenarioBuilder() {
       prompt: scenarioData.prompt,
       duration: scenarioData.duration,
       voice: scenarioData.voice,
-      enableStreaming: scenarioData.enableStreaming,
       timestamp: Date.now()
     }
     localStorage.setItem('currentScenario', JSON.stringify(simulationData))
@@ -154,8 +149,7 @@ export function ScenarioBuilder() {
           tags: ['custom-scenario'],
           settings: {
             duration: scenarioData.duration,
-            voice: scenarioData.voice,
-            enableStreaming: scenarioData.enableStreaming
+            voice: scenarioData.voice
           },
           // Simplified AI Engine fields
           voice_settings: {
@@ -196,7 +190,7 @@ export function ScenarioBuilder() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="space-y-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -222,244 +216,217 @@ export function ScenarioBuilder() {
         </div>
       </motion.div>
 
-      {/* Load Saved Scenario Section */}
-      {savedScenarios.length > 0 && (
+      <div className="space-y-8">
+        {/* Load Saved Scenario Section */}
+        {savedScenarios.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.05 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>Load Saved Scenario</CardTitle>
+                <CardDescription>
+                  Start with a previously saved scenario template
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label htmlFor="saved-scenario-select">Choose a saved scenario</Label>
+                  <Select onValueChange={(value) => {
+                    if (value && value !== 'none') {
+                      const scenario = savedScenarios.find((s: any) => s.id === value)
+                      if (scenario) {
+                        handleLoadScenario(scenario)
+                      }
+                    }
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a saved scenario to load..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Select a scenario...</SelectItem>
+                      {savedScenarios.map((scenario: any) => (
+                        <SelectItem key={scenario.id} value={scenario.id}>
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex-1">
+                              <div className="font-medium">{scenario.title}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {scenario.difficulty} • {scenario.industry}
+                              </div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        <div className="grid gap-8 lg:grid-cols-3">
+          {/* Main Form - Takes 2 columns */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="lg:col-span-2 space-y-6"
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>Scenario Details</CardTitle>
+                <CardDescription>
+                  Define the basic parameters of your sales simulation
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Scenario Title</Label>
+                  <Input
+                    id="title"
+                    placeholder="e.g., Enterprise Software Demo Call"
+                    value={scenarioData.title}
+                    onChange={(e) => setScenarioData(prev => ({ ...prev, title: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="prompt">Prospect & Scenario Description</Label>
+                  <Textarea
+                    id="prompt"
+                    placeholder="Describe your prospect and scenario naturally..."
+                    className="min-h-[175px]"
+                    value={scenarioData.prompt}
+                    onChange={(e) => setScenarioData(prev => ({ ...prev, prompt: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Write this as if you're briefing a human actor on who to play. The more specific and human you are, the better the AI will perform.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Call Duration</Label>
+                    <Select value={scenarioData.duration} onValueChange={(value) => setScenarioData(prev => ({ ...prev, duration: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select duration" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">5 minutes</SelectItem>
+                        <SelectItem value="10">10 minutes</SelectItem>
+                        <SelectItem value="20">20 minutes</SelectItem>
+                        <SelectItem value="30">30 minutes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>AI Voice</Label>
+                    <Select value={scenarioData.voice} onValueChange={(value) => setScenarioData(prev => ({ ...prev, voice: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select AI voice" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="professional-male">Professional Male</SelectItem>
+                        <SelectItem value="professional-female">Professional Female</SelectItem>
+                        <SelectItem value="executive-male">Executive Male</SelectItem>
+                        <SelectItem value="executive-female">Executive Female</SelectItem>
+                        <SelectItem value="casual-male">Casual Male</SelectItem>
+                        <SelectItem value="casual-female">Casual Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="save-reuse"
+                      checked={scenarioData.saveReuse}
+                      onCheckedChange={(checked) => setScenarioData(prev => ({ ...prev, saveReuse: checked }))}
+                    />
+                    <Label htmlFor="save-reuse">Save for reuse</Label>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Right Sidebar - Takes 1 column */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="space-y-6"
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Settings className="mr-2 h-5 w-5" />
+                  Quick Settings
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Duration</span>
+                  <Badge variant="outline">
+                    <Clock className="mr-1 h-3 w-3" />
+                    {scenarioData.duration ? `${scenarioData.duration} min` : 'Not set'}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Voice</span>
+                  <Badge variant="outline">
+                    <Mic className="mr-1 h-3 w-3" />
+                    {scenarioData.voice || 'Not set'}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Save for Reuse</span>
+                  <Badge variant={scenarioData.saveReuse ? "default" : "outline"}>
+                    {scenarioData.saveReuse ? 'Yes' : 'No'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Tips</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                  <p className="font-medium text-blue-900 dark:text-blue-100">Write Human Scenarios</p>
+                  <p className="text-blue-700 dark:text-blue-300">
+                    Describe the prospect like a real person with specific motivations, challenges, and personality traits.
+                  </p>
+                </div>
+                <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg">
+                  <p className="font-medium text-green-900 dark:text-green-100">Include Context</p>
+                  <p className="text-green-700 dark:text-green-300">
+                    Explain how this conversation came about - was it inbound, outbound, referral? This context shapes everything.
+                  </p>
+                </div>
+                <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
+                  <p className="font-medium text-yellow-900 dark:text-yellow-100">Be Specific</p>
+                  <p className="text-yellow-700 dark:text-yellow-300">
+                    "Busy but interested" is better than difficulty levels. "Burned by vendors before" sets clear expectations.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* AI Engine Settings - Full width below */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.05 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
         >
-          <Card>
-            <CardHeader>
-              <CardTitle>Load Saved Scenario</CardTitle>
-              <CardDescription>
-                Start with a previously saved scenario template
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Label htmlFor="saved-scenario-select">Choose a saved scenario</Label>
-                <Select onValueChange={(value) => {
-                  if (value && value !== 'none') {
-                    const scenario = savedScenarios.find((s: any) => s.id === value)
-                    if (scenario) {
-                      handleLoadScenario(scenario)
-                    }
-                  }
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a saved scenario to load..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Select a scenario...</SelectItem>
-                    {savedScenarios.map((scenario: any) => (
-                      <SelectItem key={scenario.id} value={scenario.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <div className="flex-1">
-                            <div className="font-medium">{scenario.title}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {scenario.difficulty} • {scenario.industry}
-                            </div>
-                          </div>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      <div className="grid gap-8 md:grid-cols-3">
-        {/* Main Form */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="md:col-span-2 space-y-6"
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle>Scenario Details</CardTitle>
-              <CardDescription>
-                Define the basic parameters of your sales simulation
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="title">Scenario Title</Label>
-                <Input
-                  id="title"
-                  placeholder="e.g., Enterprise Software Demo Call"
-                  value={scenarioData.title}
-                  onChange={(e) => setScenarioData(prev => ({ ...prev, title: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="prompt">Prospect & Scenario Description</Label>
-                <Textarea
-                  id="prompt"
-                  placeholder="Describe your prospect and scenario naturally...
-
-Example: You're Sarah, a marketing director at a mid-size SaaS company. You filled out a form on our website last week asking about marketing automation solutions. You're busy but genuinely interested, have budget approval but need to see clear ROI. You've been burned by overpromising vendors before, so you're cautiously optimistic but need to see proof.
-
-Be specific about:
-- Who they are (name, role, company type)
-- How this conversation came about (inbound/outbound/referral)
-- Their current situation and challenges
-- Their personality and communication style
-- What they care about most"
-                  className="min-h-[200px]"
-                  value={scenarioData.prompt}
-                  onChange={(e) => setScenarioData(prev => ({ ...prev, prompt: e.target.value }))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Write this as if you're briefing a human actor on who to play. The more specific and human you are, the better the AI will perform.
-                </p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Call Duration</Label>
-                  <Select value={scenarioData.duration} onValueChange={(value) => setScenarioData(prev => ({ ...prev, duration: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select duration" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5 minutes</SelectItem>
-                      <SelectItem value="10">10 minutes</SelectItem>
-                      <SelectItem value="20">20 minutes</SelectItem>
-                      <SelectItem value="30">30 minutes</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>AI Voice</Label>
-                  <Select value={scenarioData.voice} onValueChange={(value) => setScenarioData(prev => ({ ...prev, voice: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select AI voice" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="professional-male">Professional Male</SelectItem>
-                      <SelectItem value="professional-female">Professional Female</SelectItem>
-                      <SelectItem value="executive-male">Executive Male</SelectItem>
-                      <SelectItem value="executive-female">Executive Female</SelectItem>
-                      <SelectItem value="casual-male">Casual Male</SelectItem>
-                      <SelectItem value="casual-female">Casual Female</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="save-reuse"
-                    checked={scenarioData.saveReuse}
-                    onCheckedChange={(checked) => setScenarioData(prev => ({ ...prev, saveReuse: checked }))}
-                  />
-                  <Label htmlFor="save-reuse">Save for reuse</Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="enable-streaming"
-                    checked={scenarioData.enableStreaming}
-                    onCheckedChange={(checked) => setScenarioData(prev => ({ ...prev, enableStreaming: checked }))}
-                  />
-                  <Label htmlFor="enable-streaming" className="flex items-center">
-                    Enable Real-Time Voice Streaming (beta)
-                    <Badge variant="secondary" className="ml-2 text-xs">NEW</Badge>
-                  </Label>
-                </div>
-                
-                <div className="text-xs text-muted-foreground p-3 bg-muted rounded-lg">
-                  <p className="font-medium mb-1">Voice System:</p>
-                  <p>• <strong>Enabled:</strong> Uses ElevenLabs AI voices (requires credits) with speech synthesis fallback</p>
-                  <p>• <strong>Disabled:</strong> Uses free browser speech synthesis only</p>
-                  <p>• Auto-fallback to speech synthesis when ElevenLabs credits are exhausted</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Sidebar */}
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="space-y-6"
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Settings className="mr-2 h-5 w-5" />
-                Quick Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Duration</span>
-                <Badge variant="outline">
-                  <Clock className="mr-1 h-3 w-3" />
-                  {scenarioData.duration ? `${scenarioData.duration} min` : 'Not set'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Voice</span>
-                <Badge variant="outline">
-                  <Mic className="mr-1 h-3 w-3" />
-                  {scenarioData.voice || 'Not set'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Streaming</span>
-                <Badge variant={scenarioData.enableStreaming ? "default" : "outline"}>
-                  {scenarioData.enableStreaming ? 'Enabled' : 'Disabled'}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Save for Reuse</span>
-                <Badge variant={scenarioData.saveReuse ? "default" : "outline"}>
-                  {scenarioData.saveReuse ? 'Yes' : 'No'}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Tips</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                <p className="font-medium text-blue-900 dark:text-blue-100">Write Human Scenarios</p>
-                <p className="text-blue-700 dark:text-blue-300">
-                  Describe the prospect like a real person with specific motivations, challenges, and personality traits.
-                </p>
-              </div>
-              <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg">
-                <p className="font-medium text-green-900 dark:text-green-100">Include Context</p>
-                <p className="text-green-700 dark:text-green-300">
-                  Explain how this conversation came about - was it inbound, outbound, referral? This context shapes everything.
-                </p>
-              </div>
-              <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
-                <p className="font-medium text-yellow-900 dark:text-yellow-100">Be Specific</p>
-                <p className="text-yellow-700 dark:text-yellow-300">
-                  "Busy but interested" is better than difficulty levels. "Burned by vendors before" sets clear expectations.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Prompt Preview UI */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">

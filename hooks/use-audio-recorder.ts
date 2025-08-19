@@ -214,7 +214,8 @@ export function useAudioRecorder(): AudioRecorderState & AudioRecorderActions {
       formData.append('audioFile', blobToUpload, `call-${metadata.callId}.webm`)
       formData.append('metadata', JSON.stringify(metadata))
 
-      console.log('Uploading to /api/upload-call with formData size:', formData.get('audioFile')?.size);
+      const audioFile = formData.get('audioFile') as File;
+      console.log('Uploading to /api/upload-call with formData size:', audioFile?.size);
       
       const response = await fetch('/api/upload-call', {
         method: 'POST',

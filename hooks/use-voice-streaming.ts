@@ -50,6 +50,9 @@ export function useVoiceStreaming() {
   const isPlayingAudio = useRef(false);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   
+  // Audio chunking for large base64 data
+  const audioChunks = useRef<string[]>([]);
+  
   // SSE connection
   const eventSourceRef = useRef<EventSource | null>(null);
   
@@ -71,6 +74,9 @@ export function useVoiceStreaming() {
     });
     audioQueue.current = [];
     isPlayingAudio.current = false;
+    
+    // Reset audio chunks
+    audioChunks.current = [];
     
     // Stop speech synthesis
     if ('speechSynthesis' in window) {
@@ -138,8 +144,30 @@ export function useVoiceStreaming() {
         
       case 'audio_chunk':
         if (chunk.audioUrl) {
-          console.log('Received ElevenLabs audio chunk, queueing for playback');
-          queueAudio(chunk.audioUrl);
+          // Handle chunked audio data for legacy format
+          if (chunk.isPartial !== undefined) {
+            // This is a chunked audio message
+            if (!audioChunks.current) {
+              audioChunks.current = [];
+            }
+            
+            audioChunks.current[chunk.chunkIndex] = chunk.audioUrl.replace('data:audio/mpeg;base64,', '');
+            
+            // Check if we have all chunks
+            if (audioChunks.current.length === chunk.totalChunks) {
+              const fullAudioData = audioChunks.current.join('');
+              const audioUrl = `data:audio/mpeg;base64,${fullAudioData}`;
+              console.log('Received all audio chunks for legacy format, queueing for playback');
+              queueAudio(audioUrl);
+              audioChunks.current = []; // Reset for next audio
+            } else {
+              console.log(`Received legacy audio chunk ${chunk.chunkIndex + 1}/${chunk.totalChunks}`);
+            }
+          } else {
+            // Single audio chunk (legacy format)
+            console.log('Received ElevenLabs audio chunk, queueing for playback');
+            queueAudio(chunk.audioUrl);
+          }
         } else if (chunk.text) {
           // Check if we should use speech synthesis (either explicitly flagged or no streaming enabled)
           const shouldUseSpeechSynthesis = chunk.useSpeechSynthesis || 
@@ -289,9 +317,31 @@ export function useVoiceStreaming() {
       case 'audio':
         // Handle new compiled-prompt engine audio chunks
         if (chunk.content) {
-          const audioUrl = `data:audio/mpeg;base64,${chunk.content}`;
-          console.log('Received audio chunk, queueing for playback');
-          queueAudio(audioUrl);
+          // Handle chunked audio data
+          if (chunk.isPartial !== undefined) {
+            // This is a chunked audio message
+            if (!audioChunks.current) {
+              audioChunks.current = [];
+            }
+            
+            audioChunks.current[chunk.chunkIndex] = chunk.content;
+            
+            // Check if we have all chunks
+            if (audioChunks.current.length === chunk.totalChunks) {
+              const fullAudioData = audioChunks.current.join('');
+              const audioUrl = `data:audio/mpeg;base64,${fullAudioData}`;
+              console.log('Received all audio chunks, queueing for playback');
+              queueAudio(audioUrl);
+              audioChunks.current = []; // Reset for next audio
+            } else {
+              console.log(`Received audio chunk ${chunk.chunkIndex + 1}/${chunk.totalChunks}`);
+            }
+          } else {
+            // Single audio chunk (legacy format)
+            const audioUrl = `data:audio/mpeg;base64,${chunk.content}`;
+            console.log('Received single audio chunk, queueing for playback');
+            queueAudio(audioUrl);
+          }
         }
         break;
         
@@ -371,6 +421,9 @@ export function useVoiceStreaming() {
       setStreamingState('thinking');
       console.log('Starting to read streaming response...');
 
+      // Buffer for incomplete SSE data
+      let buffer = '';
+
       while (true) {
         const { done, value } = await reader.read();
         
@@ -380,17 +433,34 @@ export function useVoiceStreaming() {
         }
 
         const chunk = decoder.decode(value);
-        console.log('Received chunk:', chunk);
-        const lines = chunk.split('\n');
-
+        buffer += chunk;
+        
+        // Split by lines and process complete lines
+        const lines = buffer.split('\n');
+        
+        // Keep the last line in buffer if it's incomplete
+        buffer = lines.pop() || '';
+        
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
-              const data = JSON.parse(line.slice(6));
+              const jsonData = line.slice(6);
+              const data = JSON.parse(jsonData);
               console.log('Processing voice chunk:', data);
               processVoiceChunk(data);
             } catch (parseError) {
               console.error('Failed to parse SSE data:', parseError);
+              console.error('Problematic line:', line);
+              console.error('JSON data length:', line.slice(6).length);
+              
+              // Try to log a truncated version for debugging
+              const jsonData = line.slice(6);
+              if (jsonData.length > 100) {
+                console.error('JSON data (first 100 chars):', jsonData.substring(0, 100));
+                console.error('JSON data (last 100 chars):', jsonData.substring(jsonData.length - 100));
+              } else {
+                console.error('JSON data:', jsonData);
+              }
             }
           }
         }
