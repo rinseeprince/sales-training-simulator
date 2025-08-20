@@ -9,10 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useSimpleAuth } from '@/components/simple-auth-provider';
+import { useSupabaseAuth } from '@/components/supabase-auth-provider';
 
 export function SimpleSignUpForm() {
-  const { register } = useSimpleAuth();
+  const { signUp } = useSupabaseAuth();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -30,8 +30,12 @@ export function SimpleSignUpForm() {
     setIsLoading(true);
     setError(null);
 
+    console.log('Form submitted with:', { email: formData.email, name: formData.name });
+
     try {
-      const result = await register(formData);
+      const result = await signUp(formData.email, formData.password, formData.name);
+      
+      console.log('Signup result:', result);
       
       if (result.success) {
         setSuccess(true);
@@ -39,6 +43,7 @@ export function SimpleSignUpForm() {
         setError(result.message);
       }
     } catch (err) {
+      console.error('Signup error:', err);
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
       setIsLoading(false);

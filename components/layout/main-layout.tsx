@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Home, FileText, Phone, BarChart3, Settings, Users, Shield, Menu, X, LogOut, Moon, Sun, BookOpen, History } from 'lucide-react'
+import { Home, FileText, Phone, BarChart3, Settings, Users, Shield, Menu, X, LogOut, Moon, Sun, BookOpen, History, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useTheme } from 'next-themes'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -17,6 +17,7 @@ const navigation = [
   { name: 'Saved Scenarios', href: '/saved-scenarios', icon: BookOpen, roles: ['rep', 'manager', 'admin'] },
   { name: 'Saved Simulations', href: '/simulations', icon: History, roles: ['rep', 'manager', 'admin'] },
   { name: 'Review', href: '/review', icon: BarChart3, roles: ['rep', 'manager', 'admin'] },
+  { name: 'Pricing', href: '/pricing', icon: DollarSign, roles: ['rep', 'manager', 'admin'] },
   { name: 'Admin Panel', href: '/admin', icon: Users, roles: ['manager', 'admin'] },
   { name: 'Compliance', href: '/compliance', icon: Shield, roles: ['admin'] },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['rep', 'manager', 'admin'] },
@@ -24,13 +25,11 @@ const navigation = [
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { user, logout } = useAuth()
+  const { user, logout } = useSupabaseAuth()
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
 
-  const filteredNavigation = navigation.filter(item => 
-    user?.role && item.roles.includes(user.role)
-  )
+  const filteredNavigation = navigation
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,14 +75,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
             <div className="flex items-center space-x-3">
               <Avatar className="ring-2 ring-white/20">
-                <AvatarImage src={user?.avatar || "/placeholder.svg"} />
+                <AvatarImage src="/placeholder.svg" />
                 <AvatarFallback className="bg-white/10 text-white">
                   {user?.name?.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden sm:block">
                 <p className="text-sm font-medium text-white">{user?.name}</p>
-                <p className="text-xs text-white/80 capitalize">{user?.role}</p>
+                <p className="text-xs text-white/80 capitalize">{user?.subscription_status}</p>
               </div>
             </div>
 

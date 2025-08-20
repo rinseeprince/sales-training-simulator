@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
-import { AuthProvider } from '@/components/auth-provider'
+import { SupabaseAuthProvider } from '@/components/supabase-auth-provider'
 import { ChatbotWidget } from '@/components/support/chatbot-widget'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -28,11 +28,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
+          <SupabaseAuthProvider>
             {children}
             <ChatbotWidget />
             <Toaster />
-          </AuthProvider>
+          </SupabaseAuthProvider>
         </ThemeProvider>
       </body>
     </html>

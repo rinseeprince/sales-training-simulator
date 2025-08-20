@@ -1,11 +1,11 @@
 'use client'
 
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { MainLayout } from '@/components/layout/main-layout'
 import { PostCallReview } from '@/components/pages/post-call-review'
 
 export default function ReviewPage() {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
 
   if (!user) {
     return null

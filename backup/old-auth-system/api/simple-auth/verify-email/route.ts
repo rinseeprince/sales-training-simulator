@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { supabase } from '@/lib/api-utils';
 import {
-  isValidEmail,
   createResponse,
-  sanitizeUser
+  sanitizeUser,
+  AuthResponse
 } from '@/lib/simple-auth';
 
 export async function POST(request: NextRequest) {
@@ -11,70 +11,52 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { token, email } = body;
 
+    // Validate input
     if (!token || !email) {
       return createResponse(false, 'Token and email are required', {}, 400);
     }
 
-    if (!isValidEmail(email)) {
-      return createResponse(false, 'Invalid email format', {}, 400);
-    }
-
-    // Find user with matching email and verification token
-    const { data: user, error: userError } = await supabase
+    // Find user with this verification token
+    const { data: user, error } = await supabase
       .from('simple_users')
       .select('*')
       .eq('email', email.toLowerCase())
       .eq('verification_token', token)
+      .gt('verification_token_expires', new Date().toISOString())
       .single();
 
-    if (userError || !user) {
-      return createResponse(false, 'Invalid verification token or email', {}, 400);
+    if (error || !user) {
+      return createResponse(false, 'Invalid or expired verification token', {}, 400);
     }
 
     // Check if already verified
     if (user.email_verified) {
-      return createResponse(
-        true, 
-        'Email address is already verified', 
-        { user: sanitizeUser(user) }
-      );
+      return createResponse(false, 'Email is already verified', {}, 400);
     }
 
-    // Check if token has expired
-    if (user.verification_token_expires) {
-      const expiryDate = new Date(user.verification_token_expires);
-      if (Date.now() > expiryDate.getTime()) {
-        return createResponse(
-          false, 
-          'Verification token has expired. Please request a new verification email.', 
-          {}, 
-          400
-        );
-      }
-    }
-
-    // Update user as verified
-    const { data: updatedUser, error: updateError } = await supabase
+    // Mark email as verified and clear verification token
+    const { error: updateError } = await supabase
       .from('simple_users')
       .update({
         email_verified: true,
         verification_token: null,
-        verification_token_expires: null
+        verification_token_expires: null,
+        updated_at: new Date().toISOString()
       })
-      .eq('id', user.id)
-      .select()
-      .single();
+      .eq('id', user.id);
 
     if (updateError) {
-      console.error('User verification update error:', updateError);
-      return createResponse(false, 'Failed to verify email address', {}, 500);
+      console.error('Email verification update error:', updateError);
+      return createResponse(false, 'Failed to verify email', {}, 500);
     }
 
-    return createResponse(
-      true, 
-      'Email address verified successfully!', 
-      { user: sanitizeUser(updatedUser) }
-    );
+    const response: AuthResponse = {
+      success: true,
+      message: 'Email verified successfully! You can now sign in to your account.',
+      user: sanitizeUser({ ...user, email_verified: true })
+    };
+
+    return createResponse(true, response.message, response);
 
   } catch (error) {
     console.error('Email verification error:', error);

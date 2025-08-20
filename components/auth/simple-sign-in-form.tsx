@@ -9,11 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useSimpleAuth } from '@/components/simple-auth-provider';
+import { useSupabaseAuth } from '@/components/supabase-auth-provider';
 
 export function SimpleSignInForm() {
   const router = useRouter();
-  const { login } = useSimpleAuth();
+  const { signIn } = useSupabaseAuth();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -30,7 +30,7 @@ export function SimpleSignInForm() {
     setError(null);
 
     try {
-      const result = await login(formData);
+      const result = await signIn(formData.email, formData.password);
       
       if (result.success) {
         router.push('/dashboard');

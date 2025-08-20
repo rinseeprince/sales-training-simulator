@@ -2,12 +2,12 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { MainLayout } from '@/components/layout/main-layout'
 import { LiveSimulation } from '@/components/pages/live-simulation'
 
 export default function SimulationPage() {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const router = useRouter()
 
   // Force redirect to scenario builder - this page should only be accessed through scenario builder

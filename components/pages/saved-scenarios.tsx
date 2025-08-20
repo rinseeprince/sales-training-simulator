@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Play, Search, Filter, Calendar, Tag, Trash2, Edit, BookOpen, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
 
 interface SavedScenario {
@@ -28,7 +28,7 @@ interface SavedScenario {
 
 export function SavedScenarios() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const { toast } = useToast()
   const [scenarios, setScenarios] = useState<SavedScenario[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,7 +46,18 @@ export function SavedScenarios() {
 
     try {
       setLoading(true)
-      const response = await fetch(`/api/scenarios?userId=${user.id}`)
+      
+      // Get the correct user ID from simple_users table
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.success) {
+        throw new Error('Failed to get user profile: ' + profileData.error);
+      }
+
+      const actualUserId = profileData.userProfile.id;
+      
+      const response = await fetch(`/api/scenarios?userId=${actualUserId}`)
       
       if (!response.ok) {
         throw new Error('Failed to load scenarios')

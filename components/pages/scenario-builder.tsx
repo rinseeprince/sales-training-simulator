@@ -13,13 +13,13 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Play, Save, Settings, Clock, Users, TrendingUp, Mic } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
 import { compileProspectPrompt } from '@/lib/prompt-compiler'
 
 export function ScenarioBuilder() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const { toast } = useToast()
   const [isSaving, setIsSaving] = useState(false)
   const [scenarioData, setScenarioData] = useState({
@@ -54,7 +54,18 @@ export function ScenarioBuilder() {
     if (!user) return
     
     try {
-      const response = await fetch(`/api/scenarios?userId=${user.id}`)
+      // Get the correct user ID from simple_users table
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.success) {
+        console.error('Failed to get user profile:', profileData.error);
+        return;
+      }
+
+      const actualUserId = profileData.userProfile.id;
+      
+      const response = await fetch(`/api/scenarios?userId=${actualUserId}`)
       if (response.ok) {
         const data = await response.json()
         setSavedScenarios(data.scenarios || [])
@@ -134,6 +145,16 @@ export function ScenarioBuilder() {
     setIsSaving(true)
     
     try {
+      // Get the correct user ID from simple_users table
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.success) {
+        throw new Error('Failed to get user profile: ' + profileData.error);
+      }
+
+      const actualUserId = profileData.userProfile.id;
+      
       const response = await fetch('/api/scenarios', {
         method: 'POST',
         headers: {
@@ -142,7 +163,7 @@ export function ScenarioBuilder() {
         body: JSON.stringify({
           title: scenarioData.title,
           prompt: scenarioData.prompt,
-          userId: user.id,
+          userId: actualUserId,
           persona: 'Custom Prospect', // Simplified since it's defined in the prompt
           difficulty: 'custom', // No longer using difficulty levels
           industry: 'General',

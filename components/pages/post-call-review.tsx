@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CheckCircle, XCircle, TrendingUp, Clock, MessageSquare, ThumbsUp, ThumbsDown, Play, Award, RotateCcw, Headphones, Edit2, Save, X } from 'lucide-react'
 import { AudioPlayer } from '@/components/ui/audio-player'
 import { useCallData } from '@/hooks/use-call-data'
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useSearchParams } from 'next/navigation'
 
 const callData = {
@@ -45,13 +45,35 @@ const transcript = [
 ]
 
 export function PostCallReview() {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const searchParams = useSearchParams()
   const callId = searchParams.get('callId')
   
+  const [actualUserId, setActualUserId] = useState<string | null>(null)
+  
+  // Get the correct user ID from simple_users table
+  useEffect(() => {
+    const getUserProfile = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+        const profileData = await profileResponse.json();
+        
+        if (profileData.success) {
+          setActualUserId(profileData.userProfile.id);
+        }
+      } catch (error) {
+        console.error('Error getting user profile:', error);
+      }
+    };
+    
+    getUserProfile();
+  }, [user?.id]);
+
   const { call, loading, error } = useCallData({ 
     callId: callId || undefined, 
-    userId: user?.id 
+    userId: actualUserId 
   })
   
   const [managerComments, setManagerComments] = useState('')
@@ -152,6 +174,16 @@ export function PostCallReview() {
     
     setIsSavingCall(true)
     try {
+      // Get the correct user ID from simple_users table
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user?.id}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.success) {
+        throw new Error('Failed to get user profile: ' + profileData.error);
+      }
+
+      const actualUserId = profileData.userProfile.id;
+      
       const saveResponse = await fetch('/api/save-call', {
         method: 'POST',
         headers: {
@@ -160,7 +192,7 @@ export function PostCallReview() {
         body: JSON.stringify({
           callId: tempCallData.callId,
           transcript: tempCallData.transcript,
-          repId: tempCallData.repId,
+          repId: actualUserId, // Use the correct user ID from simple_users table
           scenarioName: tempCallData.scenarioName || simulationName.trim(),
           duration: tempCallData.duration,
           audioUrl: tempCallData.audioUrl,

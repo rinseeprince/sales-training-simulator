@@ -70,8 +70,15 @@ export async function POST(request: NextRequest) {
       return createResponse(false, 'Failed to create user account', {}, 500);
     }
 
-    // TODO: Send verification email
-    console.log('Verification token for', email, ':', verificationToken);
+    // Send verification email
+    const { sendVerificationEmail } = await import('@/lib/email-service');
+    await sendVerificationEmail({
+      to: email,
+      name: user.name,
+      token: verificationToken,
+      appName: process.env.APP_NAME || 'Sales Training Simulator',
+      appUrl: process.env.APP_URL || 'http://localhost:3000',
+    });
 
     const response: AuthResponse = {
       success: true,

@@ -37,7 +37,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -55,7 +55,7 @@ interface Simulation {
 }
 
 export default function SimulationsPage() {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const router = useRouter()
   const [simulations, setSimulations] = useState<Simulation[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,7 +72,18 @@ export default function SimulationsPage() {
       if (!user) return
       
       try {
-        const response = await fetch(`/api/calls?userId=${user.id}`)
+        // Get the correct user ID from simple_users table
+        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+        const profileData = await profileResponse.json();
+        
+        if (!profileData.success) {
+          console.error('Failed to get user profile:', profileData.error);
+          return;
+        }
+
+        const actualUserId = profileData.userProfile.id;
+        
+        const response = await fetch(`/api/calls?userId=${actualUserId}`)
         if (response.ok) {
           const data = await response.json()
           setSimulations(data.calls || [])

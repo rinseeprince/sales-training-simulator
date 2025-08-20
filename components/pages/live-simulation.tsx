@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation'
 import { useAudioRecorder } from '@/hooks/use-audio-recorder'
 import { useVoiceStreaming } from '@/hooks/use-voice-streaming'
 
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { AudioWaveform } from '@/components/ui/audio-waveform'
 import { useToast } from '@/hooks/use-toast'
 
@@ -31,8 +31,9 @@ interface ScenarioData {
 
 export function LiveSimulation() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const { toast } = useToast()
+  const [actualUserId, setActualUserId] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [showSubtitles, setShowSubtitles] = useState(true)
@@ -50,6 +51,26 @@ export function LiveSimulation() {
   const [currentUserMessage, setCurrentUserMessage] = useState('')
   const [canSendMessage, setCanSendMessage] = useState(false)
   
+  // Get the correct user ID from simple_users table
+  useEffect(() => {
+    const getUserProfile = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+        const profileData = await profileResponse.json();
+        
+        if (profileData.success) {
+          setActualUserId(profileData.userProfile.id);
+        }
+      } catch (error) {
+        console.error('Error getting user profile:', error);
+      }
+    };
+    
+    getUserProfile();
+  }, [user?.id]);
+
   // Load scenario data from localStorage
   useEffect(() => {
     const savedScenario = localStorage.getItem('currentScenario')
@@ -520,14 +541,14 @@ export function LiveSimulation() {
           try {
             setAnalysisProgress('Uploading audio file...');
             console.log('Starting audio upload with metadata:', {
-              userId: user.id,
+              userId: actualUserId,
               scenarioId,
               callId,
               timestamp: new Date().toISOString(),
             });
             
             const result = await uploadAudio({
-              userId: user.id,
+              userId: actualUserId || '',
               scenarioId,
               callId,
               timestamp: new Date().toISOString(),
@@ -562,7 +583,7 @@ export function LiveSimulation() {
             console.log('Forcing upload attempt despite state check failure...');
             try {
               const result = await uploadAudio({
-                userId: user.id,
+                userId: actualUserId || '',
                 scenarioId,
                 callId,
                 timestamp: new Date().toISOString(),
@@ -586,7 +607,7 @@ export function LiveSimulation() {
         try {
           setAnalysisProgress('Analyzing conversation with AI...');
           console.log('Scoring call data:', {
-            repId: user.id,
+            repId: actualUserId,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
             scenarioPrompt: scenarioData?.prompt || '',
             duration: currentTime,
@@ -598,7 +619,7 @@ export function LiveSimulation() {
           // Save call data and get scenario-aware scoring
           setAnalysisProgress('Analyzing conversation with AI...');
           console.log('Saving call data with scenario context:', {
-            repId: user.id,
+            repId: actualUserId,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
             scenarioPrompt: scenarioData?.prompt || '',
             duration: currentTime,
@@ -615,7 +636,7 @@ export function LiveSimulation() {
             body: JSON.stringify({
               callId: callId,
               transcript: conversationHistory,
-              repId: user.id,
+              repId: actualUserId,
               scenarioName: scenarioData?.title || 'Unnamed Simulation',
               scenarioPrompt: scenarioData?.prompt || '', // Add scenario prompt for context-aware scoring
               duration: currentTime,
@@ -658,7 +679,7 @@ export function LiveSimulation() {
           const tempCallData = {
             callId: callId,
             transcript: conversationHistory,
-            repId: user.id,
+            repId: actualUserId,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
             scenarioPrompt: scenarioData?.prompt || '', // Include scenario prompt in temp data
             duration: currentTime,
@@ -680,7 +701,7 @@ export function LiveSimulation() {
           
           console.log('Call data analyzed and prepared for review (not saved yet):', {
             callId,
-            repId: user.id,
+            repId: actualUserId,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
             scenarioPrompt: scenarioData?.prompt || '',
             duration: currentTime,

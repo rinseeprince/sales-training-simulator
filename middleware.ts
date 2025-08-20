@@ -5,7 +5,6 @@ import { supabase } from '@/lib/api-utils';
 // Define route patterns that require authentication
 const protectedRoutes = [
   '/dashboard',
-  '/admin',
   '/profile',
   '/scenarios',
   '/simulation',
@@ -13,7 +12,6 @@ const protectedRoutes = [
   '/simulations',
   '/scenario-builder',
   '/saved-scenarios',
-  '/compliance',
   '/settings'
 ];
 
@@ -22,20 +20,7 @@ const publicRoutes = [
   '/',
   '/auth/signin',
   '/auth/signup',
-  '/auth/verify-email',
-  '/auth/forgot-password',
-  '/auth/reset-password',
-  '/auth/accept-invitation'
-];
-
-// Define admin-only routes
-const adminOnlyRoutes = [
-  '/admin'
-];
-
-// Define manager+ routes (manager and admin)
-const managerPlusRoutes = [
-  '/compliance'
+  '/auth/verify-email'
 ];
 
 /**
@@ -63,13 +48,12 @@ function extractSessionToken(request: NextRequest): string | null {
 async function verifySession(sessionToken: string) {
   try {
     const { data: session, error } = await supabase
-      .from('user_sessions')
+      .from('simple_sessions')
       .select(`
         *,
-        auth_users (
+        simple_users (
           id,
           email,
-          role,
           name,
           email_verified,
           locked_until
@@ -79,11 +63,11 @@ async function verifySession(sessionToken: string) {
       .gt('expires_at', new Date().toISOString())
       .single();
 
-    if (error || !session || !session.auth_users) {
+    if (error || !session || !session.simple_users) {
       return null;
     }
 
-    const user = session.auth_users;
+    const user = session.simple_users;
 
     // Check if account is locked
     if (user.locked_until) {
@@ -95,7 +79,7 @@ async function verifySession(sessionToken: string) {
 
     // Update last activity
     await supabase
-      .from('user_sessions')
+      .from('simple_sessions')
       .update({
         last_activity: new Date().toISOString()
       })
@@ -127,24 +111,6 @@ function isPublicRoute(pathname: string): boolean {
 }
 
 /**
- * Check if user has required role for route
- */
-function hasRequiredRole(pathname: string, userRole: string): boolean {
-  // Check admin-only routes
-  if (adminOnlyRoutes.some(route => pathname.startsWith(route))) {
-    return userRole === 'admin';
-  }
-
-  // Check manager+ routes
-  if (managerPlusRoutes.some(route => pathname.startsWith(route))) {
-    return userRole === 'admin' || userRole === 'manager';
-  }
-
-  // All other protected routes allow any authenticated user
-  return true;
-}
-
-/**
  * Get redirect URL for unauthorized access
  */
 function getRedirectUrl(request: NextRequest, reason: string): string {
@@ -158,11 +124,6 @@ function getRedirectUrl(request: NextRequest, reason: string): string {
     
     case 'email_not_verified':
       url.pathname = '/auth/verify-email';
-      return url.toString();
-    
-    case 'insufficient_role':
-      url.pathname = '/dashboard';
-      url.searchParams.set('error', 'insufficient_permissions');
       return url.toString();
     
     default:
@@ -225,17 +186,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Check role permissions
-  if (!hasRequiredRole(pathname, user.role)) {
-    const redirectUrl = getRedirectUrl(request, 'insufficient_role');
-    return NextResponse.redirect(redirectUrl);
-  }
-
   // Add user info to request headers for API routes
   const response = NextResponse.next();
   
   response.headers.set('x-user-id', user.id);
-  response.headers.set('x-user-role', user.role);
   response.headers.set('x-user-email', user.email);
   response.headers.set('x-session-id', session.id);
 

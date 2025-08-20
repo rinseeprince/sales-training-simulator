@@ -11,11 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { User, Bell, Shield, Palette, Save, Upload, MessageSquare, Volume2 } from 'lucide-react'
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useTheme } from 'next-themes'
 
 export function SettingsPage() {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const { theme, setTheme } = useTheme()
   const [notifications, setNotifications] = useState({
     email: true,
@@ -78,7 +78,7 @@ export function SettingsPage() {
               <CardContent className="space-y-6">
                 <div className="flex items-center space-x-6">
                   <Avatar className="w-20 h-20">
-                    <AvatarImage src={user?.avatar || "/placeholder.svg"} />
+                    <AvatarImage src="/placeholder.svg" />
                     <AvatarFallback className="text-lg">
                       {user?.name?.charAt(0).toUpperCase()}
                     </AvatarFallback>
@@ -108,7 +108,7 @@ export function SettingsPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="role">Role</Label>
-                    <Input id="role" value={user?.role} disabled />
+                    <Input id="role" value={user?.subscription_status} disabled />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="department">Department</Label>

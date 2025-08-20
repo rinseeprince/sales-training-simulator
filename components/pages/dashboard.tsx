@@ -6,10 +6,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Play, FileText, Clock, CheckCircle, AlertCircle, Trophy, Target, TrendingUp, Phone } from 'lucide-react'
-import { useAuth } from '@/components/auth-provider'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+
+// Type definitions
+interface Call {
+  id: string
+  scenario_name: string
+  score: number | null
+  created_at: string
+  duration: string
+}
+
+interface Scenario {
+  id: string
+  title: string
+  persona: string
+  difficulty: string
+  created_at: string
+}
+
+interface Stats {
+  totalCalls: number
+  averageScore: number
+  certifications: number
+  improvement: number
+}
 
 const recentSimulations = [
   {
@@ -63,12 +87,12 @@ const savedScenarios = [
 ]
 
 export function Dashboard() {
-  const { user } = useAuth()
+  const { user } = useSupabaseAuth()
   const router = useRouter()
-  const [calls, setCalls] = useState([])
-  const [scenarios, setScenarios] = useState([])
+  const [calls, setCalls] = useState<Call[]>([])
+  const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Stats>({
     totalCalls: 0,
     averageScore: 0,
     certifications: 0,
@@ -81,17 +105,28 @@ export function Dashboard() {
       if (!user) return
       
       try {
+        // Get the correct user ID from simple_users table
+        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+        const profileData = await profileResponse.json();
+        
+        if (!profileData.success) {
+          console.error('Failed to get user profile:', profileData.error);
+          return;
+        }
+
+        const actualUserId = profileData.userProfile.id;
+        
         // Fetch calls
-        const callsResponse = await fetch(`/api/calls?userId=${user.id}`)
+        const callsResponse = await fetch(`/api/calls?userId=${actualUserId}`)
         if (callsResponse.ok) {
           const callsData = await callsResponse.json()
           setCalls(callsData.calls || [])
           
           // Calculate stats
           const totalCalls = callsData.calls?.length || 0
-          const scores = callsData.calls?.map(call => call.score).filter(score => score !== null) || []
-          const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
-          const certifications = callsData.calls?.filter(call => call.score >= 90).length || 0
+          const scores = callsData.calls?.map((call: Call) => call.score).filter((score: number | null) => score !== null) || []
+          const averageScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0
+          const certifications = callsData.calls?.filter((call: Call) => call.score !== null && call.score >= 90).length || 0
           
           setStats({
             totalCalls,
@@ -102,7 +137,7 @@ export function Dashboard() {
         }
         
         // Fetch scenarios
-        const scenariosResponse = await fetch(`/api/scenarios?userId=${user.id}`)
+        const scenariosResponse = await fetch(`/api/scenarios?userId=${actualUserId}`)
         if (scenariosResponse.ok) {
           const scenariosData = await scenariosResponse.json()
           setScenarios(scenariosData.scenarios || [])
@@ -253,21 +288,21 @@ export function Dashboard() {
                     onClick={() => router.push(`/review?callId=${call.id}`)}
                   >
                     <div className="flex items-center space-x-3">
-                      {getStatusIcon(call.score >= 90 ? 'certified' : call.score ? 'completed' : 'awaiting_review')}
+                      {getStatusIcon(call.score !== null && call.score >= 90 ? 'certified' : call.score !== null ? 'completed' : 'awaiting_review')}
                       <div>
                         <p className="font-medium">{call.scenario_name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {new Date(call.created_at).toLocaleDateString()} • {Math.round(call.duration / 60)} min
+                          {new Date(call.created_at).toLocaleDateString()} • {call.duration}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      {call.score && (
+                      {call.score !== null && (
                         <span className="text-sm font-medium">
                           {call.score}/100
                         </span>
                       )}
-                      {getStatusBadge(call.score >= 90 ? 'certified' : call.score ? 'completed' : 'awaiting_review')}
+                      {getStatusBadge(call.score !== null && call.score >= 90 ? 'certified' : call.score !== null ? 'completed' : 'awaiting_review')}
                     </div>
                   </div>
                 ))

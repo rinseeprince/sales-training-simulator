@@ -1,56 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors } from '@/lib/api-utils';
+import { supabaseAdmin } from '@/lib/supabase-auth';
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    // Handle CORS
-    const corsResponse = handleCors(req);
-    if (corsResponse) return corsResponse;
-
-    console.log('Testing database connection...');
-    
-    // Check environment variables
-    const envVars = {
-      hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      hasOpenAIKey: !!process.env.OPENAI_API_KEY,
-    };
-    
-    console.log('Environment variables:', envVars);
-
-    // Validate environment variables
-    validateEnvVars();
-
-    // Test Supabase connection by querying users table
-    const { data: users, error } = await supabase
-      .from('users')
-      .select('id, name, email')
-      .limit(5);
-
-    if (error) {
-      console.error('Supabase connection error:', error);
-      return errorResponse(`Database connection failed: ${error.message}`, 500);
+    if (!supabaseAdmin) {
+      return NextResponse.json({ 
+        error: 'Supabase admin client not available',
+        success: false 
+      }, { status: 500 });
     }
 
-    console.log('Database connection successful, found users:', users?.length || 0);
+    // Check table structure
+    let columnError = null;
+    let columns = null;
+    try {
+      const result = await supabaseAdmin
+        .rpc('get_table_columns', { table_name: 'simple_users' });
+      columns = result.data;
+      columnError = result.error;
+    } catch (e) {
+      columnError = 'RPC not available';
+    }
 
-    return successResponse({
+    // Try to get table info using a different approach
+    const { data: tableInfo, error: tableError } = await supabaseAdmin
+      .from('simple_users')
+      .select('*')
+      .limit(0);
+
+    // Test if we can insert a minimal record
+    const { error: insertError } = await supabaseAdmin
+      .from('simple_users')
+      .insert({
+        id: '00000000-0000-0000-0000-000000000000',
+        email: 'test@example.com',
+        name: 'Test User',
+        password_hash: 'dummy_hash', // Add this if the column exists
+        email_verified: false,
+        subscription_status: 'free',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    return NextResponse.json({ 
       success: true,
-      message: 'Database connection successful',
-      userCount: users?.length || 0,
-      users: users || [],
-      envVars
-    }, 200, corsHeaders);
+      tableExists: true,
+      insertError: insertError ? insertError.message : null,
+      insertErrorCode: insertError ? insertError.code : null,
+      tableInfo: tableInfo ? 'Table accessible' : 'Table not accessible',
+      columnError: columnError ? (typeof columnError === 'string' ? columnError : columnError.message) : null
+    });
 
   } catch (error) {
-    console.error('Test DB error:', error);
-    return errorResponse(
-      error instanceof Error ? error.message : 'Internal server error',
-      500
-    );
+    console.error('Database test error:', error);
+    return NextResponse.json({ 
+      error: 'Database test failed',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      success: false 
+    }, { status: 500 });
   }
 }
 
 export async function OPTIONS(req: NextRequest) {
-  return new NextResponse(null, { status: 200, headers: corsHeaders });
+  return new NextResponse(null, { 
+    status: 200, 
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
+  });
 } 
