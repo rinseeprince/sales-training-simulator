@@ -188,7 +188,7 @@ export function SavedScenarios() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="space-y-8">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
@@ -197,7 +197,7 @@ export function SavedScenarios() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -205,22 +205,11 @@ export function SavedScenarios() {
         transition={{ duration: 0.5 }}
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => router.push('/dashboard')}
-              className="flex items-center space-x-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Dashboard</span>
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Saved Scenarios</h1>
-              <p className="text-muted-foreground mt-2">
-                Your reusable training templates for sales enablement and practice
-              </p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Saved Scenarios</h1>
+            <p className="text-muted-foreground mt-2">
+              Your reusable training templates for sales enablement and practice
+            </p>
           </div>
           <Button onClick={() => router.push('/scenario-builder')}>
             <BookOpen className="mr-2 h-4 w-4" />

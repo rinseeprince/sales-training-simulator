@@ -225,7 +225,7 @@ export function ComplianceSettings() {
                 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <Clock className="h-4 w-4 text-blue-500" />
+                    <Clock className="h-4 w-4 text-teal-500" />
                     <span className="text-sm">Data Retention</span>
                   </div>
                   <Badge variant="outline">

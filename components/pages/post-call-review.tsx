@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CheckCircle, XCircle, TrendingUp, Clock, MessageSquare, ThumbsUp, ThumbsDown, Play, Award, RotateCcw, Headphones, Edit2, Save, X } from 'lucide-react'
+import { CheckCircle, XCircle, TrendingUp, Clock, MessageSquare, ThumbsUp, ThumbsDown, Award, RotateCcw, Headphones, Edit2, Save, X } from 'lucide-react'
 import { AudioPlayer } from '@/components/ui/audio-player'
 import { useCallData } from '@/hooks/use-call-data'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
@@ -36,13 +36,7 @@ const feedback = [
   'Room for improvement: Listen more actively to prospect concerns'
 ]
 
-const transcript = [
-  { timestamp: '00:15', speaker: 'Rep', text: 'Hi John, this is Sarah from TechSolutions. I know you\'re busy, so I\'ll be brief. I\'m calling because...' },
-  { timestamp: '00:45', speaker: 'AI', text: 'I appreciate you calling, but we\'re pretty happy with our current solution.' },
-  { timestamp: '01:02', speaker: 'Rep', text: 'I understand that completely. Many of our best clients said the same thing initially. Can I ask what you like most about your current setup?' },
-  { timestamp: '01:25', speaker: 'AI', text: 'Well, it works for what we need, but honestly, we\'ve been having some integration issues lately...' },
-  // More transcript entries...
-]
+
 
 export function PostCallReview() {
   const { user } = useSupabaseAuth()
@@ -246,7 +240,7 @@ export function PostCallReview() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            transcript: displayData.transcript || transcript
+            transcript: displayData.transcript || []
           })
         });
         
@@ -643,7 +637,7 @@ export function PostCallReview() {
                     <TabsContent value="next-steps" className="space-y-3 mt-4">
                       {coachingFeedback.nextSteps?.map((step: string, index: number) => (
                         <div key={index} className="flex items-start space-x-3">
-                          <CheckCircle className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                          <CheckCircle className="h-5 w-5 text-teal-500 flex-shrink-0 mt-0.5" />
                           <p className="text-sm">{step}</p>
                         </div>
                       )) || <p className="text-sm text-muted-foreground">No next steps identified</p>}
@@ -738,54 +732,7 @@ export function PostCallReview() {
             </Card>
           </div>
 
-          {/* Transcript */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Call Transcript</CardTitle>
-              <CardDescription>
-                Timestamped conversation with playback controls
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {displayData.transcript ? (
-                  displayData.transcript.map((entry, index) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      <Button variant="ghost" size="sm" className="flex-shrink-0">
-                        <Play className="h-3 w-3" />
-                      </Button>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-xs text-muted-foreground">{entry.timestamp || `${Math.floor(index * 30 / 60)}:${(index * 30 % 60).toString().padStart(2, '0')}`}</span>
-                          <Badge variant={entry.speaker === 'rep' ? 'default' : 'secondary'}>
-                            {entry.speaker === 'rep' ? 'Rep' : 'AI'}
-                          </Badge>
-                        </div>
-                        <p className="text-sm">{entry.text}</p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  transcript.map((entry, index) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      <Button variant="ghost" size="sm" className="flex-shrink-0">
-                        <Play className="h-3 w-3" />
-                      </Button>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-xs text-muted-foreground">{entry.timestamp}</span>
-                          <Badge variant={entry.speaker === 'Rep' ? 'default' : 'secondary'}>
-                            {entry.speaker}
-                          </Badge>
-                        </div>
-                        <p className="text-sm">{entry.text}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
+
         </motion.div>
 
         {/* Sidebar - Takes up less space */}

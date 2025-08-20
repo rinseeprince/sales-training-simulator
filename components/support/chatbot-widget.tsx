@@ -48,17 +48,18 @@ export function ChatbotWidget() {
     <>
       {/* Chat Widget Button */}
       <motion.div
-        className="fixed bottom-6 right-6 z-50"
+        className="fixed top-6 right-6 z-50"
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ delay: 2 }}
       >
         <Button
           onClick={() => setIsOpen(true)}
-          size="lg"
-          className="rounded-full w-14 h-14 shadow-lg"
+          variant="outline"
+          size="icon"
+          className="w-10 h-10 rounded-full border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-700"
         >
-          <MessageSquare className="h-6 w-6" />
+          <MessageSquare className="h-5 w-5" />
         </Button>
       </motion.div>
 
@@ -66,10 +67,10 @@ export function ChatbotWidget() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            className="fixed bottom-24 right-6 z-50 w-80"
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed top-20 right-6 z-50 w-80"
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
           >
             <Card className="shadow-xl">

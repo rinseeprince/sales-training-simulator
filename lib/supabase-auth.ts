@@ -244,14 +244,17 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       return null;
     }
 
-    // Get additional user data from our custom table (server-side only)
+    // Get additional user data from our custom table using auth_user_id
     let profile = null;
-    // The supabaseAdmin client is no longer used for this, so we'll fetch directly from the client
-    const { data } = await supabaseClient
+    const { data, error: profileError } = await supabaseClient
       .from('simple_users')
       .select('name, subscription_status')
-      .eq('id', user.id)
+      .eq('auth_user_id', user.id)
       .single();
+    
+    if (profileError) {
+      console.warn('Profile not found for user:', user.email, profileError.message);
+    }
     profile = data;
 
     return {

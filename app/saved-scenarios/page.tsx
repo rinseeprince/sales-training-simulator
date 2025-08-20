@@ -1,7 +1,10 @@
-'use client'
-
 import { SavedScenarios } from '@/components/pages/saved-scenarios'
+import { MainLayout } from '@/components/layout/main-layout'
 
 export default function SavedScenariosPage() {
-  return <SavedScenarios />
+  return (
+    <MainLayout>
+      <SavedScenarios />
+    </MainLayout>
+  )
 }

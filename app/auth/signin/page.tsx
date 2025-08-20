@@ -8,7 +8,7 @@ export default async function SignInPage({
   const params = await searchParams;
   
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+          <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md">
         {params.message === 'verification_expired' && (
           <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">

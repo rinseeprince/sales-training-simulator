@@ -11,7 +11,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useSupabaseAuth } from '@/components/supabase-auth-provider';
 
-export function SimpleSignUpForm() {
+interface SimpleSignUpFormProps {
+  onSuccess?: () => void;
+}
+
+export function SimpleSignUpForm({ onSuccess }: SimpleSignUpFormProps) {
   const { signUp } = useSupabaseAuth();
   
   const [formData, setFormData] = useState({
@@ -39,6 +43,10 @@ export function SimpleSignUpForm() {
       
       if (result.success) {
         setSuccess(true);
+        // Call onSuccess callback if provided for modal closing
+        if (onSuccess) {
+          onSuccess();
+        }
       } else {
         setError(result.message);
       }

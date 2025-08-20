@@ -7,7 +7,9 @@ export interface VoiceChunk {
   content?: string;
   audioUrl?: string;
   chunkId?: number;
+  chunkIndex?: number;
   isComplete?: boolean;
+  isPartial?: boolean;
   text?: string;
   error?: string;
   fullResponse?: string;
@@ -93,6 +95,9 @@ export function useVoiceStreaming() {
       console.log('Audio queue empty, stopping playback');
       isPlayingAudio.current = false;
       setStreamingState('waiting-for-rep');
+      // Clear the currentAIText only when audio playback is completely finished
+      setCurrentAIText('');
+      console.log('Audio playback finished, cleared currentAIText for next conversation');
       return;
     }
 
@@ -145,7 +150,7 @@ export function useVoiceStreaming() {
       case 'audio_chunk':
         if (chunk.audioUrl) {
           // Handle chunked audio data for legacy format
-          if (chunk.isPartial !== undefined) {
+          if (chunk.isPartial !== undefined && chunk.chunkIndex !== undefined && chunk.totalChunks !== undefined) {
             // This is a chunked audio message
             if (!audioChunks.current) {
               audioChunks.current = [];
@@ -208,7 +213,8 @@ export function useVoiceStreaming() {
             timestamp: chunk.timestamp || new Date().toISOString()
           };
           setConversationHistory(prev => [...prev, aiMessage]);
-          setCurrentAIText('');
+          // Don't clear currentAIText here - keep it for display during audio playback
+          console.log('Completion received, keeping currentAIText for display:', chunk.fullResponse);
         }
         setStreamingState('speaking');
         break;
@@ -245,14 +251,15 @@ export function useVoiceStreaming() {
             speechSynthesis.speak(utterance);
             setStreamingState('speaking');
             
-            // Add AI message to conversation history
-            const aiMessage: ConversationMessage = {
-              role: 'ai',
-              content: chunk.text,
-              timestamp: new Date().toISOString()
-            };
-            setConversationHistory(prev => [...prev, aiMessage]);
-            setCurrentAIText('');
+                    // Add AI message to conversation history
+        const aiMessage: ConversationMessage = {
+          role: 'ai',
+          content: chunk.text,
+          timestamp: new Date().toISOString()
+        };
+        setConversationHistory(prev => [...prev, aiMessage]);
+        // Don't clear currentAIText here - keep it for display
+        console.log('Voice error fallback, keeping currentAIText for display:', chunk.text);
           } else {
             console.warn('Speech synthesis not supported in this browser');
             setError('Voice generation failed and speech synthesis not available');
@@ -293,7 +300,8 @@ export function useVoiceStreaming() {
             timestamp: new Date().toISOString()
           };
           setConversationHistory(prev => [...prev, aiMessage]);
-          setCurrentAIText('');
+          // Don't clear currentAIText here - keep it for display
+          console.log('Speech synthesis fallback, keeping currentAIText for display:', chunk.text);
           
           // Show notification about fallback if credits exhausted
           if (chunk.reason === 'credits_exhausted') {
@@ -318,7 +326,7 @@ export function useVoiceStreaming() {
         // Handle new compiled-prompt engine audio chunks
         if (chunk.content) {
           // Handle chunked audio data
-          if (chunk.isPartial !== undefined) {
+          if (chunk.isPartial !== undefined && chunk.chunkIndex !== undefined && chunk.totalChunks !== undefined) {
             // This is a chunked audio message
             if (!audioChunks.current) {
               audioChunks.current = [];
@@ -355,7 +363,8 @@ export function useVoiceStreaming() {
             timestamp: new Date().toISOString()
           };
           setConversationHistory(prev => [...prev, aiMessage]);
-          setCurrentAIText('');
+          // Don't clear currentAIText here - keep it for display during audio playback
+          console.log('Done received, keeping currentAIText for display:', currentAIText);
         }
         setStreamingState('speaking');
         break;
@@ -368,10 +377,14 @@ export function useVoiceStreaming() {
       setError(null);
       setStreamingState('transcribing');
       setIsStreaming(true);
+      
+      // Clear previous AI text when starting new conversation
+      setCurrentAIText('');
+      console.log('Starting new conversation, cleared currentAIText');
 
       // Prepare the updated conversation history with the new message
-      const newMessage = {
-        role: 'rep', // Use 'rep' for consistency with our interface
+      const newMessage: ConversationMessage = {
+        role: 'rep' as const, // Use 'rep' for consistency with our interface
         content: transcript,
         timestamp: new Date().toISOString()
       };

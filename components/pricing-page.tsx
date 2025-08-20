@@ -82,88 +82,86 @@ export function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-12">
-          <div className="flex justify-center mb-4">
-            <Badge className="bg-green-500 text-white px-4 py-2 text-lg">
-              🎉 Free Beta Access
-            </Badge>
-          </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Start Training Today
-          </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            We're in beta and offering full access for free. Help us improve by providing feedback!
-          </p>
+    <div className="max-w-7xl mx-auto space-y-6">
+      <div className="text-center mb-12">
+        <div className="flex justify-center mb-4">
+          <Badge className="bg-teal-500 text-white px-4 py-2">
+            Free Beta Access
+          </Badge>
         </div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-4">
+          Start Training Today
+        </h1>
+        <p className="text-muted-foreground max-w-2xl mx-auto">
+          We're in beta and offering full access for free. Help us improve by providing feedback!
+        </p>
+      </div>
 
-        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-          {plans.map((plan) => (
-            <Card
-              key={plan.name}
-              className={`relative ${
-                plan.popular
-                  ? 'border-2 border-green-500 shadow-xl scale-105'
-                  : 'border border-gray-200 opacity-75'
-              }`}
-            >
-              {plan.popular && (
-                <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-green-500 text-white">
-                  <Heart className="w-4 h-4 mr-1" />
-                  Free Beta
-                </Badge>
-              )}
+      <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        {plans.map((plan) => (
+          <Card
+            key={plan.name}
+            className={`relative ${
+              plan.popular
+                ? 'border-2 border-teal-500 shadow-xl scale-105'
+                : 'border border-border opacity-75'
+            }`}
+          >
+            {plan.popular && (
+              <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-teal-500 text-white">
+                <Heart className="w-4 h-4 mr-1" />
+                Free Beta
+              </Badge>
+            )}
 
-              <CardHeader className="text-center">
-                <CardTitle className="text-2xl font-bold">{plan.name}</CardTitle>
+                          <CardHeader className="text-center">
+                <CardTitle className="text-lg font-bold">{plan.name}</CardTitle>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">{plan.price}</span>
+                  <span className="text-2xl font-bold">{plan.price}</span>
                   {plan.period !== 'forever' && (
-                    <span className="text-gray-600">/{plan.period}</span>
+                    <span className="text-muted-foreground">/{plan.period}</span>
                   )}
                 </div>
                 <CardDescription className="mt-2">{plan.description}</CardDescription>
               </CardHeader>
 
-              <CardContent>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center">
-                      <Check className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
-                      <span className="text-gray-700">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
+            <CardContent>
+              <ul className="space-y-3 mb-8">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-center">
+                    <Check className="h-5 w-5 text-teal-500 mr-3 flex-shrink-0" />
+                    <span className="text-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
 
-                <Button
-                  className={`w-full ${
-                    plan.popular
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-gray-400 hover:bg-gray-500'
-                  }`}
-                  onClick={() => handleAction(plan)}
-                  disabled={!plan.popular}
-                >
-                  {plan.buttonText}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              <Button
+                className={`w-full ${
+                  plan.popular
+                    ? 'bg-teal-600 hover:bg-teal-700'
+                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                }`}
+                onClick={() => handleAction(plan)}
+                disabled={!plan.popular}
+              >
+                {plan.buttonText}
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-        <div className="text-center mt-12">
-          <div className="bg-white rounded-lg p-6 shadow-sm max-w-2xl mx-auto">
-            <h3 className="text-lg font-semibold mb-2">Why Free Beta?</h3>
-            <p className="text-gray-600 mb-4">
-              We're building the best sales training platform and need your feedback to make it perfect. 
-              Use all features for free and help us improve!
-            </p>
-            <div className="flex justify-center space-x-4 text-sm text-gray-500">
-              <span>✓ No credit card required</span>
-              <span>✓ Full feature access</span>
-              <span>✓ Cancel anytime</span>
-            </div>
+      <div className="text-center mt-12">
+        <div className="bg-card rounded-lg p-6 shadow-sm max-w-2xl mx-auto">
+          <h3 className="text-lg font-semibold mb-2">Why Free Beta?</h3>
+          <p className="text-muted-foreground mb-4">
+            We're building the best sales training platform and need your feedback to make it perfect. 
+            Use all features for free and help us improve!
+          </p>
+          <div className="flex justify-center space-x-4 text-sm text-muted-foreground">
+            <span>✓ No credit card required</span>
+            <span>✓ Full feature access</span>
+            <span>✓ Cancel anytime</span>
           </div>
         </div>
       </div>

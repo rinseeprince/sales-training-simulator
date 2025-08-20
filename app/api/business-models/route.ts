@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { errorResponse, successResponse, corsHeaders, handleCors } from '@/lib/api-utils';
-import { authenticateUser } from '@/lib/auth-middleware';
+import { authenticateUser } from '@/lib/supabase-auth-middleware';
 
 // Initialize Supabase client
 const supabase = createClient(

@@ -20,9 +20,6 @@ import { useToast } from '@/hooks/use-toast'
 interface ScenarioData {
   title: string
   prompt: string
-  callType: string
-  difficulty: number
-  seniority: string
   duration: string
   voice: string
   enableStreaming: boolean
@@ -50,6 +47,13 @@ export function LiveSimulation() {
   const [isUserRecording, setIsUserRecording] = useState(false)
   const [currentUserMessage, setCurrentUserMessage] = useState('')
   const [canSendMessage, setCanSendMessage] = useState(false)
+  
+  // Synchronized transcription state
+  const [currentDisplaySentence, setCurrentDisplaySentence] = useState('')
+  const [allSentences, setAllSentences] = useState<string[]>([])
+  const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0)
+  const sentenceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const previousSentencesRef = useRef<string[]>([])
   
   // Get the correct user ID from simple_users table
   useEffect(() => {
@@ -138,12 +142,8 @@ export function LiveSimulation() {
       };
       
       scenarioConfig.current = {
-        scenarioPrompt: generateScenarioPrompt(scenarioData.prompt, scenarioData),
-        persona: {
-          difficulty: scenarioData.difficulty || 3,
-          seniority: scenarioData.seniority || 'manager',
-          callType: scenarioData.callType || 'outbound'
-        } as any,
+        scenarioPrompt: scenarioData.prompt, // Use the prompt directly - no more complex generation
+        persona: null as any, // No longer using complex persona parameters
         voiceSettings: {
           voiceId: voiceMap[scenarioData.voice] || '21m00Tcm4TlvDq8ikWAM',
           stability: 0.5,
@@ -153,7 +153,7 @@ export function LiveSimulation() {
         },
         enableStreaming: scenarioData.enableStreaming
       }
-      console.log('Updated scenario config:', scenarioConfig.current)
+      console.log('Updated scenario config (simplified):', scenarioConfig.current)
     }
   }, [scenarioData])
   
@@ -386,12 +386,91 @@ export function LiveSimulation() {
     }
   }, [canSendMessage, currentUserMessage, isAISpeaking, startStreaming])
 
+  // Synchronized transcription effect - shows sentences in sync with audio
+  useEffect(() => {
+    if (currentAIText && isAISpeaking) {
+      // Split the AI text into sentences
+      const sentences = currentAIText
+        .split(/(?<=[.!?])\s+/)
+        .filter(s => s.trim().length > 0)
+        .map(s => s.trim())
+      
+      console.log('Synchronized transcription - sentences:', sentences)
+      
+      // Check if sentences have changed by comparing with ref
+      if (sentences.length > 0 && JSON.stringify(sentences) !== JSON.stringify(previousSentencesRef.current)) {
+        // Update the ref to track current sentences
+        previousSentencesRef.current = sentences
+        
+        setAllSentences(sentences)
+        setCurrentSentenceIndex(0)
+        
+        // Start displaying the first sentence
+        setCurrentDisplaySentence(sentences[0])
+        console.log('Starting synchronized display with sentence:', sentences[0])
+        
+        // Set up timing for subsequent sentences
+        if (sentences.length > 1) {
+          const displayNextSentence = (index: number) => {
+            if (index < sentences.length) {
+              console.log(`Displaying sentence ${index + 1}:`, sentences[index])
+              setCurrentDisplaySentence(sentences[index])
+              setCurrentSentenceIndex(index)
+              
+              // Calculate timing for next sentence (roughly 3-4 seconds per sentence)
+              const sentenceLength = sentences[index].length
+              const displayTime = Math.max(2500, Math.min(5000, sentenceLength * 80)) // 80ms per character, min 2.5s, max 5s
+              
+              if (index + 1 < sentences.length) {
+                sentenceTimerRef.current = setTimeout(() => {
+                  displayNextSentence(index + 1)
+                }, displayTime)
+              }
+            }
+          }
+          
+          // Start the sequence with the first sentence
+          const firstSentenceLength = sentences[0].length
+          const firstDisplayTime = Math.max(2500, Math.min(5000, firstSentenceLength * 80))
+          
+          if (sentences.length > 1) {
+            sentenceTimerRef.current = setTimeout(() => {
+              displayNextSentence(1)
+            }, firstDisplayTime)
+          }
+        }
+      }
+    } else if (!isAISpeaking) {
+      // Clear everything when AI stops speaking
+      console.log('AI stopped speaking, clearing synchronized transcription')
+      setCurrentDisplaySentence('')
+      setAllSentences([])
+      setCurrentSentenceIndex(0)
+      previousSentencesRef.current = []
+      if (sentenceTimerRef.current) {
+        clearTimeout(sentenceTimerRef.current)
+        sentenceTimerRef.current = null
+      }
+    }
+    
+    return () => {
+      if (sentenceTimerRef.current) {
+        clearTimeout(sentenceTimerRef.current)
+        sentenceTimerRef.current = null
+      }
+    }
+  }, [currentAIText, isAISpeaking])
+  
+
+
   // Show transcription status during recording
   useEffect(() => {
     if (isUserRecording) {
       setCurrentUserMessage('Recording your message...')
     }
   }, [isUserRecording])
+
+
 
   // Simulate timer
   useEffect(() => {
@@ -893,18 +972,18 @@ export function LiveSimulation() {
           className="md:col-span-2"
         >
           <Card className="h-[500px]">
-            <CardContent className="p-8 h-full flex flex-col items-center justify-center">
+            <CardContent className="p-8 h-full flex flex-col">
               {/* Voice Waveform Visualization */}
               <div className="flex items-center justify-center space-x-2 mb-8">
                 <AudioWaveform 
-                  isRecording={isUserRecording}
+                  isRecording={isAISpeaking || isUserRecording}
                   isPaused={false}
                   className="h-20"
                 />
               </div>
 
-              {/* AI Status */}
-              <div className="text-center mb-8">
+              {/* AI Status and Animated Transcription */}
+              <div className="text-center mb-8 flex-1 flex flex-col justify-center">
                 <div className="flex items-center justify-center space-x-2 mb-2">
                   {isAISpeaking ? (
                     <Volume2 className="h-5 w-5 text-primary" />
@@ -912,29 +991,52 @@ export function LiveSimulation() {
                     <VolumeX className="h-5 w-5 text-muted-foreground" />
                   )}
                   <span className="text-lg font-medium">
-                    {isAISpeaking ? `${scenarioData?.seniority ? scenarioData.seniority.charAt(0).toUpperCase() + scenarioData.seniority.slice(1) : 'Prospect'} Speaking...` : 'Waiting for your message...'}
+                    {isAISpeaking ? 'Prospect Speaking...' : 'Waiting for your message...'}
                   </span>
                   <Badge variant="secondary" className="ml-2">
                     <Zap className="mr-1 h-3 w-3" />
                     Push-to-Talk
                   </Badge>
                 </div>
+                
+                {/* Synchronized Transcription Display */}
                 {showSubtitles && (
-                  <p className="text-muted-foreground max-w-md">
-                    {isAISpeaking 
-                      ? (currentAIText || "Hello, this is Sarah Johnson. I appreciate you taking the time to call. We're always looking for ways to improve our operations.")
-                      : isTranscribingMessage
-                      ? "Transcribing and sending your message..."
-                      : isUserRecording
-                      ? "Recording your message..."
-                      : currentUserMessage && currentUserMessage !== 'Recording your message...'
-                      ? currentUserMessage
-                      : "Press Space or click Record to speak"
-                    }
-                  </p>
+                  <div className="min-h-[60px] flex items-center justify-center">
+                    {isAISpeaking && currentDisplaySentence ? (
+                      <motion.p 
+                        key={`${currentSentenceIndex}-${currentDisplaySentence}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.3 }}
+                        className="text-muted-foreground max-w-md text-center"
+                      >
+                        {currentDisplaySentence}
+                      </motion.p>
+                    ) : isTranscribingMessage ? (
+                      <p className="text-muted-foreground max-w-md">
+                        Transcribing and sending your message...
+                      </p>
+                    ) : isUserRecording ? (
+                      <p className="text-muted-foreground max-w-md">
+                        Recording your message...
+                      </p>
+                    ) : currentUserMessage && currentUserMessage !== 'Recording your message...' ? (
+                      <p className="text-muted-foreground max-w-md">
+                        {currentUserMessage}
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground max-w-md">
+                        Press Space or click Record to speak
+                      </p>
+                    )}
+                  </div>
                 )}
+                
+
+                
                 {streamingState === 'thinking' && (
-                  <p className="text-sm text-blue-600 mt-2">
+                  <p className="text-sm text-teal-600 mt-2">
                     <span className="animate-pulse">●</span> AI is thinking...
                   </p>
                 )}
@@ -944,84 +1046,50 @@ export function LiveSimulation() {
                   </p>
                 )}
                 {isTranscribingMessage && (
-                  <p className="text-sm text-blue-600 mt-2">
+                  <p className="text-sm text-teal-600 mt-2">
                     <span className="animate-pulse">●</span> Transcribing and sending...
                   </p>
                 )}
               </div>
 
-              {/* Push-to-Talk Controls */}
-              <div className="flex items-center space-x-4">
-                <motion.div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                    isUserRecording 
-                      ? 'bg-red-100 dark:bg-red-900' 
-                      : canSendMessage
-                      ? 'bg-green-100 dark:bg-green-900'
-                      : 'bg-gray-100 dark:bg-gray-800'
-                  }`}
-                  animate={{
-                    scale: isUserRecording ? [1, 1.1, 1] : 1,
-                  }}
-                  transition={{
-                    duration: 1,
-                    repeat: isUserRecording ? Infinity : 0,
-                  }}
-                >
-                  {isUserRecording ? (
-                    <Mic className="h-8 w-8 text-red-600" />
-                  ) : isTranscribingMessage ? (
-                    <Send className="h-8 w-8 text-blue-600" />
-                  ) : (
-                    <MicOff className="h-8 w-8 text-gray-400" />
-                  )}
-                </motion.div>
-                <div className="text-center">
-                  <p className="font-medium">
-                    {isUserRecording ? 'Recording' : isTranscribingMessage ? 'Sending...' : 'Ready to Record'}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {isUserRecording ? 'Press Space to stop and send' : isTranscribingMessage ? 'Processing...' : 'Press Space to record'}
-                  </p>
-                </div>
+              {/* Fixed Record Button at Bottom */}
+              <div className="mt-auto">
+                {isRecording && (
+                  <div className="flex justify-center">
+                    {!isUserRecording && !isTranscribingMessage ? (
+                      <Button
+                        onClick={handleStartUserRecording}
+                        disabled={isAISpeaking}
+                        className="flex items-center space-x-2"
+                        size="lg"
+                      >
+                        <Mic className="h-4 w-4" />
+                        <span>Record Message</span>
+                      </Button>
+                    ) : isUserRecording ? (
+                      <Button
+                        onClick={handleStopUserRecording}
+                        variant="destructive"
+                        className="flex items-center space-x-2"
+                        size="lg"
+                      >
+                        <Square className="h-4 w-4" />
+                        <span>Stop & Send</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        disabled
+                        variant="outline"
+                        className="flex items-center space-x-2"
+                        size="lg"
+                      >
+                        <Send className="h-4 w-4" />
+                        <span>Sending...</span>
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
-
-              {/* Push-to-Talk Buttons */}
-              {isRecording && (
-                <div className="flex space-x-3 mt-6">
-                  {!isUserRecording && !isTranscribingMessage ? (
-                    <Button
-                      onClick={handleStartUserRecording}
-                      disabled={isAISpeaking}
-                      className="flex items-center space-x-2"
-                      size="lg"
-                    >
-                      <Mic className="h-4 w-4" />
-                      <span>Record Message</span>
-                    </Button>
-                  ) : isUserRecording ? (
-                    <Button
-                      onClick={handleStopUserRecording}
-                      variant="destructive"
-                      className="flex items-center space-x-2"
-                      size="lg"
-                    >
-                      <Square className="h-4 w-4" />
-                      <span>Stop & Send</span>
-                    </Button>
-                  ) : (
-                    <Button
-                      disabled
-                      variant="outline"
-                      className="flex items-center space-x-2"
-                      size="lg"
-                    >
-                      <Send className="h-4 w-4" />
-                      <span>Sending...</span>
-                    </Button>
-                  )}
-                </div>
-              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1172,15 +1240,7 @@ export function LiveSimulation() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Type:</span>
-                  <span>{scenarioData?.callType ? scenarioData.callType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not set'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Prospect:</span>
-                  <span>{scenarioData?.seniority ? `${scenarioData.seniority.charAt(0).toUpperCase() + scenarioData.seniority.slice(1)} Level` : 'Not set'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Difficulty:</span>
-                  <span>{scenarioData?.difficulty ? `${scenarioData.difficulty}/5` : 'Not set'}</span>
+                  <span>Custom Scenario</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Duration:</span>

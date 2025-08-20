@@ -224,16 +224,10 @@ export function ScenarioBuilder() {
               Create your sales scenario to start a live simulation with AI-powered prospects
             </p>
           </div>
-          <div className="flex space-x-2">
-            <Button variant="outline" onClick={handleSaveScenario} disabled={isSaving}>
-              <Save className="mr-2 h-4 w-4" />
-              {isSaving ? 'Saving...' : 'Save Scenario'}
-            </Button>
-            <Button onClick={handleStartSimulation}>
-              <Play className="mr-2 h-4 w-4" />
-              Start Live Simulation
-            </Button>
-          </div>
+          <Button onClick={handleStartSimulation}>
+            <Play className="mr-2 h-4 w-4" />
+            Start Live Simulation
+          </Button>
         </div>
       </motion.div>
 
@@ -419,9 +413,9 @@ export function ScenarioBuilder() {
                 <CardTitle>Tips</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                  <p className="font-medium text-blue-900 dark:text-blue-100">Write Human Scenarios</p>
-                  <p className="text-blue-700 dark:text-blue-300">
+                              <div className="p-3 bg-teal-50 dark:bg-teal-950 rounded-lg">
+                <p className="font-medium text-teal-900 dark:text-teal-100">Write Human Scenarios</p>
+                <p className="text-teal-700 dark:text-teal-300">
                     Describe the prospect like a real person with specific motivations, challenges, and personality traits.
                   </p>
                 </div>

@@ -159,7 +159,7 @@ export function Dashboard() {
       case 'awaiting_review':
         return <Clock className="h-4 w-4 text-yellow-500" />
       case 'certified':
-        return <Trophy className="h-4 w-4 text-blue-500" />
+        return <Trophy className="h-4 w-4 text-teal-500" />
       default:
         return <AlertCircle className="h-4 w-4 text-gray-500" />
     }
@@ -172,7 +172,7 @@ export function Dashboard() {
       case 'awaiting_review':
         return <Badge variant="outline">Awaiting Review</Badge>
       case 'certified':
-        return <Badge className="bg-blue-500">Certified</Badge>
+        return <Badge className="bg-teal-500">Certified</Badge>
       default:
         return <Badge variant="outline">Unknown</Badge>
     }
@@ -261,7 +261,7 @@ export function Dashboard() {
         </Card>
       </motion.div>
 
-      <div className="grid gap-8 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Recent Simulations */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -307,11 +307,13 @@ export function Dashboard() {
                   </div>
                 ))
               )}
-              <Link href="/simulations">
-                <Button variant="outline" className="w-full">
-                  View All Simulations
-                </Button>
-              </Link>
+              <div className="pt-1">
+                <Link href="/simulations">
+                  <Button variant="outline" className="w-full">
+                    View All Simulations
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </motion.div>
@@ -355,12 +357,14 @@ export function Dashboard() {
                   </div>
                 ))
               )}
-              <Link href="/scenario-builder">
-                <Button variant="outline" className="w-full">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Create New Scenario
-                </Button>
-              </Link>
+              <div className="pt-1">
+                <Link href="/scenario-builder">
+                  <Button variant="outline" className="w-full">
+                    <FileText className="mr-2 h-4 w-4" />
+                    Create New Scenario
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </motion.div>
@@ -394,8 +398,8 @@ export function Dashboard() {
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">
-                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <Trophy className="h-6 w-6 text-blue-600" />
+                                <div className="w-12 h-12 bg-teal-100 dark:bg-teal-900 rounded-full flex items-center justify-center mx-auto mb-2">
+                <Trophy className="h-6 w-6 text-teal-600" />
                   </div>
                   <p className="text-sm font-medium">Cold Caller</p>
                   <p className="text-xs text-muted-foreground">Earned</p>

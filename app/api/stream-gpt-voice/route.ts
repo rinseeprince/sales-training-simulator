@@ -258,26 +258,13 @@ async function legacyStreamingHandler(req: NextRequest) {
 
           // Build conversation context with user scenario as primary prompt
           const buildSystemPrompt = () => {
-            // Parse additional parameters for behavioral modifiers
-            const { difficulty = 3, seniority = 'manager', callType = 'outbound' } = persona || {};
-            
-            // Behavioral modifiers based on parameters
-            const difficultyModifier = getDifficultyModifier(difficulty);
-            const seniorityModifier = getSeniorityModifier(seniority);
-            const callTypeModifier = getCallTypeModifier(callType);
-            
+            // Use the scenario prompt directly for simplified architecture
             return `YOU ARE THE PROSPECT/CUSTOMER, NOT THE SALESPERSON.
 
 You are being contacted by a sales representative. Your role is to act as the potential customer/prospect that they are trying to sell to.
 
 SCENARIO CONTEXT:
 ${scenarioPrompt}
-
-${difficultyModifier}
-
-${seniorityModifier}
-
-${callTypeModifier}
 
 CRITICAL INSTRUCTIONS:
 - You are the PROSPECT/CUSTOMER being sold to
@@ -286,9 +273,11 @@ CRITICAL INSTRUCTIONS:
 - Respond as someone who might be interested in THEIR product/service
 - Ask questions about what THEY are offering YOU
 - Stay in character as the person described in the scenario
-- React naturally to their sales pitch
+- React naturally based on the personality, motivations, and context provided in the scenario
+- Let the scenario description guide your level of interest, skepticism, or cooperation
+- Respond with the depth and detail that this person would naturally provide
 
-REMEMBER: You are the one being sold to, not the one selling!`;
+REMEMBER: You are the one being sold to, not the one selling! Stay true to the character described in the scenario.`;
           };
 
           const messages = [

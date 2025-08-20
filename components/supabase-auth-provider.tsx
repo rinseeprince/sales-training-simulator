@@ -81,9 +81,7 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
   const signUp = useCallback(async (email: string, password: string, name?: string): Promise<AuthResponse> => {
     const response = await signUpWithEmail(email, password, name);
     
-    if (response.success && response.user) {
-      setUser(response.user);
-    }
+    // Don't set user state here - let them verify email first
     
     return response;
   }, []);
@@ -105,9 +103,25 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
    * Logout function
    */
   const logout = useCallback(async (): Promise<void> => {
-    await signOut();
-    setUser(null);
-    router.push('/');
+    try {
+      const result = await signOut();
+      console.log('Logout result:', result);
+      
+      if (result.success) {
+        setUser(null);
+        router.push('/');
+      } else {
+        console.error('Logout failed:', result.message);
+        // Still try to clear user state and redirect
+        setUser(null);
+        router.push('/');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Still try to clear user state and redirect
+      setUser(null);
+      router.push('/');
+    }
   }, [router]);
 
   /**

@@ -1,9 +1,9 @@
 'use client'
 
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
-import { SimpleSignInForm } from '@/components/auth/simple-sign-in-form'
 import { MainLayout } from '@/components/layout/main-layout'
 import { Dashboard } from '@/components/pages/dashboard'
+import { Homepage } from '@/components/pages/homepage'
 
 export default function HomePage() {
   const { user, isLoading } = useSupabaseAuth()
@@ -17,7 +17,7 @@ export default function HomePage() {
   }
 
   if (!user) {
-    return <SimpleSignInForm />
+    return <Homepage />
   }
 
   return (

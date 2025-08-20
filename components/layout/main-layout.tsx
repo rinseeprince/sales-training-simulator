@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Home, FileText, Phone, BarChart3, Settings, Users, Shield, Menu, X, LogOut, Moon, Sun, BookOpen, History, DollarSign } from 'lucide-react'
+import { Home, FileText, Phone, BarChart3, Settings, Users, Shield, Menu, X, LogOut, Moon, Sun, BookOpen, History, DollarSign, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
@@ -24,17 +24,30 @@ const navigation = [
 ]
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebarOpen')
+      return saved ? JSON.parse(saved) : true
+    }
+    return true
+  })
   const { user, logout } = useSupabaseAuth()
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
+
+  const handleSidebarToggle = (newState: boolean) => {
+    setSidebarOpen(newState)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebarOpen', JSON.stringify(newState))
+    }
+  }
 
   const filteredNavigation = navigation
 
   return (
     <div className="min-h-screen bg-background">
       {/* Top header - full width */}
-      <div className="fixed top-0 left-0 right-0 z-[60] bg-gradient-to-r from-blue-600 via-blue-500 to-green-500 shadow-lg">
+              <div className="fixed top-0 left-0 right-0 z-[60] bg-gradient-to-r from-teal-600 via-teal-500 to-teal-400 shadow-lg">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-6">
             <Button
@@ -86,7 +99,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={logout}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="text-white hover:bg-white/10" 
+              onClick={() => {
+                console.log('Logout button clicked');
+                logout();
+              }}
+            >
               <LogOut className="h-5 w-5" />
             </Button>
           </div>
@@ -121,8 +142,38 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       </motion.div>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:block lg:w-64 lg:bg-gray-50 lg:border-r" style={{ top: '64px' }}>
-        <nav className="p-4 space-y-2">
+      <div className={`hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:block lg:bg-gray-50 lg:border-r transition-all duration-300 ease-in-out ${sidebarOpen ? 'lg:w-64' : 'lg:w-16'}`} style={{ top: '64px' }}>
+        {/* Logo Section */}
+        <div className="p-4">
+                      <div 
+              className="flex items-center space-x-3 cursor-pointer group relative"
+              onClick={() => handleSidebarToggle(!sidebarOpen)}
+            >
+            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            </div>
+            {sidebarOpen && (
+              <div className="flex items-center space-x-1">
+                <span className="font-semibold text-lg">RepScore</span>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              </div>
+            )}
+            {/* Hover tooltip for collapsed state */}
+            {!sidebarOpen && (
+              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
+                Open sidebar
+              </div>
+            )}
+            {/* Hover icon for collapsed state */}
+            {!sidebarOpen && (
+              <div className="absolute left-full ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <nav className="p-2 space-y-1">
           {filteredNavigation.map((item) => (
             <Link
               key={item.name}
@@ -131,20 +182,21 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                 pathname === item.href
                   ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                !sidebarOpen && "justify-center px-2"
               )}
             >
               <item.icon className="h-5 w-5" />
-              <span>{item.name}</span>
+              {sidebarOpen && <span>{item.name}</span>}
             </Link>
           ))}
         </nav>
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64 pt-16">
+      <div className={`pt-16 transition-all duration-300 ease-in-out ${sidebarOpen ? 'lg:pl-64' : 'lg:pl-16'}`}>
         {/* Page content */}
-        <main className="p-6 bg-gray-50 min-h-screen">
+        <main className="p-4 bg-gray-50 min-h-screen">
           {children}
         </main>
       </div>
