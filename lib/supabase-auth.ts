@@ -10,7 +10,9 @@ if (typeof window !== 'undefined') {
     hasUrl: !!supabaseUrl,
     hasKey: !!supabaseAnonKey,
     urlFirst10: supabaseUrl?.substring(0, 10),
-    keyFirst10: supabaseAnonKey?.substring(0, 10)
+    keyFirst10: supabaseAnonKey?.substring(0, 10),
+    appUrl: process.env.NEXT_PUBLIC_APP_URL,
+    redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback?next=/dashboard`
   });
 }
 
@@ -78,6 +80,14 @@ async function syncUserToSimpleUsers(authUserId: string, email: string, name?: s
 // Auth functions
 export async function signUpWithEmail(email: string, password: string, name?: string): Promise<AuthResponse> {
   console.log('signUpWithEmail called with:', { email, name });
+  
+  const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback?next=/dashboard`;
+  console.log('Using redirect URL:', redirectUrl);
+  console.log('Supabase client config:', {
+    url: supabaseClient.supabaseUrl,
+    key: supabaseClient.supabaseKey?.substring(0, 20) + '...'
+  });
+  
   try {
     // Try to sign up directly first
     const { data, error } = await supabaseClient.auth.signUp({
@@ -87,7 +97,7 @@ export async function signUpWithEmail(email: string, password: string, name?: st
         data: {
           name: name || null,
         },
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback?next=/dashboard`,
+        emailRedirectTo: redirectUrl,
       },
     });
 
