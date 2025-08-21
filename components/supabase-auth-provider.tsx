@@ -34,10 +34,12 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
    */
   const loadUser = useCallback(async (): Promise<void> => {
     try {
+      console.log('AUTH PROVIDER: Starting loadUser...');
       const user = await getCurrentUser();
+      console.log('AUTH PROVIDER: getCurrentUser returned:', user ? 'USER FOUND' : 'NO USER');
       setUser(user);
     } catch (error) {
-      console.error('Failed to load user:', error);
+      console.error('AUTH PROVIDER: Failed to load user:', error);
       setUser(null);
     }
   }, []);
@@ -47,29 +49,38 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
    */
   useEffect(() => {
     const initAuth = async () => {
-      // Set up auth state listener
-      const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
-        async (event, session) => {
-          console.log('Auth state changed:', event, session?.user?.email);
-          
-          if (event === 'SIGNED_IN' && session?.user) {
-            const user = await getCurrentUser();
-            setUser(user);
-          } else if (event === 'SIGNED_OUT') {
-            setUser(null);
-          } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-            const user = await getCurrentUser();
-            setUser(user);
+      try {
+        console.log('AUTH PROVIDER: Initializing authentication...');
+        
+        // Set up auth state listener
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
+          async (event, session) => {
+            console.log('Auth state changed:', event, session?.user?.email);
+            
+            if (event === 'SIGNED_IN' && session?.user) {
+              const user = await getCurrentUser();
+              setUser(user);
+            } else if (event === 'SIGNED_OUT') {
+              setUser(null);
+            } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+              const user = await getCurrentUser();
+              setUser(user);
+            }
           }
-        }
-      );
+        );
 
-      // Load initial user state
-      await loadUser();
-      setIsLoading(false);
+        // Load initial user state
+        console.log('AUTH PROVIDER: Loading initial user state...');
+        await loadUser();
+        console.log('AUTH PROVIDER: Setting isLoading to false');
+        setIsLoading(false);
 
-      // Cleanup subscription
-      return () => subscription.unsubscribe();
+        // Cleanup subscription
+        return () => subscription.unsubscribe();
+      } catch (error) {
+        console.error('AUTH PROVIDER: Error during initialization:', error);
+        setIsLoading(false);
+      }
     };
 
     initAuth();

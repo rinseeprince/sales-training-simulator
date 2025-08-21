@@ -1,15 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Debug environment variables
-console.log('SUPABASE DEBUG:', {
-  url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  typeof_url: typeof process.env.NEXT_PUBLIC_SUPABASE_URL,
-  typeof_key: typeof process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  NODE_ENV: process.env.NODE_ENV,
-  all_env_keys: Object.keys(process.env).filter(key => key.includes('SUPABASE'))
-});
-
 // Check if required environment variables are available
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
