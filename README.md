@@ -779,3 +779,4 @@ When asking ChatGPT for help with this project, include:
 ## License
 
 MIT License - see LICENSE file for details # sales-training-simulator
+# Force redeploy Thu Aug 21 23:16:44 BST 2025
