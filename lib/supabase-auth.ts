@@ -4,6 +4,16 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+// Debug environment variables in production
+if (typeof window !== 'undefined') {
+  console.log('Environment check:', {
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseAnonKey,
+    urlFirst10: supabaseUrl?.substring(0, 10),
+    keyFirst10: supabaseAnonKey?.substring(0, 10)
+  });
+}
+
 if (!supabaseUrl) {
   throw new Error('NEXT_PUBLIC_SUPABASE_URL is required');
 }
