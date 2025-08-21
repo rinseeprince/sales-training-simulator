@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-auth';
+import { createClient } from '@supabase/supabase-js';
+
+/**
+ * Create Supabase admin client for server-side operations
+ */
+function createSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 export async function GET(request: NextRequest) {
   try {
-    if (!supabaseAdmin) {
-      return NextResponse.json({ 
-        error: 'Supabase admin client not available',
-        success: false 
-      }, { status: 500 });
-    }
+    const supabaseAdmin = createSupabaseAdmin();
 
     // Check table structure
     let columnError = null;
@@ -70,4 +79,4 @@ export async function OPTIONS(req: NextRequest) {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }
   });
-} 
+}
