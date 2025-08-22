@@ -45,14 +45,7 @@ export interface AuthResponse {
   error?: string;
 }
 
-/**
- * Sync user to simple_users table via API
- */
-async function syncUserToSimpleUsers(authUserId: string, email: string, name?: string): Promise<boolean> {
-  // Skip manual sync - the database trigger will automatically sync users
-  console.log('Skipping manual sync for user:', email, '- using automatic trigger from migration');
-  return true;
-}
+
 
 // Auth functions
 export async function signUpWithEmail(email: string, password: string, name?: string): Promise<AuthResponse> {
@@ -118,13 +111,9 @@ export async function signUpWithEmail(email: string, password: string, name?: st
     }
 
     if (data.user) {
-      // Sync user to simple_users table via API
-      const syncSuccess = await syncUserToSimpleUsers(data.user.id, data.user.email!, name);
+      // Auth user created successfully - return immediately
+      console.log('Supabase auth user created successfully:', data.user.email);
       
-      if (!syncSuccess) {
-        console.warn('Failed to sync user to simple_users, but auth user was created');
-      }
-
       return {
         success: true,
         message: data.user.email_confirmed_at 
@@ -171,12 +160,8 @@ export async function signInWithEmail(email: string, password: string): Promise<
     }
 
     if (data.user) {
-      // Sync user to simple_users table via API
-      const syncSuccess = await syncUserToSimpleUsers(data.user.id, data.user.email!, data.user.user_metadata?.name);
-      
-      if (!syncSuccess) {
-        console.warn('Failed to sync user to simple_users during signin');
-      }
+      // User signed in successfully
+      console.log('User signed in successfully:', data.user.email);
 
       return {
         success: true,
