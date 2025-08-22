@@ -49,32 +49,9 @@ export interface AuthResponse {
  * Sync user to simple_users table via API
  */
 async function syncUserToSimpleUsers(authUserId: string, email: string, name?: string): Promise<boolean> {
-  try {
-    const response = await fetch('/api/sync-user', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        authUserId,
-        email,
-        name,
-      }),
-    });
-
-    const data = await response.json();
-    
-    if (data.success) {
-      console.log('Successfully synced user to simple_users:', email);
-      return true;
-    } else {
-      console.error('Failed to sync user:', data.error);
-      return false;
-    }
-  } catch (error) {
-    console.error('Error calling sync-user API:', error);
-    return false;
-  }
+  // Skip manual sync - the database trigger will automatically sync users
+  console.log('Skipping manual sync for user:', email, '- using automatic trigger from migration');
+  return true;
 }
 
 // Auth functions
