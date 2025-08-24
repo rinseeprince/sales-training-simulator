@@ -163,6 +163,8 @@ export function ScenarioBuilder() {
         body: JSON.stringify({
           title: scenarioData.title,
           prompt: scenarioData.prompt,
+          duration: scenarioData.duration,
+          voice: scenarioData.voice,
           userId: actualUserId
         }),
       })

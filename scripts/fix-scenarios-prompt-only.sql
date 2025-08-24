@@ -1,9 +1,11 @@
--- Fix Scenarios Table for Prompt-Only System
+-- Fix Scenarios Table for Prompt-Only System with Duration and Voice
 -- This aligns the table with the new prompt-only AI prospect system
 
 -- First, add the columns that the current API expects
 ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS prompt TEXT;
+ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS duration TEXT;
+ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS voice TEXT;
 
 -- Copy existing data if needed
 UPDATE scenarios SET title = name WHERE title IS NULL AND name IS NOT NULL;

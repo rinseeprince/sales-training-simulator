@@ -61,12 +61,9 @@ export async function POST(req: NextRequest) {
     const { 
       title, 
       prompt, 
-      settings, 
-      userId,
-      persona,
-      difficulty,
-      industry,
-      tags
+      duration,
+      voice,
+      userId
     } = body;
 
     // Validate required fields
@@ -78,11 +75,13 @@ export async function POST(req: NextRequest) {
       return errorResponse('userId is required');
     }
 
-    // Prepare scenario data - PROMPT-ONLY SYSTEM
+    // Prepare scenario data - PROMPT-ONLY SYSTEM with duration and voice
     const scenarioData = {
       user_id: userId,
       title: title,
       prompt: prompt,
+      duration: duration || null,
+      voice: voice || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
