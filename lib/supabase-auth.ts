@@ -53,20 +53,14 @@ export async function signUpWithEmail(email: string, password: string, name?: st
   
   const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback?next=/dashboard`;
   console.log('Using redirect URL:', redirectUrl);
-  console.log('Supabase client config:', {
-    url: supabaseClient.supabaseUrl,
-    key: supabaseClient.supabaseKey?.substring(0, 20) + '...'
-  });
+  console.log('Supabase client initialized with URL:', supabaseUrl?.substring(0, 20) + '...');
   
   try {
-    // Try to sign up directly first
+    // Try to sign up with minimal options to avoid trigger issues
     const { data, error } = await supabaseClient.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          name: name || null,
-        },
         emailRedirectTo: redirectUrl,
       },
     });
