@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/api-utils';
+import { supabaseClient } from '@/lib/supabase-auth';
 
 export interface UsageMetrics {
   simulationsCompleted: number;
@@ -28,7 +28,7 @@ export async function trackUsage(userId: string, action: string, metadata?: Reco
     };
 
     // Store usage event in database
-    const { error } = await supabase
+    const { error } = await supabaseClient
       .from('user_usage')
       .insert(event);
 
@@ -39,7 +39,7 @@ export async function trackUsage(userId: string, action: string, metadata?: Reco
     }
 
     // Update user's last activity
-    await supabase
+    await supabaseClient
       .from('simple_users')
       .update({ 
         last_active: new Date().toISOString(),
@@ -55,7 +55,7 @@ export async function trackUsage(userId: string, action: string, metadata?: Reco
 export async function getUsageStats(userId: string): Promise<UsageMetrics> {
   try {
     // Get user's usage events
-    const { data: events, error } = await supabase
+    const { data: events, error } = await supabaseClient
       .from('user_usage')
       .select('*')
       .eq('user_id', userId)
