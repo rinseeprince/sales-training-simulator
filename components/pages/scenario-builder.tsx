@@ -163,14 +163,7 @@ export function ScenarioBuilder() {
         body: JSON.stringify({
           title: scenarioData.title,
           prompt: scenarioData.prompt,
-          userId: actualUserId,
-          persona: 'Custom Prospect',
-          industry: 'General',
-          tags: ['custom-scenario'],
-          settings: {
-            duration: scenarioData.duration,
-            voice: scenarioData.voice
-          }
+          userId: actualUserId
         }),
       })
 

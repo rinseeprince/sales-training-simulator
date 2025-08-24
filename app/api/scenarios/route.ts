@@ -78,20 +78,14 @@ export async function POST(req: NextRequest) {
       return errorResponse('userId is required');
     }
 
-    // Prepare scenario data - only essential fields
-    const scenarioData: any = {
+    // Prepare scenario data - PROMPT-ONLY SYSTEM
+    const scenarioData = {
       user_id: userId,
       title: title,
       prompt: prompt,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
-    // Only add optional fields if they exist in the request
-    if (settings !== undefined) scenarioData.settings = settings;
-    if (persona !== undefined) scenarioData.persona = persona;
-    if (industry !== undefined) scenarioData.industry = industry;
-    if (tags !== undefined) scenarioData.tags = tags;
 
     // Insert into Supabase
     const { data, error } = await supabase
