@@ -17,11 +17,8 @@ interface SavedScenario {
   id: string
   title: string
   prompt: string
-  settings: Record<string, any>
-  persona: string
-  difficulty: string
-  industry: string
-  tags: string[]
+  duration?: string
+  voice?: string
   created_at: string
   updated_at: string
 }
@@ -33,8 +30,6 @@ export function SavedScenarios() {
   const [scenarios, setScenarios] = useState<SavedScenario[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterDifficulty, setFilterDifficulty] = useState('all')
-  const [filterIndustry, setFilterIndustry] = useState('all')
 
   // Load saved scenarios
   useEffect(() => {
@@ -82,13 +77,9 @@ export function SavedScenarios() {
     const simulationData = {
       title: scenario.title,
       prompt: scenario.prompt,
-      callType: scenario.settings.callType || 'outbound',
-      difficulty: getDifficultyNumber(scenario.difficulty),
-      seniority: scenario.settings.seniority || 'manager',
-      duration: scenario.settings.duration || '5-10',
-      voice: scenario.settings.voice || 'professional-male',
+      duration: scenario.duration || '5 minutes',
+      voice: scenario.voice || 'professional-male',
       saveReuse: false,
-      enableStreaming: scenario.settings.enableStreaming !== false,
       timestamp: Date.now()
     }
 
@@ -102,13 +93,9 @@ export function SavedScenarios() {
     const builderData = {
       title: scenario.title,
       prompt: scenario.prompt,
-      callType: scenario.settings.callType || '',
-      difficulty: [getDifficultyNumber(scenario.difficulty)],
-      seniority: scenario.settings.seniority || '',
-      duration: scenario.settings.duration || '',
-      voice: scenario.settings.voice || '',
+      duration: scenario.duration || '',
+      voice: scenario.voice || '',
       saveReuse: true,
-      enableStreaming: scenario.settings.enableStreaming !== false,
       scenarioId: scenario.id // Include ID for editing
     }
 
@@ -146,36 +133,15 @@ export function SavedScenarios() {
     }
   }
 
-  const getDifficultyNumber = (difficulty: string): number => {
-    const map: Record<string, number> = {
-      'easy': 2,
-      'medium': 3,
-      'hard': 4,
-      'expert': 5
-    }
-    return map[difficulty] || 3
-  }
-
-  const getDifficultyColor = (difficulty: string) => {
-    const colors: Record<string, string> = {
-      'easy': 'bg-green-100 text-green-800',
-      'medium': 'bg-yellow-100 text-yellow-800',
-      'hard': 'bg-orange-100 text-orange-800',
-      'expert': 'bg-red-100 text-red-800'
-    }
-    return colors[difficulty] || 'bg-gray-100 text-gray-800'
-  }
+  // Removed difficulty functions - not used in prompt-only system
 
   // Filter scenarios
   const filteredScenarios = scenarios.filter(scenario => {
     const matchesSearch = scenario.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         scenario.prompt.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         scenario.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
+                         scenario.prompt.toLowerCase().includes(searchTerm.toLowerCase())
     
-    const matchesDifficulty = filterDifficulty === 'all' || scenario.difficulty === filterDifficulty
-    const matchesIndustry = filterIndustry === 'all' || scenario.industry === filterIndustry
-
-    return matchesSearch && matchesDifficulty && matchesIndustry
+    // For now, show all scenarios since we don't have difficulty/industry in prompt-only system
+    return matchesSearch
   })
 
   const formatDate = (dateString: string) => {
@@ -229,53 +195,19 @@ export function SavedScenarios() {
             <CardTitle className="text-lg">Search & Filter</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-1">
               <div className="space-y-2">
                 <Label htmlFor="search">Search</Label>
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="search"
-                    placeholder="Search scenarios, tags..."
+                    placeholder="Search scenarios..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-8"
                   />
                 </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="difficulty">Difficulty</Label>
-                <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Difficulties" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Difficulties</SelectItem>
-                    <SelectItem value="easy">Easy</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="hard">Hard</SelectItem>
-                    <SelectItem value="expert">Expert</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="industry">Industry</Label>
-                <Select value={filterIndustry} onValueChange={setFilterIndustry}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Industries" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Industries</SelectItem>
-                    <SelectItem value="technology">Technology</SelectItem>
-                    <SelectItem value="finance">Finance</SelectItem>
-                    <SelectItem value="healthcare">Healthcare</SelectItem>
-                    <SelectItem value="retail">Retail</SelectItem>
-                    <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                    <SelectItem value="general">General</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </CardContent>
@@ -320,12 +252,14 @@ export function SavedScenarios() {
                   <div className="flex items-start justify-between">
                     <div className="space-y-1 flex-1">
                       <CardTitle className="text-lg">{scenario.title}</CardTitle>
-                      <div className="flex items-center space-x-2">
-                        <Badge className={getDifficultyColor(scenario.difficulty)}>
-                          {scenario.difficulty}
-                        </Badge>
-                        <Badge variant="outline">{scenario.industry}</Badge>
-                      </div>
+                                        <div className="flex items-center space-x-2">
+                    {scenario.duration && (
+                      <Badge variant="outline">{scenario.duration}</Badge>
+                    )}
+                    {scenario.voice && (
+                      <Badge variant="outline">{scenario.voice}</Badge>
+                    )}
+                  </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -335,21 +269,7 @@ export function SavedScenarios() {
                     {scenario.prompt}
                   </p>
                   
-                  {scenario.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {scenario.tags.slice(0, 3).map((tag, tagIndex) => (
-                        <Badge key={tagIndex} variant="secondary" className="text-xs">
-                          <Tag className="mr-1 h-3 w-3" />
-                          {tag}
-                        </Badge>
-                      ))}
-                      {scenario.tags.length > 3 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{scenario.tags.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
-                  )}
+                  {/* Tags removed - prompt-only system doesn't use tags */}
 
                   <div className="flex items-center text-xs text-muted-foreground">
                     <Calendar className="mr-1 h-3 w-3" />
