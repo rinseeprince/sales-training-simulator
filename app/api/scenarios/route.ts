@@ -78,19 +78,20 @@ export async function POST(req: NextRequest) {
       return errorResponse('userId is required');
     }
 
-    // Prepare scenario data
-    const scenarioData = {
+    // Prepare scenario data - only essential fields
+    const scenarioData: any = {
       user_id: userId,
       title: title,
       prompt: prompt,
-      settings: settings || {},
-      persona: persona || 'potential customer',
-      // difficulty field removed - using prompt-based system
-      industry: industry || 'general',
-      tags: tags || [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+    
+    // Only add optional fields if they exist in the request
+    if (settings !== undefined) scenarioData.settings = settings;
+    if (persona !== undefined) scenarioData.persona = persona;
+    if (industry !== undefined) scenarioData.industry = industry;
+    if (tags !== undefined) scenarioData.tags = tags;
 
     // Insert into Supabase
     const { data, error } = await supabase
