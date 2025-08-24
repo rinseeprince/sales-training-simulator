@@ -164,19 +164,12 @@ export function ScenarioBuilder() {
           title: scenarioData.title,
           prompt: scenarioData.prompt,
           userId: actualUserId,
-          persona: 'Custom Prospect', // Simplified since it's defined in the prompt
-          // difficulty removed - using prompt-based system
+          persona: 'Custom Prospect',
           industry: 'General',
           tags: ['custom-scenario'],
           settings: {
             duration: scenarioData.duration,
             voice: scenarioData.voice
-          },
-          // Simplified AI Engine fields
-          voice_settings: {
-            voiceId: scenarioData.voice || 'professional-male',
-            stability: 0.75,
-            similarityBoost: 0.75
           }
         }),
       })
