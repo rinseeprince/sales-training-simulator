@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     // Prepare scenario data - PROMPT-ONLY SYSTEM with duration and voice
     const scenarioData = {
       user_id: userId,
-      name: title,  // The DB column is 'name', not 'title'
+      title: title,  // The DB column is 'title', not 'name'
       prompt: prompt,
       duration: duration || null,
       voice: voice || null,
