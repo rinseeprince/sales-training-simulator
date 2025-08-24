@@ -79,8 +79,8 @@ export function ScenarioBuilder() {
     setScenarioData({
       title: scenario.title,
       prompt: scenario.prompt,
-      duration: scenario.settings.duration || '',
-      voice: scenario.settings.voice || '',
+      duration: scenario.duration || '',
+      voice: scenario.voice || '',
       saveReuse: true
     })
     
@@ -256,7 +256,7 @@ export function ScenarioBuilder() {
                             <div className="flex-1">
                               <div className="font-medium">{scenario.title}</div>
                               <div className="text-xs text-muted-foreground">
-                                {scenario.difficulty} • {scenario.industry}
+                                {scenario.duration && `${scenario.duration} min`} {scenario.voice && `• ${scenario.voice}`}
                               </div>
                             </div>
                           </div>
