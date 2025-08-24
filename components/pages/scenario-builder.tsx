@@ -165,7 +165,7 @@ export function ScenarioBuilder() {
           prompt: scenarioData.prompt,
           userId: actualUserId,
           persona: 'Custom Prospect', // Simplified since it's defined in the prompt
-          difficulty: 'custom', // No longer using difficulty levels
+          // difficulty removed - using prompt-based system
           industry: 'General',
           tags: ['custom-scenario'],
           settings: {

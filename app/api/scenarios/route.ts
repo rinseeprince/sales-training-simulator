@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       prompt: prompt,
       settings: settings || {},
       persona: persona || 'potential customer',
-      difficulty: difficulty || 'medium',
+      // difficulty field removed - using prompt-based system
       industry: industry || 'general',
       tags: tags || [],
       created_at: new Date().toISOString(),
