@@ -1,7 +1,10 @@
 -- Fix Scenarios Table for Prompt-Only System with Duration and Voice
 -- This aligns the table with the new prompt-only AI prospect system
 
--- First, add the columns that the current API expects
+-- First, drop the NOT NULL constraint on name if it exists
+ALTER TABLE scenarios ALTER COLUMN name DROP NOT NULL;
+
+-- Add the columns that the current API expects
 ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS prompt TEXT;
 ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS duration TEXT;
@@ -15,7 +18,7 @@ UPDATE scenarios SET prompt = description WHERE prompt IS NULL AND description I
 ALTER TABLE scenarios ALTER COLUMN title SET NOT NULL;
 
 -- Show what columns we have now
-SELECT column_name, data_type 
+SELECT column_name, data_type, is_nullable
 FROM information_schema.columns 
 WHERE table_name = 'scenarios' 
 ORDER BY ordinal_position;
