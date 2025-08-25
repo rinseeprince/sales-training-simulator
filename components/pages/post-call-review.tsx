@@ -228,10 +228,22 @@ export function PostCallReview() {
   const displayData = tempCallData || call || callData
   const hasAudio = tempCallData?.audioUrl || call?.audio_url || callData.audioUrl
 
+  // Ensure data safety for critical properties
+  const safeDisplayData = {
+    ...displayData,
+    feedback: Array.isArray(displayData?.feedback) ? displayData.feedback : [],
+    transcript: Array.isArray(displayData?.transcript) ? displayData.transcript : [],
+    score: typeof displayData?.score === 'number' ? displayData.score : 0,
+    talk_ratio: typeof displayData?.talk_ratio === 'number' ? displayData.talk_ratio : 50,
+    objections_handled: typeof displayData?.objections_handled === 'number' ? displayData.objections_handled : 0,
+    cta_used: typeof displayData?.cta_used === 'boolean' ? displayData.cta_used : false,
+    duration: typeof displayData?.duration === 'number' ? displayData.duration : 0
+  }
+
   // Load coaching feedback when we have a transcript
   useEffect(() => {
     const loadCoachingFeedback = async () => {
-      if (!displayData?.transcript || isLoadingCoaching || coachingFeedback) return;
+      if (!safeDisplayData.transcript || safeDisplayData.transcript.length === 0 || isLoadingCoaching || coachingFeedback) return;
       
       setIsLoadingCoaching(true);
       try {
@@ -241,7 +253,7 @@ export function PostCallReview() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            transcript: displayData.transcript || []
+            transcript: safeDisplayData.transcript
           })
         });
         
@@ -257,7 +269,7 @@ export function PostCallReview() {
     };
     
     loadCoachingFeedback();
-  }, [displayData?.transcript]);
+  }, [safeDisplayData.transcript]);
   
   console.log('Review page data:', {
     callId,
@@ -271,12 +283,12 @@ export function PostCallReview() {
       hasAudioUrl: !!call.audio_url
     } : null,
     hasAudio,
-    displayData: displayData ? {
-      id: displayData.id,
-      score: displayData.score,
-      talk_ratio: displayData.talk_ratio,
-      objections_handled: displayData.objections_handled,
-      audio_url: displayData.audio_url
+    displayData: safeDisplayData ? {
+      id: safeDisplayData.id,
+      score: safeDisplayData.score,
+      talk_ratio: safeDisplayData.talk_ratio,
+      objections_handled: safeDisplayData.objections_handled,
+      audio_url: safeDisplayData.audio_url
     } : null,
     coachingFeedback: coachingFeedback ? {
       overallScore: coachingFeedback.overallScore,
@@ -381,7 +393,7 @@ export function PostCallReview() {
               ) : (
                 <div className="flex items-center space-x-2">
                   <p className="text-muted-foreground">
-                    {simulationName} - {callSaved ? 'Completed' : 'Not Saved'} {isRealCall(displayData) && displayData.created_at ? new Date(displayData.created_at).toLocaleDateString() : tempCallData?.created_at ? new Date(tempCallData.created_at).toLocaleDateString() : callData.date}
+                    {simulationName} - {callSaved ? 'Completed' : 'Not Saved'} {isRealCall(safeDisplayData) && safeDisplayData.created_at ? new Date(safeDisplayData.created_at).toLocaleDateString() : tempCallData?.created_at ? new Date(tempCallData.created_at).toLocaleDateString() : callData.date}
                   </p>
                   <Button
                     size="sm"
@@ -431,8 +443,8 @@ export function PostCallReview() {
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{coachingFeedback?.overallScore || displayData.score || 0}/100</div>
-            <Progress value={coachingFeedback?.overallScore || displayData.score || 0} className="mt-2" />
+            <div className="text-2xl font-bold text-green-600">{coachingFeedback?.overallScore || safeDisplayData.score}/100</div>
+            <Progress value={coachingFeedback?.overallScore || safeDisplayData.score} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -444,7 +456,7 @@ export function PostCallReview() {
           <CardContent>
             <div className="text-2xl font-bold">
               {coachingFeedback?.metrics?.talkRatio ? `${coachingFeedback.metrics.talkRatio}% / ${100 - coachingFeedback.metrics.talkRatio}%` :
-               displayData.talk_ratio ? `${displayData.talk_ratio}% / ${100 - displayData.talk_ratio}%` : 
+               safeDisplayData.talk_ratio ? `${safeDisplayData.talk_ratio}% / ${100 - safeDisplayData.talk_ratio}%` : 
                `${callData.talkRatio.rep}% / ${callData.talkRatio.ai}%`}
             </div>
             <p className="text-xs text-muted-foreground">Rep / Prospect</p>
@@ -455,8 +467,7 @@ export function PostCallReview() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">CTA Used</CardTitle>
             {(() => {
-              const ctaUsed = coachingFeedback?.categoryScores?.closing > 0 || 
-                             displayData.cta_used !== undefined ? displayData.cta_used : callData.ctaUsed;
+              const ctaUsed = coachingFeedback?.categoryScores?.closing > 0 || safeDisplayData.cta_used;
               return ctaUsed ? (
                 <CheckCircle className="h-4 w-4 text-green-500" />
               ) : (
@@ -486,7 +497,7 @@ export function PostCallReview() {
           <CardContent>
             <div className="text-2xl font-bold">{callData.confidence}</div>
             <Badge variant="secondary" className="mt-1">
-              {displayData.sentiment || callData.sentiment}
+              {safeDisplayData.sentiment || callData.sentiment}
             </Badge>
           </CardContent>
         </Card>
@@ -652,7 +663,16 @@ export function PostCallReview() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {(displayData.feedback || feedback).map((item: string, index: number) => (
+                  {safeDisplayData.feedback.length > 0 ? safeDisplayData.feedback.map((item: string, index: number) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      {index < 2 ? (
+                        <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <ThumbsDown className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                      )}
+                      <p className="text-sm">{item}</p>
+                    </div>
+                  )) : feedback.map((item: string, index: number) => (
                     <div key={index} className="flex items-start space-x-3">
                       {index < 2 ? (
                         <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
@@ -684,7 +704,7 @@ export function PostCallReview() {
                 <AudioPlayer 
                   audioUrl={hasAudio}
                   title="Call Recording"
-                  duration={displayData.duration || 0}
+                  duration={safeDisplayData.duration}
                   showWaveform={true}
                   className="w-full"
                 />
@@ -700,16 +720,16 @@ export function PostCallReview() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Duration:</span>
                   <span>
-                    {displayData.duration ? 
-                      `${Math.floor(displayData.duration / 60)}:${(displayData.duration % 60).toString().padStart(2, '0')}` : 
+                    {safeDisplayData.duration ? 
+                      `${Math.floor(safeDisplayData.duration / 60)}:${(safeDisplayData.duration % 60).toString().padStart(2, '0')}` : 
                       callData.duration}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Date:</span>
                   <span>
-                    {displayData.created_at ? 
-                      new Date(displayData.created_at).toLocaleDateString() : 
+                    {safeDisplayData.created_at ? 
+                      new Date(safeDisplayData.created_at).toLocaleDateString() : 
                       callData.date}
                   </span>
                 </div>
