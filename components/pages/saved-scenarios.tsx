@@ -9,6 +9,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Play, Search, Filter, Calendar, Tag, Trash2, Edit, BookOpen, ArrowLeft } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
@@ -30,6 +40,9 @@ export function SavedScenarios() {
   const [scenarios, setScenarios] = useState<SavedScenario[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [scenarioToDelete, setScenarioToDelete] = useState<SavedScenario | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Load saved scenarios
   useEffect(() => {
@@ -104,11 +117,17 @@ export function SavedScenarios() {
     router.push('/scenario-builder')
   }
 
-  const handleDeleteScenario = async (scenarioId: string) => {
-    if (!confirm('Are you sure you want to delete this scenario?')) return
+  const handleDeleteClick = (scenario: SavedScenario) => {
+    setScenarioToDelete(scenario)
+    setDeleteDialogOpen(true)
+  }
 
+  const handleDeleteConfirm = async () => {
+    if (!scenarioToDelete) return
+
+    setIsDeleting(true)
     try {
-      const response = await fetch(`/api/scenarios/${scenarioId}`, {
+      const response = await fetch(`/api/scenarios/${scenarioToDelete.id}`, {
         method: 'DELETE'
       })
 
@@ -121,6 +140,8 @@ export function SavedScenarios() {
         description: "Scenario deleted successfully",
       })
 
+      setDeleteDialogOpen(false)
+      setScenarioToDelete(null)
       // Reload scenarios
       loadScenarios()
     } catch (error) {
@@ -130,6 +151,8 @@ export function SavedScenarios() {
         description: "Failed to delete scenario",
         variant: "destructive",
       })
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -295,7 +318,7 @@ export function SavedScenarios() {
                     <Button 
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDeleteScenario(scenario.id)}
+                      onClick={() => handleDeleteClick(scenario)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -317,6 +340,28 @@ export function SavedScenarios() {
           Showing {filteredScenarios.length} of {scenarios.length} scenarios
         </motion.div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Scenario</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{scenarioToDelete?.title}"? This action cannot be undone and will permanently remove the scenario and its data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
