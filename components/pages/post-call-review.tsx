@@ -14,7 +14,7 @@ import { CheckCircle, XCircle, TrendingUp, Clock, MessageSquare, ThumbsUp, Thumb
 import { AudioPlayer } from '@/components/ui/audio-player'
 import { useCallData } from '@/hooks/use-call-data'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 
 const callData = {
   score: 87,
@@ -41,6 +41,7 @@ const feedback = [
 export function PostCallReview() {
   const { user } = useSupabaseAuth()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const callId = searchParams.get('callId')
   
   const [actualUserId, setActualUserId] = useState<string | null>(null)
@@ -200,8 +201,8 @@ export function PostCallReview() {
         setCallSaved(true)
         // Remove temp data from session storage
         sessionStorage.removeItem(`temp_call_${callId}`)
-        // Optionally refresh the page to show saved data
-        window.location.reload()
+        // Navigate to saved simulations page
+        router.push('/simulations')
       } else {
         const errorText = await saveResponse.text()
         console.error('Failed to save call:', saveResponse.status, errorText)
