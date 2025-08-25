@@ -77,6 +77,7 @@ export function PostCallReview() {
       if (callId || !actualUserId) return; // Only fetch if no callId and we have userId
       
       setLoadingRecentCall(true);
+      setMostRecentCall(null); // Reset state to prevent flash
       try {
         const response = await fetch(`/api/calls?userId=${actualUserId}`);
         if (response.ok) {
@@ -365,8 +366,8 @@ export function PostCallReview() {
   }
 
   // If we have neither call data nor temp data, show error
-  // Show loading while fetching data
-  if (loading || loadingRecentCall) {
+  // Show loading while fetching data or when we don't have userId yet
+  if (loading || loadingRecentCall || (!callId && !actualUserId)) {
     return (
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-center h-64">
@@ -394,8 +395,8 @@ export function PostCallReview() {
     )
   }
 
-  // Show message if no callId and no recent calls exist
-  if (!callId && !mostRecentCall && !tempCallData) {
+  // Show message if no callId and no recent calls exist (but only after we've tried to fetch)
+  if (!callId && !mostRecentCall && !tempCallData && actualUserId && !loadingRecentCall) {
     return (
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-center h-64">
