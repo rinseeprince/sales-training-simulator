@@ -70,6 +70,33 @@ export function PostCallReview() {
     callId: callId || undefined, 
     userId: actualUserId 
   })
+
+  // Fetch most recent call if no callId is provided
+  useEffect(() => {
+    const fetchMostRecentCall = async () => {
+      if (callId || !actualUserId) return; // Only fetch if no callId and we have userId
+      
+      setLoadingRecentCall(true);
+      try {
+        const response = await fetch(`/api/calls?userId=${actualUserId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.calls && data.calls.length > 0) {
+            setMostRecentCall(data.calls[0]); // Most recent call (already sorted by created_at desc)
+          } else {
+            setMostRecentCall(null);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching most recent call:', error);
+        setMostRecentCall(null);
+      } finally {
+        setLoadingRecentCall(false);
+      }
+    };
+
+    fetchMostRecentCall();
+  }, [callId, actualUserId]);
   
   const [managerComments, setManagerComments] = useState('')
   const [certificationLevel, setCertificationLevel] = useState('')
@@ -81,6 +108,8 @@ export function PostCallReview() {
   const [callSaved, setCallSaved] = useState(false)
   const [coachingFeedback, setCoachingFeedback] = useState<any>(null)
   const [isLoadingCoaching, setIsLoadingCoaching] = useState(false)
+  const [mostRecentCall, setMostRecentCall] = useState<any>(null)
+  const [loadingRecentCall, setLoadingRecentCall] = useState(false)
 
   // Check for temporary call data on mount
   useEffect(() => {
@@ -108,10 +137,13 @@ export function PostCallReview() {
     if (call?.scenario_name && tempCallData === null) {
       setSimulationName(call.scenario_name)
       setCallSaved(true) // Call is already saved if it comes from database
-    } else if (tempCallData === null && !call) {
+    } else if (mostRecentCall?.scenario_name && tempCallData === null && !call) {
+      setSimulationName(mostRecentCall.scenario_name)
+      setCallSaved(true) // Most recent call is already saved
+    } else if (tempCallData === null && !call && !mostRecentCall) {
       setSimulationName('Enterprise Software Demo') // Default fallback
     }
-  }, [call?.scenario_name, tempCallData]) // More specific dependencies
+  }, [call?.scenario_name, mostRecentCall?.scenario_name, tempCallData]) // More specific dependencies
 
   const handleSaveSimulationName = async () => {
     if (!callId || !simulationName.trim()) return
@@ -224,9 +256,9 @@ export function PostCallReview() {
     console.log('Retry requested')
   }
 
-  // Use temp call data, then real call data, or fallback to demo data
-  const displayData = tempCallData || call || callData
-  const hasAudio = tempCallData?.audioUrl || call?.audio_url || callData.audioUrl
+  // Use temp call data, then real call data, then most recent call, or fallback to demo data
+  const displayData = tempCallData || call || mostRecentCall || callData
+  const hasAudio = tempCallData?.audioUrl || call?.audio_url || mostRecentCall?.audio_url || callData.audioUrl
 
   // Ensure data safety for critical properties
   const safeDisplayData = {
@@ -333,7 +365,21 @@ export function PostCallReview() {
   }
 
   // If we have neither call data nor temp data, show error
-  if (!call && !tempCallData && !loading) {
+  // Show loading while fetching data
+  if (loading || loadingRecentCall) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <p className="text-muted-foreground mb-4">Loading call data...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error only if we have a specific callId but no data found
+  if (callId && !call && !tempCallData) {
     return (
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex items-center justify-center h-64">
@@ -341,6 +387,22 @@ export function PostCallReview() {
             <p className="text-red-500 mb-4">Call data not found</p>
             <Button onClick={() => window.location.reload()}>
               Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show message if no callId and no recent calls exist
+  if (!callId && !mostRecentCall && !tempCallData) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <p className="text-muted-foreground mb-4">No saved simulations found</p>
+            <Button onClick={() => router.push('/scenario-builder')}>
+              Create Your First Simulation
             </Button>
           </div>
         </div>
