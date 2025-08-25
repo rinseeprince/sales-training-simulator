@@ -22,10 +22,17 @@ FOR INSERT WITH CHECK (
 );
 
 -- Policy for users to view their own audio files
-CREATE POLICY "Users can view their own audio files" ON storage.objects
+CREATE POLICY "Users can view their audio files" ON storage.objects
 FOR SELECT USING (
   bucket_id = 'call-audio' 
-  AND auth.uid()::text = (storage.foldername(name))[1]
+  AND auth.role() = 'authenticated'
+);
+
+-- Policy for users to delete their own audio files
+CREATE POLICY "Users can delete their audio files" ON storage.objects
+FOR DELETE USING (
+  bucket_id = 'call-audio' 
+  AND auth.role() = 'authenticated'
 );
 
 -- Policy for public access to audio files (for playback)
