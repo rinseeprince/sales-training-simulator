@@ -2,143 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { openai, errorResponse, successResponse, validateEnvVars, validateStreamingEnvVars, corsHeaders, handleCors } from '@/lib/api-utils';
 import { compileProspectPrompt, serializeHistory, validateProspectReply } from '@/lib/prompt-compiler';
 import { AI_CONFIG, LEGACY_MODE } from '@/lib/ai-config';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { generateGoogleTTSAudio } from '@/lib/google-tts';
 
-// Initialize ElevenLabs client dynamically
-let elevenlabs: any = null;
+// Google TTS client is now handled by the imported generateGoogleTTSAudio function
 
-async function getElevenLabsClient() {
-  try {
-    if (!elevenlabs) {
-      console.log('Initializing ElevenLabs client...');
-      const { default: ElevenLabs } = await import('elevenlabs-node');
-      const apiKey = process.env.ELEVENLABS_API_KEY;
-      if (!apiKey) {
-        throw new Error('ELEVENLABS_API_KEY is not configured');
-      }
-      console.log('Creating ElevenLabs client with API key:', apiKey.substring(0, 10) + '...');
-      elevenlabs = new (ElevenLabs as any)({
-        apiKey: apiKey,
-        voiceId: '21m00Tcm4TlvDq8ikWAM' // Default voice ID
-      });
-    }
-    return elevenlabs;
-  } catch (error) {
-    console.error('Failed to initialize ElevenLabs client:', error);
-    throw error;
-  }
-}
+// File handling is no longer needed with Google TTS (returns base64 directly)
 
-// Helper function to generate unique temporary file paths
-function getTempFilePath(prefix: string, extension: string = 'mp3'): string {
-  const tempDir = os.tmpdir();
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 15);
-  return path.join(tempDir, `${prefix}_${timestamp}_${random}.${extension}`);
-}
-
-// Helper function to safely read and delete audio file
-async function readAndDeleteAudioFile(filePath: string): Promise<Buffer | null> {
-  try {
-    if (!fs.existsSync(filePath)) {
-      console.warn(`Audio file not found: ${filePath}`);
-      return null;
-    }
-    
-    const audioBuffer = fs.readFileSync(filePath);
-    console.log(`Audio file read successfully: ${filePath}, size: ${audioBuffer.length} bytes`);
-    
-    // Clean up the file
-    try {
-      fs.unlinkSync(filePath);
-      console.log(`Audio file cleaned up: ${filePath}`);
-    } catch (cleanupError) {
-      console.warn(`Failed to cleanup audio file ${filePath}:`, cleanupError);
-    }
-    
-    return audioBuffer;
-  } catch (error) {
-    console.error(`Error reading audio file ${filePath}:`, error);
-    return null;
-  }
-}
-
-// Helper function to generate ElevenLabs audio with proper error handling
-async function generateElevenLabsAudio(
-  text: string, 
-  voiceSettings: any, 
-  chunkId?: number
-): Promise<{ success: boolean; audioBase64?: string; error?: string; fallbackReason?: string }> {
-  try {
-    console.log(`Generating ElevenLabs audio for chunk ${chunkId || 'full'}, text: "${text.substring(0, 50)}..."`);
-    
-    const elevenlabsClient = await getElevenLabsClient();
-    const voiceId = voiceSettings.voiceId || process.env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
-    
-    // Generate unique temporary file path
-    const tempFilePath = getTempFilePath(`audio_${chunkId || 'full'}`);
-    console.log('Using temporary file path:', tempFilePath);
-    
-    const audioResult = await elevenlabsClient.textToSpeech({
-      fileName: tempFilePath,
-      textInput: text,
-      voiceId: voiceId,
-      model_id: 'eleven_turbo_v2',
-      stability: voiceSettings.stability || 0.5,
-      similarityBoost: voiceSettings.similarityBoost || 0.5,
-      style: voiceSettings.style || 0.0,
-      useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
-    });
-
-    console.log('ElevenLabs API response:', audioResult);
-
-    // Check if audioResult exists and has valid status
-    if (!audioResult) {
-      throw new Error('ElevenLabs returned empty response');
-    }
-    
-    if (audioResult.status && audioResult.status !== 'ok') {
-      throw new Error(`ElevenLabs returned status: ${audioResult.status}`);
-    }
-    
-    // Read the generated audio file
-    const audioBuffer = await readAndDeleteAudioFile(tempFilePath);
-    
-    if (!audioBuffer) {
-      throw new Error('Failed to read generated audio file');
-    }
-
-    // Convert audio buffer to base64
-    const audioBase64 = audioBuffer.toString('base64');
-    console.log(`Audio generated successfully, base64 length: ${audioBase64.length}`);
-    
-    return { success: true, audioBase64 };
-    
-  } catch (error) {
-    console.error('ElevenLabs audio generation failed:', error);
-    
-    // Determine if it's a credits/quota error
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isCreditsError = errorMessage.toLowerCase().includes('credits') || 
-                         errorMessage.toLowerCase().includes('quota') || 
-                         errorMessage.toLowerCase().includes('limit') ||
-                         errorMessage.toLowerCase().includes('insufficient') ||
-                         errorMessage.toLowerCase().includes('payment') ||
-                         errorMessage.toLowerCase().includes('subscription') ||
-                         errorMessage.toLowerCase().includes('unauthorized') ||
-                         errorMessage.includes('401') ||
-                         errorMessage.includes('402') ||
-                         errorMessage.includes('403');
-    
-    return { 
-      success: false, 
-      error: errorMessage,
-      fallbackReason: isCreditsError ? 'credits_exhausted' : 'api_error'
-    };
-  }
-}
+// Google TTS audio generation is now handled by the imported generateGoogleTTSAudio function
 
 // Helper functions for behavioral modifiers
 function getDifficultyModifier(difficulty: number): string {
@@ -242,8 +112,8 @@ async function legacyStreamingHandler(req: NextRequest) {
             throw new Error('OpenAI API key is not configured');
           }
           
-          if (!process.env.ELEVENLABS_API_KEY) {
-            throw new Error('ElevenLabs API key is not configured');
+          if (!process.env.GOOGLE_TTS_CLIENT_EMAIL) {
+            throw new Error('Google TTS API key is not configured');
           }
 
           // Convert conversation history roles to OpenAI format and limit to last 4 exchanges
@@ -348,17 +218,16 @@ You are the prospect receiving this sales call. Respond naturally as the charact
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunkData)}\n\n`));
 
                 // Generate audio for this chunk if voice settings are provided
-                // Always try to generate audio, but fallback to speech synthesis if ElevenLabs fails
+                // Always try to generate audio, but fallback to speech synthesis if Google TTS fails
                 if (voiceSettings) {
                   try {
-                    const audioResult = await generateElevenLabsAudio(
+                    const audioResult = await generateGoogleTTSAudio(
                       currentSentence.trim(), 
-                      voiceSettings, 
-                      sentenceCount
+                      voiceSettings
                     );
                     
                     if (audioResult.success && audioResult.audioBase64) {
-                      // ElevenLabs audio generated successfully
+                      // Google TTS audio generated successfully
                       // Chunk the base64 audio data to avoid SSE message size limits
                       const base64Data = audioResult.audioBase64;
                       const chunkSize = 16384; // 16KB chunks
@@ -379,8 +248,8 @@ You are the prospect receiving this sales call. Respond naturally as the charact
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
                       }
                     } else {
-                      // ElevenLabs failed, use speech synthesis fallback
-                      console.log(`ElevenLabs failed for chunk ${sentenceCount}, using speech synthesis fallback:`, audioResult.fallbackReason);
+                      // Google TTS failed, use speech synthesis fallback
+                      console.log(`Google TTS failed for chunk ${sentenceCount}, using speech synthesis fallback:`, audioResult.fallbackReason);
                       
                       const fallbackAudioData = {
                         type: 'audio_chunk',
@@ -449,14 +318,13 @@ You are the prospect receiving this sales call. Respond naturally as the charact
             // Generate audio for final chunk
             if (voiceSettings) {
               try {
-                const audioResult = await generateElevenLabsAudio(
+                const audioResult = await generateGoogleTTSAudio(
                   currentSentence.trim(), 
-                  voiceSettings, 
-                  sentenceCount
+                  voiceSettings
                 );
                 
                 if (audioResult.success && audioResult.audioBase64) {
-                  // ElevenLabs audio generated successfully
+                  // Google TTS audio generated successfully
                   // Chunk the base64 audio data to avoid SSE message size limits
                   const base64Data = audioResult.audioBase64;
                   const chunkSize = 16384; // 16KB chunks
@@ -477,8 +345,8 @@ You are the prospect receiving this sales call. Respond naturally as the charact
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
                   }
                 } else {
-                  // ElevenLabs failed, use speech synthesis fallback
-                  console.log(`ElevenLabs failed for final chunk ${sentenceCount}, using speech synthesis fallback:`, audioResult.fallbackReason);
+                  // Google TTS failed, use speech synthesis fallback
+                  console.log(`Google TTS failed for final chunk ${sentenceCount}, using speech synthesis fallback:`, audioResult.fallbackReason);
                   
                   const fallbackAudioData = {
                     type: 'audio_chunk',
@@ -656,10 +524,10 @@ Remember: You are this specific person in this specific situation. Be human, be 
             throw new Error('OpenAI API key is not configured');
           }
           
-          // Check if ElevenLabs is available (but don't fail if not)
-          const hasElevenLabs = !!process.env.ELEVENLABS_API_KEY;
-          if (!hasElevenLabs) {
-            console.log('ElevenLabs API key not configured, will use speech synthesis fallback');
+          // Check if Google TTS is available (but don't fail if not)
+          const hasGoogleTTS = !!(process.env.GOOGLE_TTS_CLIENT_EMAIL && process.env.GOOGLE_TTS_PRIVATE_KEY);
+          if (!hasGoogleTTS) {
+            console.log('Google TTS not configured, will use speech synthesis fallback');
           }
 
           // Generate GPT response
@@ -696,15 +564,15 @@ Remember: You are this specific person in this specific situation. Be human, be 
           console.log('Full AI response generated, length:', fullResponse.length);
 
           // Generate voice response with fallback to speech synthesis
-          if (hasElevenLabs) {
+          if (hasGoogleTTS) {
             try {
               const settings = voiceSettings || {};
-              console.log('Attempting ElevenLabs voice generation...');
+              console.log('Attempting Google TTS voice generation...');
               
-              const audioResult = await generateElevenLabsAudio(fullResponse, settings);
+              const audioResult = await generateGoogleTTSAudio(fullResponse, settings);
               
               if (audioResult.success && audioResult.audioBase64) {
-                // ElevenLabs audio generated successfully
+                // Google TTS audio generated successfully
                 // Chunk the base64 audio data to avoid SSE message size limits
                 const base64Data = audioResult.audioBase64;
                 const chunkSize = 16384; // 16KB chunks
@@ -723,32 +591,32 @@ Remember: You are this specific person in this specific situation. Be human, be 
                   controller.enqueue(encoder.encode(`data: ${audioData}\n\n`));
                 }
               } else {
-                // ElevenLabs failed, use speech synthesis fallback
-                console.log(`ElevenLabs failed, using speech synthesis fallback:`, audioResult.fallbackReason);
+                // Google TTS failed, use speech synthesis fallback
+                console.log(`Google TTS failed, using speech synthesis fallback:`, audioResult.fallbackReason);
                 
                 const fallbackData = JSON.stringify({ 
                   type: 'speech_synthesis_fallback', 
                   text: fullResponse,
                   reason: audioResult.fallbackReason,
-                  message: 'Using browser speech synthesis due to ElevenLabs unavailability'
+                                              message: 'Using browser speech synthesis due to Google TTS unavailability'
                 });
                 controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
               }
                           } catch (voiceError) {
-                console.error('ElevenLabs voice generation error:', voiceError);
+                console.error('Google TTS voice generation error:', voiceError);
                 
                 // Send speech synthesis fallback signal
                 const fallbackData = JSON.stringify({ 
                   type: 'speech_synthesis_fallback', 
                   text: fullResponse,
                   reason: 'api_error',
-                  message: 'Using browser speech synthesis due to ElevenLabs unavailability'
+                                              message: 'Using browser speech synthesis due to Google TTS unavailability'
                 });
                 controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
               }
           } else {
-            // No ElevenLabs API key, use speech synthesis directly
-            console.log('Using speech synthesis (no ElevenLabs API key)');
+            // No Google TTS API key, use speech synthesis directly
+            console.log('Using speech synthesis (no Google TTS API key)');
             const fallbackData = JSON.stringify({ 
               type: 'speech_synthesis_fallback', 
               text: fullResponse,

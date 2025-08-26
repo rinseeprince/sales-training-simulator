@@ -233,9 +233,12 @@ export interface APIError {
 // Environment Variables
 export interface EnvironmentVariables {
   OPENAI_API_KEY: string;
-  ELEVENLABS_API_KEY?: string;
+  ELEVENLABS_API_KEY?: string; // Legacy - will be deprecated
+  GOOGLE_TTS_PROJECT_ID?: string;
+  GOOGLE_TTS_CLIENT_EMAIL?: string;
+  GOOGLE_TTS_PRIVATE_KEY?: string;
   NEXT_PUBLIC_SUPABASE_URL: string;
   NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
-  DEFAULT_VOICE_ID?: string;
+  DEFAULT_VOICE_ID?: string; // Legacy - will be deprecated
 } 

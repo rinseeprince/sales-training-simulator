@@ -1,29 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai, errorResponse, validateStreamingEnvVars, corsHeaders, handleCors } from '@/lib/api-utils';
+import { generateGoogleTTSAudio } from '@/lib/google-tts';
 
-// Initialize ElevenLabs client dynamically
-let elevenlabs: any = null;
-
-async function getElevenLabsClient() {
-  try {
-    if (!elevenlabs) {
-      console.log('Initializing ElevenLabs client...');
-      const { default: ElevenLabs } = await import('elevenlabs-node');
-      const apiKey = process.env.ELEVENLABS_API_KEY;
-      if (!apiKey) {
-        throw new Error('ELEVENLABS_API_KEY is not configured');
-      }
-      elevenlabs = new (ElevenLabs as any)({
-        apiKey: apiKey,
-        voiceId: '21m00Tcm4TlvDq8ikWAM' // Default voice ID
-      });
-    }
-    return elevenlabs;
-  } catch (error) {
-    console.error('Failed to initialize ElevenLabs client:', error);
-    throw error;
-  }
-}
+// Google TTS is now handled by the imported generateGoogleTTSAudio function
 
 // Helper functions for behavioral modifiers
 function getDifficultyModifier(difficulty: number): string {
@@ -195,55 +174,27 @@ IMPORTANT: You are the PROSPECT/CUSTOMER in this sales conversation, not the sal
                 // Generate audio for this chunk if voice settings are provided
                 if (voiceSettings) {
                   try {
-                    console.log('Generating voice for chunk:', sentenceCount, 'Text:', currentSentence.trim());
+                    console.log('Generating Google TTS voice for chunk:', sentenceCount, 'Text:', currentSentence.trim());
                     
-                    const voiceId = voiceSettings.voiceId || process.env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+                    const textToSpeech = currentSentence.trim();
+                    const result = await generateGoogleTTSAudio(textToSpeech, voiceSettings);
                     
-                    // Only try ElevenLabs if API key is available
-                    if (process.env.ELEVENLABS_API_KEY) {
-                      const elevenlabsClient = await getElevenLabsClient();
-                      
-                      const textToSpeech = currentSentence.trim();
-                      
-                      const audioResult = await elevenlabsClient.textToSpeech({
-                        fileName: `chunk_${sentenceCount}.mp3`,
-                        textInput: textToSpeech,
-                        voiceId: voiceId,
-                        stability: voiceSettings.stability || 0.5,
-                        similarityBoost: voiceSettings.similarityBoost || 0.5,
-                        style: voiceSettings.style || 0.0,
-                        useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
-                      });
+                    if (result.success && result.audioBase64) {
+                      const audioData = {
+                        type: 'audio_chunk',
+                        audioUrl: `data:audio/mpeg;base64,${result.audioBase64}`,
+                        chunkId: sentenceCount,
+                        text: textToSpeech,
+                        isComplete: true
+                      };
 
-                      if (audioResult.status === 'ok') {
-                        // Read the generated audio file
-                        const fs = require('fs');
-                        const audioBuffer = fs.readFileSync(`chunk_${sentenceCount}.mp3`);
-                        
-                        // Convert audio buffer to base64
-                        const audioBase64 = audioBuffer.toString('base64');
-                        
-                        const audioData = {
-                          type: 'audio_chunk',
-                          audioUrl: `data:audio/mpeg;base64,${audioBase64}`,
-                          chunkId: sentenceCount,
-                          text: currentSentence.trim()
-                        };
-
-                        controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
-                        
-                        // Clean up the temporary file
-                        try {
-                          fs.unlinkSync(`chunk_${sentenceCount}.mp3`);
-                        } catch (cleanupError) {
-                          console.warn('Failed to cleanup audio file:', cleanupError);
-                        }
-                      }
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
+                      console.log('Google TTS audio chunk generated successfully for chunk:', sentenceCount);
                     } else {
-                      throw new Error('No ElevenLabs API key configured');
+                      throw new Error(result.error || 'Google TTS generation failed');
                     }
                   } catch (voiceError) {
-                    console.error('Voice generation failed for chunk:', sentenceCount, voiceError);
+                    console.error('Google TTS voice generation failed for chunk:', sentenceCount, voiceError);
                     
                     // Send fallback audio chunk with speech synthesis flag
                     const fallbackAudioData = {
@@ -252,7 +203,7 @@ IMPORTANT: You are the PROSPECT/CUSTOMER in this sales conversation, not the sal
                       chunkId: sentenceCount,
                       text: currentSentence.trim(),
                       useSpeechSynthesis: true, // Explicitly flag for speech synthesis
-                      fallbackReason: 'api_error'
+                      fallbackReason: 'google_tts_error'
                     };
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackAudioData)}\n\n`));
                   }
@@ -279,44 +230,26 @@ IMPORTANT: You are the PROSPECT/CUSTOMER in this sales conversation, not the sal
             // Generate audio for final chunk
             if (voiceSettings) {
               try {
-                const voiceId = voiceSettings.voiceId || process.env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+                console.log('Generating Google TTS voice for final chunk:', sentenceCount, 'Text:', currentSentence.trim());
                 
-                if (process.env.ELEVENLABS_API_KEY) {
-                  const elevenlabsClient = await getElevenLabsClient();
-                  
-                  const audioResult = await elevenlabsClient.textToSpeech({
-                    fileName: `final_chunk_${sentenceCount}.mp3`,
-                    textInput: currentSentence.trim(),
-                    voiceId: voiceId,
-                    stability: voiceSettings.stability || 0.5,
-                    similarityBoost: voiceSettings.similarityBoost || 0.5,
-                    style: voiceSettings.style || 0.0,
-                    useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
-                  });
+                const result = await generateGoogleTTSAudio(currentSentence.trim(), voiceSettings);
+                
+                if (result.success && result.audioBase64) {
+                  const audioData = {
+                    type: 'audio_chunk',
+                    audioUrl: `data:audio/mpeg;base64,${result.audioBase64}`,
+                    chunkId: sentenceCount,
+                    text: currentSentence.trim(),
+                    isComplete: true
+                  };
 
-                  if (audioResult.status === 'ok') {
-                    const fs = require('fs');
-                    const audioBuffer = fs.readFileSync(`final_chunk_${sentenceCount}.mp3`);
-                    
-                    const audioBase64 = audioBuffer.toString('base64');
-                    const audioData = {
-                      type: 'audio_chunk',
-                      audioUrl: `data:audio/mpeg;base64,${audioBase64}`,
-                      chunkId: sentenceCount,
-                      text: currentSentence.trim()
-                    };
-
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
-                    
-                    try {
-                      fs.unlinkSync(`final_chunk_${sentenceCount}.mp3`);
-                    } catch (cleanupError) {
-                      console.warn('Failed to cleanup final audio file:', cleanupError);
-                    }
-                  }
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(audioData)}\n\n`));
+                  console.log('Google TTS final audio chunk generated successfully for chunk:', sentenceCount);
+                } else {
+                  throw new Error(result.error || 'Google TTS final chunk generation failed');
                 }
               } catch (voiceError) {
-                console.error('Voice generation failed for final chunk:', voiceError);
+                console.error('Google TTS voice generation failed for final chunk:', voiceError);
                 
                 const fallbackAudioData = {
                   type: 'audio_chunk',
@@ -324,7 +257,7 @@ IMPORTANT: You are the PROSPECT/CUSTOMER in this sales conversation, not the sal
                   chunkId: sentenceCount,
                   text: currentSentence.trim(),
                   useSpeechSynthesis: true,
-                  fallbackReason: 'api_error'
+                  fallbackReason: 'google_tts_error'
                 };
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(fallbackAudioData)}\n\n`));
               }

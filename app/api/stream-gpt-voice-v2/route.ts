@@ -4,30 +4,9 @@ import { AIProspectEngine } from '@/lib/ai-engine/core/prospect-engine';
 import { BusinessModelParser } from '@/lib/ai-engine/core/business-model-parser';
 import { ConversationManager } from '@/lib/ai-engine/core/conversation-manager';
 import { PersonaLevel, CallType, DifficultyLevel } from '@/lib/ai-engine/types/prospect-types';
+import { generateGoogleTTSAudio } from '@/lib/google-tts';
 
-// Initialize ElevenLabs client dynamically
-let elevenlabs: any = null;
-
-async function getElevenLabsClient() {
-  try {
-    if (!elevenlabs) {
-      console.log('Initializing ElevenLabs client...');
-      const { default: ElevenLabs } = await import('elevenlabs-node');
-      const apiKey = process.env.ELEVENLABS_API_KEY;
-      if (!apiKey) {
-        throw new Error('ELEVENLABS_API_KEY is not configured');
-      }
-      elevenlabs = new (ElevenLabs as any)({
-        apiKey: apiKey,
-        voiceId: '21m00Tcm4TlvDq8ikWAM' // Default voice ID
-      });
-    }
-    return elevenlabs;
-  } catch (error) {
-    console.error('ElevenLabs initialization error:', error);
-    throw error;
-  }
-}
+// Google TTS is now handled by the imported generateGoogleTTSAudio function
 
 // Store conversation sessions
 const conversationSessions = new Map<string, {

@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai, errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors } from '@/lib/api-utils';
-import ElevenLabs from 'elevenlabs-node';
-
-// Initialize ElevenLabs client dynamically
-let elevenlabs: any = null;
-
-async function getElevenLabsClient() {
-  if (!elevenlabs) {
-    const { default: ElevenLabs } = await import('elevenlabs-node');
-    elevenlabs = new ElevenLabs(process.env.ELEVENLABS_API_KEY || '');
-  }
-  return elevenlabs;
-}
+import { generateGoogleTTSAudio } from '@/lib/google-tts';
 
 export async function POST(req: NextRequest) {
   try {
@@ -67,25 +56,18 @@ export async function POST(req: NextRequest) {
     let audioUrl = null;
 
     // Generate voice response if voice settings are provided
-    if (voiceSettings && process.env.ELEVENLABS_API_KEY) {
+    if (voiceSettings && process.env.GOOGLE_TTS_CLIENT_EMAIL) {
       try {
-        const voiceId = voiceSettings.voiceId || process.env.DEFAULT_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
-        const elevenlabsClient = await getElevenLabsClient();
+        console.log('Generating Google TTS audio for start simulation...');
+        const result = await generateGoogleTTSAudio(aiResponse, voiceSettings);
         
-        const audio = await elevenlabsClient.textToSpeech({
-          text: aiResponse,
-          voiceId: voiceId,
-          model_id: 'eleven_turbo_v2',
-          stability: voiceSettings.stability || 0.5,
-          similarityBoost: voiceSettings.similarityBoost || 0.5,
-          style: voiceSettings.style || 0.0,
-          useSpeakerBoost: voiceSettings.useSpeakerBoost || true,
-        });
-
-        // Convert audio buffer to base64 or store in cloud storage
-        // For now, we'll return the audio as base64
-        const audioBase64 = Buffer.from(audio).toString('base64');
-        audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
+        if (result.success && result.audioBase64) {
+          audioUrl = `data:audio/mpeg;base64,${result.audioBase64}`;
+          console.log('Voice generation successful for start simulation');
+        } else {
+          console.error('Google TTS generation failed:', result.error);
+          // Continue without voice if it fails
+        }
       } catch (voiceError) {
         console.error('Voice generation failed:', voiceError);
         // Continue without voice if it fails
