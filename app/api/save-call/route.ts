@@ -44,11 +44,12 @@ export async function POST(req: NextRequest) {
 
     // Use simplified AI-only scoring
     let score = 0;
-    let feedback = [];
+    let feedback: string[] = [];
     let talkRatio = 0;
     let objectionsHandled = 0;
     let ctaUsed = false;
     let sentiment = 'neutral';
+    let enhancedScoring: any = null;
 
     try {
       console.log('Starting scenario-aware AI scoring...');
@@ -79,9 +80,9 @@ export async function POST(req: NextRequest) {
       // Get scenario context from localStorage or use fallback
       const scenarioContext = scenarioPrompt || `Scenario: ${scenarioName}`;
       
-      // Scenario-aware AI evaluation
+      // Intelligent AI evaluation - ChatGPT style
       const evaluationPrompt = `
-You are a sales coach analyzing this call. The original scenario context was:
+You are an experienced sales coach evaluating a practice call. Analyze this performance naturally, focusing on what matters most for this specific scenario.
 
 SCENARIO CONTEXT: "${scenarioContext}"
 SCENARIO NAME: "${scenarioName}"
@@ -89,49 +90,50 @@ SCENARIO NAME: "${scenarioName}"
 ACTUAL CALL TRANSCRIPT:
 ${transcriptText}
 
-Score this call based on how well the rep performed RELATIVE TO THE SCENARIO CONTEXT above.
+Evaluate this call as if you were giving feedback to the rep in person. Consider:
+- What was this scenario designed to practice?
+- What would success look like in this specific situation?
+- How well did the rep perform against those objectives?
+- What specific moments stood out (both positive and areas for improvement)?
 
-Analyze the call and respond with ONLY valid JSON in this exact format:
+Respond with ONLY valid JSON in this exact format:
 
 {
-  "overallScore": 75,
-  "scenarioAlignment": 85,
+  "overallScore": 82,
+  "strengths": [
+    "Built excellent rapport with personal connection about their industry challenges",
+    "Handled the budget objection confidently using the feel-felt-found framework",
+    "Asked insightful discovery questions that uncovered real pain points"
+  ],
+  "areasForImprovement": [
+    "Could have created more urgency around the implementation timeline",
+    "Missed opportunity to quantify the ROI when discussing pricing",
+    "The close was somewhat weak - didn't clearly ask for commitment"
+  ],
+  "keyMoments": [
+    {
+      "moment": "When prospect said 'we don't have budget this quarter'",
+      "feedback": "Good acknowledgment, but could have explored if there's budget next quarter"
+    },
+    {
+      "moment": "During the discovery phase",
+      "feedback": "Excellent use of open-ended questions to understand their workflow"
+    }
+  ],
+  "coachingTips": [
+    "Practice creating urgency without being pushy - try the 'cost of inaction' approach",
+    "Work on quantifying value in terms the prospect cares about (time saved, revenue gained)",
+    "Strengthen your closing by using assumptive language: 'When we get started...' instead of 'If you decide...'"
+  ],
+  "scenarioFit": 85,
+  "readyForRealCustomers": true,
   "talkRatio": 65,
-  "objectionsRaised": 2,
-  "objectionsHandled": 1,
+  "objectionsHandled": 2,
   "ctaUsed": true,
-  "sentiment": "friendly",
-  "categoryScores": {
-    "opening": 15,
-    "discovery": 18,
-    "objectionHandling": 10,
-    "valueDemo": 16,
-    "closing": 12
-  },
-  "feedback": [
-    "Strong opening that established rapport quickly",
-    "Excellent discovery questions about business challenges", 
-    "Missed opportunity to address budget concerns",
-    "Clear next steps established with specific timeline"
-  ]
+  "sentiment": "positive"
 }
 
-SCORING CONSIDERATIONS:
-- Was the approach appropriate for the scenario described?
-- Did they adapt their style to match the context?
-- Were expectations realistic for this type of interaction?
-- Did they achieve the scenario objectives?
-- Overall Score (0-100): Consider all aspects of performance
-- Scenario Alignment (0-100): How well they matched the scenario context
-- Talk Ratio (0-100): Percentage rep spoke (evaluate if appropriate for this scenario)
-- Objections Raised: Count of objections that were actually brought up (0 if none)
-- Objections Handled: Count of objections that were properly addressed
-- CTA Used: true if clear next steps were established, false otherwise
-- Sentiment: "friendly", "neutral", or "tense" based on conversation tone
-- Category Scores: Rate each area out of 20 points based on scenario expectations
-- Feedback: 3-4 specific, actionable observations referencing the scenario
-
-IMPORTANT: Return ONLY the JSON object. No other text.`;
+Be specific, constructive, and focus on what actually matters for THIS scenario. Provide actionable feedback that will help them improve.`;
 
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
@@ -186,20 +188,16 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
         
         evaluation = {
           overallScore: 50,
-          scenarioAlignment: 50,
+          strengths: ['Call completed successfully'],
+          areasForImprovement: ['Unable to generate detailed analysis'],
+          keyMoments: [],
+          coachingTips: ['Please retry for detailed feedback'],
+          scenarioFit: 50,
+          readyForRealCustomers: false,
           talkRatio: Math.round(calculatedTalkRatio),
-          objectionsRaised: 0,
           objectionsHandled: 0,
           ctaUsed: false,
-          sentiment: 'neutral',
-          categoryScores: {
-            opening: 10,
-            discovery: 12,
-            objectionHandling: 0,
-            valueDemo: 10,
-            closing: 8
-          },
-          feedback: ['Call completed successfully', 'Unable to generate detailed feedback due to analysis error']
+          sentiment: 'neutral'
         };
       }
       
@@ -209,18 +207,34 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
       objectionsHandled = evaluation.objectionsHandled || 0;
       ctaUsed = evaluation.ctaUsed || false;
       sentiment = evaluation.sentiment || 'neutral';
-      feedback = evaluation.feedback || ['Call analysis completed'];
       
-      console.log('Scenario-aware AI scoring completed:', {
+      // Convert new format to feedback array for backwards compatibility
+      feedback = [
+        ...evaluation.strengths || [],
+        ...evaluation.areasForImprovement || []
+      ];
+      
+      // Store enhanced scoring data for frontend
+      const enhancedScoring = {
+        overallScore: evaluation.overallScore || 50,
+        strengths: evaluation.strengths || [],
+        areasForImprovement: evaluation.areasForImprovement || [],
+        keyMoments: evaluation.keyMoments || [],
+        coachingTips: evaluation.coachingTips || [],
+        scenarioFit: evaluation.scenarioFit || 50,
+        readyForRealCustomers: evaluation.readyForRealCustomers || false
+      };
+      
+      console.log('Intelligent AI scoring completed:', {
         score,
-        scenarioAlignment: evaluation.scenarioAlignment,
+        scenarioFit: evaluation.scenarioFit,
         talkRatio,
-        objectionsRaised: evaluation.objectionsRaised,
         objectionsHandled,
         ctaUsed,
         sentiment,
-        feedbackCount: feedback.length,
-        categoryScores: evaluation.categoryScores
+        strengthsCount: evaluation.strengths?.length || 0,
+        improvementsCount: evaluation.areasForImprovement?.length || 0,
+        keyMomentsCount: evaluation.keyMoments?.length || 0
       });
       
     } catch (scoringError) {
@@ -236,6 +250,17 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
         ctaUsed = false;
         sentiment = 'neutral';
         feedback = ['Call completed successfully', 'Detailed analysis unavailable'];
+        
+        // Default enhanced scoring for fallback
+        enhancedScoring = {
+          overallScore: score,
+          strengths: ['Call completed successfully'],
+          areasForImprovement: ['Detailed analysis unavailable'],
+          keyMoments: [],
+          coachingTips: ['Please retry for detailed feedback'],
+          scenarioFit: 50,
+          readyForRealCustomers: false
+        };
         
         console.log('Using fallback scoring values:', {
           score,
@@ -303,7 +328,9 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
       objections_handled: objectionsHandled,
       cta_used: ctaUsed,
       sentiment,
-      success: true
+      success: true,
+      // Include enhanced scoring data for frontend
+      enhancedScoring: enhancedScoring
     }, 200, corsHeaders);
 
   } catch (error) {

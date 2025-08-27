@@ -270,7 +270,8 @@ export function PostCallReview() {
     talk_ratio: typeof displayData?.talk_ratio === 'number' ? displayData.talk_ratio : 50,
     objections_handled: typeof displayData?.objections_handled === 'number' ? displayData.objections_handled : 0,
     cta_used: typeof displayData?.cta_used === 'boolean' ? displayData.cta_used : false,
-    duration: typeof displayData?.duration === 'number' ? displayData.duration : 0
+    duration: typeof displayData?.duration === 'number' ? displayData.duration : 0,
+    enhancedScoring: displayData?.enhancedScoring || null
   }
 
   // Load coaching feedback when we have a transcript
@@ -506,8 +507,10 @@ export function PostCallReview() {
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{coachingFeedback?.overallScore || safeDisplayData.score}/100</div>
-            <Progress value={coachingFeedback?.overallScore || safeDisplayData.score} className="mt-2" />
+            <div className="text-2xl font-bold text-green-600">
+              {safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score}/100
+            </div>
+            <Progress value={safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score} className="mt-2" />
           </CardContent>
         </Card>
 
@@ -631,13 +634,81 @@ export function PostCallReview() {
             <CardHeader>
               <CardTitle>AI-Generated Coaching Feedback</CardTitle>
               <CardDescription>
-                Detailed performance analysis with category-based scoring
+                Detailed performance analysis tailored to your scenario
               </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingCoaching ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : safeDisplayData.enhancedScoring ? (
+                <div className="space-y-6">
+                  {/* Enhanced Scoring Display */}
+                  <Tabs defaultValue="strengths" className="w-full">
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="strengths">Strengths</TabsTrigger>
+                      <TabsTrigger value="improvements">Areas to Improve</TabsTrigger>
+                      <TabsTrigger value="moments">Key Moments</TabsTrigger>
+                      <TabsTrigger value="tips">Coaching Tips</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="strengths" className="space-y-3 mt-4">
+                      {safeDisplayData.enhancedScoring.strengths?.map((strength: string, index: number) => (
+                        <div key={index} className="flex items-start space-x-3">
+                          <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm">{strength}</p>
+                        </div>
+                      )) || <p className="text-sm text-muted-foreground">No strengths identified</p>}
+                    </TabsContent>
+                    
+                    <TabsContent value="improvements" className="space-y-3 mt-4">
+                      {safeDisplayData.enhancedScoring.areasForImprovement?.map((improvement: string, index: number) => (
+                        <div key={index} className="flex items-start space-x-3">
+                          <TrendingUp className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm">{improvement}</p>
+                        </div>
+                      )) || <p className="text-sm text-muted-foreground">No improvements identified</p>}
+                    </TabsContent>
+                    
+                    <TabsContent value="moments" className="space-y-3 mt-4">
+                      {safeDisplayData.enhancedScoring.keyMoments?.map((moment: any, index: number) => (
+                        <div key={index} className="space-y-2 p-3 bg-accent/50 rounded-lg">
+                          <p className="text-sm font-medium">{moment.moment}</p>
+                          <p className="text-sm text-muted-foreground">{moment.feedback}</p>
+                        </div>
+                      )) || <p className="text-sm text-muted-foreground">No key moments identified</p>}
+                    </TabsContent>
+                    
+                    <TabsContent value="tips" className="space-y-3 mt-4">
+                      {safeDisplayData.enhancedScoring.coachingTips?.map((tip: string, index: number) => (
+                        <div key={index} className="flex items-start space-x-3">
+                          <CheckCircle className="h-5 w-5 text-teal-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm">{tip}</p>
+                        </div>
+                      )) || <p className="text-sm text-muted-foreground">No coaching tips available</p>}
+                    </TabsContent>
+                  </Tabs>
+
+                  {/* Scenario Fit Score */}
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Scenario Fit Score</span>
+                      <span className="text-sm font-bold">{safeDisplayData.enhancedScoring.scenarioFit || 0}%</span>
+                    </div>
+                    <Progress value={safeDisplayData.enhancedScoring.scenarioFit || 0} className="mb-2" />
+                    <p className="text-xs text-muted-foreground">
+                      How well you performed for this specific scenario
+                    </p>
+                  </div>
+
+                  {/* Ready for Real Customers */}
+                  <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                    <span className="text-sm font-medium">Ready for Similar Real Situations?</span>
+                    <Badge variant={safeDisplayData.enhancedScoring.readyForRealCustomers ? "default" : "secondary"}>
+                      {safeDisplayData.enhancedScoring.readyForRealCustomers ? "Yes" : "Not Yet"}
+                    </Badge>
+                  </div>
                 </div>
               ) : coachingFeedback ? (
                 <div className="space-y-6">

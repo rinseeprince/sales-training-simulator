@@ -357,7 +357,7 @@ export function Simulations() {
                       </div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Objections</div>
+                      <div className="text-muted-foreground">Areas for Improvement</div>
                       <div className="font-medium">
                         {simulation.objections_handled || 0}
                       </div>

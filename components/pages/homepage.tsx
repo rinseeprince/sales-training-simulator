@@ -11,6 +11,7 @@ import { Mic, Plus, BarChart3, ChevronDown, Settings, DollarSign, Shield, User, 
 export function Homepage() {
   const router = useRouter()
   const [isSignUpOpen, setIsSignUpOpen] = useState(false)
+  const [isAdminSignUpOpen, setIsAdminSignUpOpen] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -18,6 +19,10 @@ export function Homepage() {
     if (prompt.trim()) {
       setIsSignUpOpen(true)
     }
+  }
+
+  const handleAdminPanelClick = () => {
+    setIsAdminSignUpOpen(true)
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -81,7 +86,7 @@ export function Homepage() {
             variant="ghost" 
             size="sm" 
             className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2'} text-muted-foreground hover:text-foreground hover:bg-muted`}
-            onClick={() => router.push('/admin')}
+            onClick={handleAdminPanelClick}
           >
             <User className="w-4 h-4" />
             {sidebarOpen && <span className="ml-3">Admin Panel</span>}
@@ -198,6 +203,18 @@ export function Homepage() {
               </Dialog>
             </div>
 
+            {/* Admin Sign-In Modal */}
+            <Dialog open={isAdminSignUpOpen} onOpenChange={setIsAdminSignUpOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Sign In Required</DialogTitle>
+                </DialogHeader>
+                <AuthModal onSuccess={() => {
+                  setIsAdminSignUpOpen(false)
+                  router.push('/admin')
+                }} />
+              </DialogContent>
+            </Dialog>
 
           </div>
         </main>
