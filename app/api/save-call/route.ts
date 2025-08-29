@@ -60,19 +60,27 @@ export async function POST(req: NextRequest) {
           index: i,
           keys: Object.keys(entry || {}),
           speaker: entry?.speaker,
+          role: entry?.role,
           message: entry?.message,
-          text: entry?.text
+          text: entry?.text,
+          content: entry?.content
         }))
       });
       
       // Format transcript for AI analysis
       const transcriptText = transcript
         .map((turn: any) => {
-          const speaker = turn.speaker || 'UNKNOWN';
-          const message = turn.message || turn.text || '';
+          const speaker = turn.speaker || turn.role || 'UNKNOWN';
+          const message = turn.message || turn.text || turn.content || '';
           return `${speaker.toUpperCase()}: ${message}`;
         })
-        .filter((line: string) => line.trim() !== ': ')
+        .filter((line: string) => {
+          const trimmed = line.trim();
+          // Filter out completely empty lines or lines with just speaker and no content
+          return trimmed !== '' && 
+                 trimmed !== ':' && 
+                 !trimmed.match(/^[A-Z]+:\s*$/);
+        })
         .join('\n');
       
       console.log('Formatted transcript for AI analysis');
@@ -90,6 +98,8 @@ SCENARIO NAME: "${scenarioName}"
 ACTUAL CALL TRANSCRIPT:
 ${transcriptText}
 
+IMPORTANT: Analyze ONLY what actually happened in this specific conversation. Do NOT make up or assume anything that didn't occur. If the call is too short or incomplete, be honest about that.
+
 Evaluate this call as if you were giving feedback to the rep in person. Consider:
 - What was this scenario designed to practice?
 - What would success look like in this specific situation?
@@ -99,41 +109,31 @@ Evaluate this call as if you were giving feedback to the rep in person. Consider
 Respond with ONLY valid JSON in this exact format:
 
 {
-  "overallScore": 82,
+  "overallScore": [0-100],
   "strengths": [
-    "Built excellent rapport with personal connection about their industry challenges",
-    "Handled the budget objection confidently using the feel-felt-found framework",
-    "Asked insightful discovery questions that uncovered real pain points"
+    "List only strengths that actually occurred in this conversation"
   ],
   "areasForImprovement": [
-    "Could have created more urgency around the implementation timeline",
-    "Missed opportunity to quantify the ROI when discussing pricing",
-    "The close was somewhat weak - didn't clearly ask for commitment"
+    "List only areas for improvement based on what actually happened"
   ],
   "keyMoments": [
     {
-      "moment": "When prospect said 'we don't have budget this quarter'",
-      "feedback": "Good acknowledgment, but could have explored if there's budget next quarter"
-    },
-    {
-      "moment": "During the discovery phase",
-      "feedback": "Excellent use of open-ended questions to understand their workflow"
+      "moment": "Specific moment from the actual conversation",
+      "feedback": "Feedback about that specific moment"
     }
   ],
   "coachingTips": [
-    "Practice creating urgency without being pushy - try the 'cost of inaction' approach",
-    "Work on quantifying value in terms the prospect cares about (time saved, revenue gained)",
-    "Strengthen your closing by using assumptive language: 'When we get started...' instead of 'If you decide...'"
+    "Actionable tips based on what actually happened in this call"
   ],
-  "scenarioFit": 85,
-  "readyForRealCustomers": true,
-  "talkRatio": 65,
-  "objectionsHandled": 2,
-  "ctaUsed": true,
-  "sentiment": "positive"
+  "scenarioFit": [0-100],
+  "readyForRealCustomers": [true/false],
+  "talkRatio": [0-100],
+  "objectionsHandled": [number],
+  "ctaUsed": [true/false],
+  "sentiment": "[positive/neutral/negative]"
 }
 
-Be specific, constructive, and focus on what actually matters for THIS scenario. Provide actionable feedback that will help them improve.`;
+CRITICAL: Base your analysis ONLY on the actual conversation above. If the call is too short for meaningful analysis, be honest about that and provide appropriate feedback. Do not invent or assume anything that didn't happen. Be specific, constructive, and focus on what actually matters for THIS scenario.`;
 
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
