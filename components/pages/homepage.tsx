@@ -145,7 +145,7 @@ export function Homepage() {
               <h1 className="text-3xl font-semibold text-slate-900">
                 What's on the agenda today?
               </h1>
-              <p className="text-base font-medium text-slate-600">
+              <p className="text-base font-normal text-slate-500">
                 Practice your sales skills with AI-powered roleplays
               </p>
             </div>
