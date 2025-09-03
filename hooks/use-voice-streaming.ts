@@ -40,7 +40,7 @@ export interface ConversationMessage {
   timestamp: string;
 }
 
-export function useVoiceStreaming() {
+export function useVoiceStreaming(onAudioPlay?: (audioElement: HTMLAudioElement) => void) {
   const [streamingState, setStreamingState] = useState<StreamingState>('idle');
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [currentAIText, setCurrentAIText] = useState('');
@@ -125,15 +125,22 @@ export function useVoiceStreaming() {
 
   // Add audio to queue and start playback if not already playing
   const queueAudio = useCallback((audioUrl: string) => {
-    console.log('Queueing audio for playback:', audioUrl.substring(0, 50) + '...');
+    console.log('Queueing audio for playback and recording:', audioUrl.substring(0, 50) + '...');
     const audio = new Audio(audioUrl);
+    
+    // Register audio element with enhanced recorder if callback provided
+    if (onAudioPlay) {
+      console.log('Registering AI audio with enhanced recorder');
+      onAudioPlay(audio);
+    }
+    
     audioQueue.current.push(audio);
 
     if (!isPlayingAudio.current) {
       console.log('Starting audio playback queue');
       playNextAudio();
     }
-  }, [playNextAudio]);
+  }, [playNextAudio, onAudioPlay]);
 
   // Process incoming voice chunks
   const processVoiceChunk = useCallback((chunk: VoiceChunk) => {

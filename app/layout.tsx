@@ -4,7 +4,7 @@ import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import { SupabaseAuthProvider } from '@/components/supabase-auth-provider'
-import { ChatbotWidget } from '@/components/support/chatbot-widget'
+
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -30,7 +30,6 @@ export default function RootLayout({
         >
           <SupabaseAuthProvider>
             {children}
-            <ChatbotWidget />
             <Toaster />
           </SupabaseAuthProvider>
         </ThemeProvider>

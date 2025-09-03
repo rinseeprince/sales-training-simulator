@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
       duration, 
       audioUrl,
       conversationHistory = [],
-      scoreOnly = false
+      scoreOnly = false,
+      existingEnhancedScoring = null
     } = body;
 
     console.log('Received save call request:', { 
@@ -33,7 +34,8 @@ export async function POST(req: NextRequest) {
       transcriptLength: transcript?.length,
       conversationHistoryLength: conversationHistory?.length,
       audioUrl: audioUrl,
-      hasScenarioPrompt: !!scenarioPrompt
+      hasScenarioPrompt: !!scenarioPrompt,
+      hasExistingEnhancedScoring: !!existingEnhancedScoring
     });
 
     // Validate required fields
@@ -51,8 +53,34 @@ export async function POST(req: NextRequest) {
     let sentiment = 'neutral';
     let enhancedScoring: any = null;
 
-    try {
-      console.log('Starting scenario-aware AI scoring...');
+    // Check if we have existing enhanced scoring data to prevent regeneration
+    if (existingEnhancedScoring) {
+      console.log('Using existing enhanced scoring data to prevent regeneration');
+      enhancedScoring = existingEnhancedScoring;
+      score = enhancedScoring.overallScore || 50;
+      talkRatio = enhancedScoring.talkRatio || 50;
+      objectionsHandled = enhancedScoring.objectionsHandled || 0;
+      ctaUsed = enhancedScoring.ctaUsed || false;
+      sentiment = enhancedScoring.sentiment || 'neutral';
+      
+      // Convert enhanced scoring to feedback array for backwards compatibility
+      feedback = [
+        ...(enhancedScoring.strengths || []),
+        ...(enhancedScoring.areasForImprovement || [])
+      ];
+      
+      console.log('Using existing enhanced scoring:', {
+        score,
+        talkRatio,
+        objectionsHandled,
+        ctaUsed,
+        sentiment,
+        strengthsCount: enhancedScoring.strengths?.length || 0,
+        improvementsCount: enhancedScoring.areasForImprovement?.length || 0
+      });
+    } else {
+      try {
+        console.log('Starting scenario-aware AI scoring...');
       console.log('Transcript structure:', {
         length: transcript.length,
         firstEntry: transcript[0],
@@ -214,8 +242,8 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         ...evaluation.areasForImprovement || []
       ];
       
-      // Store enhanced scoring data for frontend
-      const enhancedScoring = {
+      // Store enhanced scoring data for frontend (don't use const to avoid shadowing)
+      enhancedScoring = {
         overallScore: evaluation.overallScore || 50,
         strengths: evaluation.strengths || [],
         areasForImprovement: evaluation.areasForImprovement || [],
@@ -273,6 +301,7 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         console.error('Fallback scoring also failed:', fallbackError);
       }
     }
+    } // Close the else block for existing enhanced scoring check
 
     // Save to database only if not scoreOnly
     let data = null;
@@ -290,6 +319,7 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         feedback: feedback,
         duration: duration,
         audio_url: audioUrl,
+        enhanced_scoring: enhancedScoring, // Save the detailed feedback
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -300,7 +330,9 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         scenario_name: callData.scenario_name?.substring(0, 50) + '...',
         audio_url: callData.audio_url ? 'PRESENT' : 'MISSING',
         duration: callData.duration,
-        score: callData.score
+        score: callData.score,
+        enhanced_scoring: callData.enhanced_scoring ? 'PRESENT' : 'MISSING',
+        enhanced_scoring_data: callData.enhanced_scoring
       });
 
       const { data: dbData, error } = await supabase
@@ -309,7 +341,15 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         .select()
         .single();
 
-      console.log('Database response:', { data: dbData, error });
+      console.log('Database response:', { 
+        data: dbData ? {
+          id: dbData.id,
+          score: dbData.score,
+          enhanced_scoring: dbData.enhanced_scoring ? 'PRESENT' : 'MISSING',
+          enhanced_scoring_data: dbData.enhanced_scoring
+        } : null, 
+        error 
+      });
 
         if (error) {
           console.error('Database insert error:', error);

@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       // Fetch all calls for the user
       const { data: calls, error } = await supabase
         .from('calls')
-        .select('*')
+        .select('*, enhanced_scoring')
         .eq('rep_id', userId)
         .order('created_at', { ascending: false })
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     // Fetch specific call by ID
     let query = supabase
       .from('calls')
-      .select('*')
+      .select('*, enhanced_scoring')
       .eq('id', callId)
 
     // Add user filter if provided
@@ -71,7 +71,9 @@ export async function GET(request: NextRequest) {
     console.log('Fetched call data:', {
       id: call.id,
       audio_url: call.audio_url,
-      hasAudioUrl: !!call.audio_url
+      hasAudioUrl: !!call.audio_url,
+      enhanced_scoring: call.enhanced_scoring ? 'PRESENT' : 'MISSING',
+      enhanced_scoring_data: call.enhanced_scoring
     });
 
     return successResponse(call, 200, corsHeaders)

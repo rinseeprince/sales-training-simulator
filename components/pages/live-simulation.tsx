@@ -10,11 +10,12 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Mic, MicOff, Pause, Play, Square, MessageSquare, Wifi, WifiOff, Volume2, VolumeX, AlertCircle, Zap, RotateCcw, Send } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useAudioRecorder } from '@/hooks/use-audio-recorder'
+import { useEnhancedAudioRecorder } from '@/hooks/use-enhanced-audio-recorder'
 import { useVoiceStreaming } from '@/hooks/use-voice-streaming'
 
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { AudioWaveform } from '@/components/ui/audio-waveform'
+import { ReviewModal } from '@/components/ui/review-modal'
 import { useToast } from '@/hooks/use-toast'
 
 interface ScenarioData {
@@ -42,6 +43,8 @@ export function LiveSimulation() {
   const [scenarioData, setScenarioData] = useState<ScenarioData | null>(null)
   const [isProcessingEndCall, setIsProcessingEndCall] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState<string>('')
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [reviewCallId, setReviewCallId] = useState<string | null>(null)
   
   // Push-to-talk state
   const [isUserRecording, setIsUserRecording] = useState(false)
@@ -157,7 +160,7 @@ export function LiveSimulation() {
     }
   }, [scenarioData])
   
-  // Audio recording hook
+  // Enhanced audio recording hook with mixed streams
   const {
     isRecording: isAudioRecording,
     isPaused: isAudioPaused,
@@ -170,9 +173,10 @@ export function LiveSimulation() {
     pauseRecording: pauseAudioRecording,
     resumeRecording: resumeAudioRecording,
     uploadAudio,
-  } = useAudioRecorder()
+    addAudioToMix,
+  } = useEnhancedAudioRecorder()
 
-  // Voice streaming hook
+  // Voice streaming hook with callback for enhanced recording
   const {
     streamingState,
     conversationHistory,
@@ -184,7 +188,7 @@ export function LiveSimulation() {
     startStreaming,
     stopStreaming,
     resetConversation,
-  } = useVoiceStreaming()
+  } = useVoiceStreaming(addAudioToMix)
 
   // Simple audio recording for push-to-talk (no chunking transcription)
   const [isTranscribingMessage, setIsTranscribingMessage] = useState(false)
@@ -731,7 +735,8 @@ export function LiveSimulation() {
             talkRatio: 0,
             objectionsHandled: 0,
             ctaUsed: false,
-            sentiment: 'neutral'
+            sentiment: 'neutral',
+            enhancedScoring: null
           };
           
           if (saveResponse.ok) {
@@ -745,7 +750,8 @@ export function LiveSimulation() {
               talkRatio: saveResult.talk_ratio || 0,
               objectionsHandled: saveResult.objections_handled || 0,
               ctaUsed: saveResult.cta_used || false,
-              sentiment: saveResult.sentiment || 'neutral'
+              sentiment: saveResult.sentiment || 'neutral',
+              enhancedScoring: saveResult.enhancedScoring || null
             };
             
             setAnalysisProgress('Generating performance insights...');
@@ -772,7 +778,10 @@ export function LiveSimulation() {
             talk_ratio: scoringResult.talkRatio,
             objections_handled: scoringResult.objectionsHandled,
             cta_used: scoringResult.ctaUsed,
-            sentiment: scoringResult.sentiment
+            sentiment: scoringResult.sentiment,
+            // Include enhanced scoring for coaching feedback
+            enhanced_scoring: scoringResult.enhancedScoring,
+            enhancedScoring: scoringResult.enhancedScoring // Store both field names for compatibility
           };
           
           // Store in session storage for the review page
@@ -816,17 +825,19 @@ export function LiveSimulation() {
       // Small delay to show the complete message
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Redirect to review page with the call ID
-      router.push(`/review?callId=${callId}`)
+      // Open review modal with the call ID
+      setReviewModalOpen(true)
+      setReviewCallId(callId)
     } catch (error) {
       console.error('Error ending call:', error)
       console.error('End call error details:', {
         message: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : 'No stack trace'
       });
-      // Still redirect to review even if upload fails
+      // Still open review modal even if upload fails
       setIsProcessingEndCall(false);
-      router.push(`/review?callId=${callId}`)
+      setReviewModalOpen(true)
+      setReviewCallId(callId)
     }
   }
 
@@ -848,7 +859,7 @@ export function LiveSimulation() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 relative">
+    <div className="space-y-6 relative">
       {/* Loading Overlay for Call Analysis */}
       {isProcessingEndCall && (
         <motion.div
@@ -856,62 +867,69 @@ export function LiveSimulation() {
           animate={{ opacity: 1 }}
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
         >
-          <Card className="w-full max-w-md mx-4">
-            <CardContent className="p-8">
-              <div className="text-center space-y-6">
-                <div className="mx-auto w-16 h-16 relative">
-                  <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
-                  <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
-                  <div className="absolute inset-2 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Zap className="w-6 h-6 text-primary" />
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold">Analyzing Your Call</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {analysisProgress || 'Processing...'}
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="w-full bg-secondary rounded-full h-2">
-                    <div 
-                      className="bg-primary h-2 rounded-full transition-all duration-500"
-                      style={{
-                        width: analysisProgress.includes('Stopping') ? '20%' :
-                               analysisProgress.includes('Processing') ? '40%' :
-                               analysisProgress.includes('Uploading') ? '60%' :
-                               analysisProgress.includes('Analyzing') ? '80%' :
-                               analysisProgress.includes('Generating') ? '90%' :
-                               analysisProgress.includes('Finalizing') ? '95%' :
-                               analysisProgress.includes('Complete') ? '100%' : '10%'
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    AI is analyzing your conversation and generating personalized feedback
-                  </p>
+          <div className="w-full max-w-md mx-4 bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-8">
+            <div className="text-center space-y-6">
+              <div className="mx-auto w-16 h-16 relative">
+                <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
+                <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+                <div className="absolute inset-2 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-primary" />
                 </div>
               </div>
-            </CardContent>
-          </Card>
+              
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-slate-900">Analyzing Your Call</h3>
+                <p className="text-sm text-slate-500">
+                  {analysisProgress || 'Processing...'}
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="w-full bg-slate-100 rounded-full h-2">
+                  <div 
+                    className="bg-primary h-2 rounded-full transition-all duration-500"
+                    style={{
+                      width: analysisProgress.includes('Stopping') ? '20%' :
+                             analysisProgress.includes('Processing') ? '40%' :
+                             analysisProgress.includes('Uploading') ? '60%' :
+                             analysisProgress.includes('Analyzing') ? '80%' :
+                             analysisProgress.includes('Generating') ? '90%' :
+                             analysisProgress.includes('Finalizing') ? '95%' :
+                             analysisProgress.includes('Complete') ? '100%' : '10%'
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  AI is analyzing your conversation and generating personalized feedback
+                </p>
+              </div>
+            </div>
+          </div>
         </motion.div>
       )}
+
+      {/* Header Card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
       >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Live Call Simulation</h1>
-            <p className="text-muted-foreground mt-2">
+            <h1 className="text-lg font-semibold text-slate-900 mb-1">Live Call Simulation</h1>
+            <p className="text-sm text-slate-500">
               {scenarioData?.title || 'Loading scenario...'}
             </p>
           </div>
           <div className="flex items-center space-x-2">
-            <Badge variant={connectionStatus === 'connected' ? 'default' : 'destructive'}>
+            <Badge 
+              className={`rounded-full px-3 py-1 text-sm font-medium ${
+                connectionStatus === 'connected' 
+                  ? 'bg-emerald-50 text-emerald-700' 
+                  : 'bg-red-50 text-red-700'
+              }`}
+            >
               {connectionStatus === 'connected' ? (
                 <Wifi className="mr-1 h-3 w-3" />
               ) : (
@@ -929,18 +947,26 @@ export function LiveSimulation() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
+          className="bg-white rounded-xl border border-red-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-4"
         >
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between">
-              <span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+              </div>
+              <span className="text-sm text-slate-900">
                 {audioError || streamingError || transcriptionError}
               </span>
-              <Button variant="outline" size="sm" onClick={handleStartRecording}>
-                Retry Recording
-              </Button>
-            </AlertDescription>
-          </Alert>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleStartRecording}
+              className="rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+            >
+              Retry Recording
+            </Button>
+          </div>
         </motion.div>
       )}
 
@@ -950,20 +976,28 @@ export function LiveSimulation() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
+          className="bg-white rounded-xl border border-amber-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-4"
         >
-          <Alert>
-            <WifiOff className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between">
-              <span>High latency detected. Voice quality may be affected.</span>
-              <Button variant="outline" size="sm" onClick={handleSwitchToText}>
-                Switch to Text Mode
-              </Button>
-            </AlertDescription>
-          </Alert>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <WifiOff className="h-4 w-4 text-amber-600" />
+              </div>
+              <span className="text-sm text-slate-900">High latency detected. Voice quality may be affected.</span>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleSwitchToText}
+              className="rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+            >
+              Switch to Text Mode
+            </Button>
+          </div>
         </motion.div>
       )}
 
-      <div className="grid gap-8 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-3">
         {/* Main Simulation Area */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -971,8 +1005,7 @@ export function LiveSimulation() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="md:col-span-2"
         >
-          <Card className="h-[500px]">
-            <CardContent className="p-8 h-full flex flex-col">
+          <div className="h-[500px] bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-8 flex flex-col">
               {/* Voice Waveform Visualization */}
               <div className="flex items-center justify-center space-x-2 mb-8">
                 <AudioWaveform 
@@ -990,10 +1023,10 @@ export function LiveSimulation() {
                   ) : (
                     <VolumeX className="h-5 w-5 text-muted-foreground" />
                   )}
-                  <span className="text-lg font-medium">
+                  <span className="text-lg font-medium text-slate-900">
                     {isAISpeaking ? 'Prospect Speaking...' : 'Waiting for your message...'}
                   </span>
-                  <Badge variant="secondary" className="ml-2">
+                  <Badge className="ml-2 rounded-full px-3 py-1 bg-primary/10 text-primary text-sm font-medium">
                     <Zap className="mr-1 h-3 w-3" />
                     Push-to-Talk
                   </Badge>
@@ -1014,19 +1047,19 @@ export function LiveSimulation() {
                         {currentDisplaySentence}
                       </motion.p>
                     ) : isTranscribingMessage ? (
-                      <p className="text-muted-foreground max-w-md">
+                      <p className="text-slate-500 max-w-md">
                         Transcribing and sending your message...
                       </p>
                     ) : isUserRecording ? (
-                      <p className="text-muted-foreground max-w-md">
+                      <p className="text-slate-500 max-w-md">
                         Recording your message...
                       </p>
                     ) : currentUserMessage && currentUserMessage !== 'Recording your message...' ? (
-                      <p className="text-muted-foreground max-w-md">
+                      <p className="text-slate-500 max-w-md">
                         {currentUserMessage}
                       </p>
                     ) : (
-                      <p className="text-muted-foreground max-w-md">
+                      <p className="text-slate-500 max-w-md">
                         Press Space or click Record to speak
                       </p>
                     )}
@@ -1036,7 +1069,7 @@ export function LiveSimulation() {
 
                 
                 {streamingState === 'thinking' && (
-                  <p className="text-sm text-teal-600 mt-2">
+                  <p className="text-sm text-primary mt-2">
                     <span className="animate-pulse">●</span> AI is thinking...
                   </p>
                 )}
@@ -1046,7 +1079,7 @@ export function LiveSimulation() {
                   </p>
                 )}
                 {isTranscribingMessage && (
-                  <p className="text-sm text-teal-600 mt-2">
+                  <p className="text-sm text-primary mt-2">
                     <span className="animate-pulse">●</span> Transcribing and sending...
                   </p>
                 )}
@@ -1060,7 +1093,7 @@ export function LiveSimulation() {
                       <Button
                         onClick={handleStartUserRecording}
                         disabled={isAISpeaking}
-                        className="flex items-center space-x-2"
+                        className="flex items-center space-x-2 rounded-2xl bg-primary hover:bg-primary/90 text-white shadow-sm"
                         size="lg"
                       >
                         <Mic className="h-4 w-4" />
@@ -1069,8 +1102,7 @@ export function LiveSimulation() {
                     ) : isUserRecording ? (
                       <Button
                         onClick={handleStopUserRecording}
-                        variant="destructive"
-                        className="flex items-center space-x-2"
+                        className="flex items-center space-x-2 rounded-2xl bg-red-600 hover:bg-red-700 text-white shadow-sm"
                         size="lg"
                       >
                         <Square className="h-4 w-4" />
@@ -1080,7 +1112,7 @@ export function LiveSimulation() {
                       <Button
                         disabled
                         variant="outline"
-                        className="flex items-center space-x-2"
+                        className="flex items-center space-x-2 rounded-2xl border-slate-200 text-slate-700 shadow-sm"
                         size="lg"
                       >
                         <Send className="h-4 w-4" />
@@ -1090,8 +1122,7 @@ export function LiveSimulation() {
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+          </div>
         </motion.div>
 
         {/* Controls Sidebar */}
@@ -1102,80 +1133,76 @@ export function LiveSimulation() {
           className="space-y-6"
         >
           {/* Timer and Controls */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center mb-6">
-                <div className="text-3xl font-bold text-primary mb-2">
-                  {formatTime(currentTime)}
-                </div>
-                <p className="text-sm text-muted-foreground">Call Duration</p>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+            <div className="text-center mb-6">
+              <div className="text-3xl font-bold text-primary mb-2">
+                {formatTime(currentTime)}
               </div>
+              <p className="text-sm text-slate-500">Call Duration</p>
+            </div>
 
-              <div className="space-y-3">
-                {!isRecording ? (
-                  <Button 
-                    onClick={handleStartRecording}
-                    className="w-full"
-                    size="lg"
+            <div className="space-y-3">
+              {!isRecording ? (
+                                <Button
+                  onClick={handleStartRecording}
+                  className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
+                >
+                  <Play className="mr-2 h-4 w-4" />
+                  Start Call
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => {
+                      if (isPaused) {
+                        setIsPaused(false)
+                        resumeAudioRecording()
+                      } else {
+                        setIsPaused(true)
+                        pauseAudioRecording()
+                      }
+                    }}
+                    variant="outline"
+                    className="w-full rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
                   >
-                    <Play className="mr-2 h-5 w-5" />
-                    Start Call
+                    {isPaused ? (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Resume
+                      </>
+                    ) : (
+                      <>
+                        <Pause className="mr-2 h-4 w-4" />
+                        Pause
+                      </>
+                    )}
                   </Button>
-                ) : (
-                  <>
-                    <Button
-                      onClick={() => {
-                        if (isPaused) {
-                          setIsPaused(false)
-                          resumeAudioRecording()
-                        } else {
-                          setIsPaused(true)
-                          pauseAudioRecording()
-                        }
-                      }}
-                      variant="outline"
-                      className="w-full"
-                    >
-                      {isPaused ? (
-                        <>
-                          <Play className="mr-2 h-4 w-4" />
-                          Resume
-                        </>
-                      ) : (
-                        <>
-                          <Pause className="mr-2 h-4 w-4" />
-                          Pause
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        console.log('=== END CALL BUTTON CLICKED ===');
-                        handleEndCall();
-                      }}
-                      disabled={isProcessingEndCall}
-                      variant="destructive"
-                      className="w-full"
-                    >
-                      <Square className="mr-2 h-4 w-4" />
-                      {isProcessingEndCall ? 'Ending Call...' : 'End Call'}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  <Button
+                    onClick={() => {
+                      console.log('=== END CALL BUTTON CLICKED ===');
+                      handleEndCall();
+                    }}
+                    disabled={isProcessingEndCall}
+                    className="w-full rounded-2xl bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                  >
+                    <Square className="mr-2 h-4 w-4" />
+                    {isProcessingEndCall ? 'Ending Call...' : 'End Call'}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
 
           {/* Push-to-Talk Instructions */}
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <h3 className="font-semibold text-center">Push-to-Talk Controls</h3>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1 text-center">Push-to-Talk Controls</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex items-center space-x-3">
-                  <Badge variant="outline" className="text-xs">Space</Badge>
-                  <span>Start/Stop & auto-send</span>
+                  <Badge className="rounded-full px-3 py-1 bg-slate-100 text-slate-700 text-xs font-medium">Space</Badge>
+                  <span className="text-slate-700">Start/Stop & auto-send</span>
                 </div>
-                <div className="text-xs text-muted-foreground mt-3 p-2 bg-muted rounded">
+                <div className="text-xs text-slate-500 mt-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
                   <p>• Press Space to start recording</p>
                   <p>• Speak your complete message</p>
                   <p>• Press Space to stop</p>
@@ -1183,14 +1210,14 @@ export function LiveSimulation() {
                   <p>• No extra buttons needed!</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Settings */}
-          <Card>
-            <CardContent className="p-6 space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label htmlFor="subtitles">Show Subtitles</Label>
+                <Label htmlFor="subtitles" className="text-sm text-slate-700">Show Subtitles</Label>
                 <Switch
                   id="subtitles"
                   checked={showSubtitles}
@@ -1198,14 +1225,18 @@ export function LiveSimulation() {
                 />
               </div>
               
-              <Button variant="outline" className="w-full" onClick={handleSwitchToText}>
+              <Button 
+                variant="outline" 
+                className="w-full rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm" 
+                onClick={handleSwitchToText}
+              >
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Switch to Text Chat
               </Button>
               
               <Button 
                 variant="outline" 
-                className="w-full" 
+                className="w-full rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm" 
                 onClick={() => {
                   console.log('Resetting conversation...');
                   resetConversation();
@@ -1226,41 +1257,60 @@ export function LiveSimulation() {
                 <RotateCcw className="mr-2 h-4 w-4" />
                 Reset Conversation
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Scenario Info */}
-          <Card>
-            <CardContent className="p-6 space-y-3">
-              <h3 className="font-semibold">Scenario Details</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Title:</span>
-                  <span className="text-right max-w-[150px] truncate">{scenarioData?.title || 'Loading...'}</span>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1">Scenario Details</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Title:</span>
+                  <span className="text-right max-w-[150px] truncate text-slate-900 font-medium">{scenarioData?.title || 'Loading...'}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Type:</span>
-                  <span>Custom Scenario</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Type:</span>
+                  <Badge className="rounded-full px-3 py-1 bg-slate-100 text-slate-700 text-xs font-medium">Custom Scenario</Badge>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Duration:</span>
-                  <span>{scenarioData?.duration ? `${scenarioData.duration} minutes` : 'Not set'}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Duration:</span>
+                  <span className="text-slate-900">{scenarioData?.duration ? `${scenarioData.duration} minutes` : 'Not set'}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Voice:</span>
-                  <span>{scenarioData?.voice ? scenarioData.voice.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not set'}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Voice:</span>
+                  <span className="text-slate-900">{scenarioData?.voice ? scenarioData.voice.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not set'}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Mode:</span>
-                  <Badge variant="default" className="text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Mode:</span>
+                  <Badge className="rounded-full px-3 py-1 bg-primary/10 text-primary text-xs font-medium">
                     Push-to-Talk
                   </Badge>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </motion.div>
       </div>
+
+      {/* Review Modal */}
+      <ReviewModal
+        isOpen={reviewModalOpen}
+        onClose={() => {
+          setReviewModalOpen(false)
+          setReviewCallId(null)
+          // Reset simulation state and redirect to scenario builder
+          setIsProcessingEndCall(false)
+          setAnalysisProgress('')
+          // Clean up any temporary call data
+          if (reviewCallId) {
+            sessionStorage.removeItem(`temp_call_${reviewCallId}`)
+          }
+          router.push('/scenario-builder')
+        }}
+        callId={reviewCallId}
+        title={scenarioData?.title}
+      />
     </div>
   )
 }

@@ -31,6 +31,20 @@ export interface CallTranscript {
   timestamp?: string;
 }
 
+// Add enhanced scoring interface
+export interface EnhancedScoring {
+  overallScore: number;
+  strengths: string[];
+  areasForImprovement: string[];
+  keyMoments: Array<{
+    moment: string;
+    feedback: string;
+  }>;
+  coachingTips: string[];
+  scenarioFit: number;
+  readyForRealCustomers: boolean;
+}
+
 export interface Call {
   id: string;
   rep_id: string;
@@ -46,6 +60,7 @@ export interface Call {
   audio_url?: string;
   audio_duration?: number;
   audio_file_size?: number;
+  enhanced_scoring?: EnhancedScoring; // Add enhanced scoring data
   created_at: string;
   updated_at: string;
 }

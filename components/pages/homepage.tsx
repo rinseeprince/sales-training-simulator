@@ -42,31 +42,30 @@ export function Homepage() {
             className="flex items-center space-x-3 cursor-pointer group relative"
             onClick={() => setSidebarOpen(!sidebarOpen)}
           >
-            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L13.09 8.26L20 9L13.09 9.74L12 16L10.91 9.74L4 9L10.91 8.26L12 2Z" fill="currentColor"/>
-                <path d="M19 15L19.5 17L22 17.5L19.5 18L19 20L18.5 18L16 17.5L18.5 17L19 15Z" fill="currentColor"/>
-                <path d="M5 15L5.5 17L8 17.5L5.5 18L5 20L4.5 18L2 17.5L4.5 17L5 15Z" fill="currentColor"/>
-              </svg>
+            <div className="relative h-6 w-6">
+              <img 
+                src="/symbol (1).png"
+                alt="RepScore Logo" 
+                className="h-6 w-6 object-contain transition-all duration-300 group-hover:opacity-0"
+              />
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center">
+                {sidebarOpen ? (
+                  <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </div>
             </div>
-            {sidebarOpen && (
-              <div className="flex items-center space-x-1">
-                <span className="font-semibold text-lg">RepScore</span>
-                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-              </div>
-            )}
-            {/* Hover tooltip for collapsed state */}
-            {!sidebarOpen && (
-              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
-                Open sidebar
-              </div>
-            )}
-            {/* Hover icon for collapsed state */}
-            {!sidebarOpen && (
-              <div className="absolute left-full ml-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <ChevronUp className="w-4 h-4 text-muted-foreground" />
-              </div>
-            )}
+
+            {/* Hover tooltip - always present */}
+            <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
+              {sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            </div>
+
           </div>
         </div>
 

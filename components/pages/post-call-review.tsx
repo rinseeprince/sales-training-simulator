@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { CheckCircle, XCircle, TrendingUp, Clock, MessageSquare, ThumbsUp, ThumbsDown, Award, RotateCcw, Headphones, Edit2, Save, X } from 'lucide-react'
+import { CheckCircle, XCircle, TrendingUp, Clock, MessageSquare, ThumbsUp, ThumbsDown, Award, RotateCcw, Headphones, Edit2, Save, X, Target, Users, Phone, FileText, Lightbulb } from 'lucide-react'
 import { AudioPlayer } from '@/components/ui/audio-player'
 import { useCallData } from '@/hooks/use-call-data'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
@@ -38,11 +38,28 @@ const feedback = [
 
 
 
-export function PostCallReview() {
+interface TempCallData {
+  callId: string;
+  scenarioName: string;
+  duration: string;
+  audioUrl: string;
+  conversationHistory: any[];
+  transcript: any[];
+  enhanced_scoring?: any;
+  enhancedScoring?: any;
+  created_at?: string;
+}
+
+interface PostCallReviewProps {
+  modalCallId?: string
+  isInModal?: boolean
+}
+
+export function PostCallReview({ modalCallId, isInModal = false }: PostCallReviewProps = {}) {
   const { user } = useSupabaseAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const callId = searchParams.get('callId')
+  const callId = modalCallId || searchParams.get('callId')
   
   const [actualUserId, setActualUserId] = useState<string | null>(null)
   
@@ -68,7 +85,7 @@ export function PostCallReview() {
 
   const { call, loading, error } = useCallData({ 
     callId: callId || undefined, 
-    userId: actualUserId 
+    userId: actualUserId || undefined 
   })
 
   // Fetch most recent call if no callId is provided
@@ -104,7 +121,7 @@ export function PostCallReview() {
   const [isEditingName, setIsEditingName] = useState(false)
   const [simulationName, setSimulationName] = useState('')
   const [isSavingName, setIsSavingName] = useState(false)
-  const [tempCallData, setTempCallData] = useState(null)
+  const [tempCallData, setTempCallData] = useState<TempCallData | null>(null)
   const [isSavingCall, setIsSavingCall] = useState(false)
   const [callSaved, setCallSaved] = useState(false)
   const [coachingFeedback, setCoachingFeedback] = useState<any>(null)
@@ -224,16 +241,31 @@ export function PostCallReview() {
           scenarioName: tempCallData.scenarioName || simulationName.trim(),
           duration: tempCallData.duration,
           audioUrl: tempCallData.audioUrl,
-          conversationHistory: tempCallData.conversationHistory
+          conversationHistory: tempCallData.conversationHistory,
+          // Pass existing enhanced scoring to prevent regeneration
+          existingEnhancedScoring: tempCallData.enhanced_scoring || tempCallData.enhancedScoring
         }),
       })
       
       if (saveResponse.ok) {
         const saveResult = await saveResponse.json()
         console.log('Call saved successfully:', saveResult)
+        
+        // Update temp call data with enhanced scoring from save response
+        if (saveResult.enhancedScoring) {
+          const updatedTempData = {
+            ...tempCallData,
+            enhanced_scoring: saveResult.enhancedScoring,
+            enhancedScoring: saveResult.enhancedScoring // Store both field names for compatibility
+          }
+          sessionStorage.setItem(`temp_call_${callId}`, JSON.stringify(updatedTempData))
+          setTempCallData(updatedTempData)
+          console.log('🔄 Updated temp data with enhanced scoring:', saveResult.enhancedScoring)
+        }
+        
         setCallSaved(true)
-        // Remove temp data from session storage
-        sessionStorage.removeItem(`temp_call_${callId}`)
+        // Don't remove temp data immediately - let it persist for the current session
+        // sessionStorage.removeItem(`temp_call_${callId}`)
         // Navigate to saved simulations page
         router.push('/simulations')
       } else {
@@ -271,13 +303,15 @@ export function PostCallReview() {
     objections_handled: typeof displayData?.objections_handled === 'number' ? displayData.objections_handled : 0,
     cta_used: typeof displayData?.cta_used === 'boolean' ? displayData.cta_used : false,
     duration: typeof displayData?.duration === 'number' ? displayData.duration : 0,
-    enhancedScoring: displayData?.enhancedScoring || null
+    enhancedScoring: displayData?.enhanced_scoring || displayData?.enhancedScoring || null // Handle both field names
   }
 
   // Load coaching feedback when we have a transcript
   useEffect(() => {
     const loadCoachingFeedback = async () => {
-      if (!safeDisplayData.transcript || safeDisplayData.transcript.length === 0 || isLoadingCoaching || coachingFeedback) return;
+      // Only load if we don't have enhanced scoring data from database
+      if (!safeDisplayData.transcript || safeDisplayData.transcript.length === 0 || 
+          isLoadingCoaching || coachingFeedback || safeDisplayData.enhancedScoring) return;
       
       setIsLoadingCoaching(true);
       try {
@@ -303,7 +337,7 @@ export function PostCallReview() {
     };
     
     loadCoachingFeedback();
-  }, [safeDisplayData.transcript]);
+  }, [safeDisplayData.transcript, safeDisplayData.enhancedScoring]);
   
   console.log('Review page data:', {
     callId,
@@ -314,7 +348,8 @@ export function PostCallReview() {
       objections_handled: call.objections_handled,
       cta_used: call.cta_used,
       audio_url: call.audio_url,
-      hasAudioUrl: !!call.audio_url
+      hasAudioUrl: !!call.audio_url,
+      enhanced_scoring: call.enhanced_scoring
     } : null,
     hasAudio,
     displayData: safeDisplayData ? {
@@ -322,7 +357,12 @@ export function PostCallReview() {
       score: safeDisplayData.score,
       talk_ratio: safeDisplayData.talk_ratio,
       objections_handled: safeDisplayData.objections_handled,
-      audio_url: safeDisplayData.audio_url
+      audio_url: safeDisplayData.audio_url,
+      enhancedScoring: safeDisplayData.enhancedScoring
+    } : null,
+    tempCallData: tempCallData ? {
+      enhanced_scoring: tempCallData.enhanced_scoring,
+      enhancedScoring: tempCallData.enhancedScoring
     } : null,
     coachingFeedback: coachingFeedback ? {
       overallScore: coachingFeedback.overallScore,
@@ -414,159 +454,176 @@ export function PostCallReview() {
 
   return (
     <div className="w-full space-y-6">
+      {/* Compressed Hero Bar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] px-6 py-4 h-20"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Post-Call Review</h1>
-            <div className="flex items-center mt-2 space-x-2">
-              {isEditingName ? (
-                <div className="flex items-center space-x-2">
-                  <Input
-                    value={simulationName}
-                    onChange={(e) => setSimulationName(e.target.value)}
-                    className="text-muted-foreground"
-                    placeholder="Enter simulation name"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSaveSimulationName()
-                      } else if (e.key === 'Escape') {
-                        handleCancelEdit()
-                      }
-                    }}
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleSaveSimulationName}
-                    disabled={isSavingName || !simulationName.trim()}
-                  >
-                    {isSavingName ? 'Saving...' : <Save className="h-4 w-4" />}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCancelEdit}
-                    disabled={isSavingName}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <p className="text-muted-foreground">
-                    {simulationName} - {callSaved ? 'Completed' : 'Not Saved'} {isRealCall(safeDisplayData) && safeDisplayData.created_at ? new Date(safeDisplayData.created_at).toLocaleDateString() : tempCallData?.created_at ? new Date(tempCallData.created_at).toLocaleDateString() : callData.date}
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setIsEditingName(true)}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                  {!callSaved && tempCallData && (
-                    <Button
-                      size="sm"
-                      onClick={handleSaveCall}
-                      disabled={isSavingCall || !simulationName.trim()}
-                      className="ml-2"
-                    >
-                      {isSavingCall ? 'Saving...' : <><Save className="h-4 w-4 mr-1" />Save Call</>}
-                    </Button>
-                  )}
-                </div>
-              )}
+        <div className="flex-1 min-w-0">
+          {isEditingName ? (
+            <div className="flex items-center space-x-2">
+              <Input
+                value={simulationName}
+                onChange={(e) => setSimulationName(e.target.value)}
+                className="border-slate-200 focus:ring-primary"
+                placeholder="Enter simulation name"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveSimulationName()
+                  } else if (e.key === 'Escape') {
+                    handleCancelEdit()
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                onClick={handleSaveSimulationName}
+                disabled={isSavingName || !simulationName.trim()}
+                className="rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 font-medium"
+              >
+                {isSavingName ? 'Saving...' : <Save className="h-4 w-4" />}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCancelEdit}
+                disabled={isSavingName}
+                className="rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-          <div className="flex space-x-2">
-            <Button variant="outline" onClick={handleRequestRetry}>
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Request Re-try
+          ) : (
+            <div className="flex items-center space-x-2">
+              <div>
+                <h1 className="text-xl font-semibold text-slate-900 truncate">{simulationName}</h1>
+                <p className="text-sm text-slate-500">
+                  {callSaved ? 'Completed' : 'Not Saved'} • {isRealCall(safeDisplayData) && safeDisplayData?.created_at ? new Date(safeDisplayData.created_at).toLocaleDateString() : tempCallData?.created_at ? new Date(tempCallData.created_at).toLocaleDateString() : callData.date}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setIsEditingName(true)}
+                className="h-8 w-8 p-0 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <Edit2 className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center space-x-2 flex-shrink-0">
+          {!callSaved && tempCallData && (
+            <Button
+              size="sm"
+              onClick={handleSaveCall}
+              disabled={isSavingCall || !simulationName.trim()}
+              className="rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 font-medium"
+            >
+              {isSavingCall ? 'Saving...' : <><Save className="h-4 w-4 mr-1" />Save Call</>}
             </Button>
-            <Button onClick={handleApprove}>
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Approve
-            </Button>
-          </div>
+          )}
+          <Button 
+            variant="outline" 
+            onClick={handleRequestRetry} 
+            className="rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Request Re-try
+          </Button>
+          <Button 
+            onClick={handleApprove} 
+            className="rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 font-medium"
+          >
+            <CheckCircle className="mr-2 h-4 w-4" />
+            Approve
+          </Button>
         </div>
       </motion.div>
 
-      {/* Summary Cards */}
+      {/* Modern Metric Tiles */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="grid gap-6 md:grid-cols-2 lg:grid-cols-4"
+        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
       >
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Overall Score</CardTitle>
-            <Award className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score}/100
-            </div>
-            <Progress value={safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score} className="mt-2" />
-          </CardContent>
-        </Card>
+        {/* Overall Score Tile */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6 hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">OVERALL SCORE</span>
+            <Award className="h-4 w-4 text-slate-400" />
+          </div>
+          <div className="text-3xl font-semibold text-slate-900 mb-2">
+            {safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score}/100
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-2">
+            <div 
+              className="h-2 rounded-full transition-all duration-300"
+              style={{ 
+                width: `${safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score}%`,
+                backgroundColor: (safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score) >= 90 
+                  ? '#10b981' 
+                  : (safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score) >= 70 
+                  ? '#048998' 
+                  : '#f59e0b'
+              }}
+            />
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Talk Ratio</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {coachingFeedback?.metrics?.talkRatio ? `${coachingFeedback.metrics.talkRatio}% / ${100 - coachingFeedback.metrics.talkRatio}%` :
-               safeDisplayData.talk_ratio ? `${safeDisplayData.talk_ratio}% / ${100 - safeDisplayData.talk_ratio}%` : 
-               `${callData.talkRatio.rep}% / ${callData.talkRatio.ai}%`}
-            </div>
-            <p className="text-xs text-muted-foreground">Rep / Prospect</p>
-          </CardContent>
-        </Card>
+        {/* Talk Ratio Tile */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6 hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">TALK RATIO</span>
+            <MessageSquare className="h-4 w-4 text-slate-400" />
+          </div>
+          <div className="text-3xl font-semibold text-slate-900 mb-1">
+            {coachingFeedback?.metrics?.talkRatio ? `${coachingFeedback.metrics.talkRatio}%` :
+             safeDisplayData.talk_ratio ? `${safeDisplayData.talk_ratio}%` : 
+             `${callData.talkRatio.rep}%`}
+          </div>
+          <p className="text-xs text-slate-500">Rep / {coachingFeedback?.metrics?.talkRatio ? `${100 - coachingFeedback.metrics.talkRatio}%` :
+           safeDisplayData.talk_ratio ? `${100 - safeDisplayData.talk_ratio}%` : 
+           `${callData.talkRatio.ai}%`} Prospect</p>
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">CTA Used</CardTitle>
+        {/* CTA Used Tile */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6 hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">CTA USED</span>
             {(() => {
               const ctaUsed = coachingFeedback?.categoryScores?.closing > 0 || safeDisplayData.cta_used;
               return ctaUsed ? (
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                <CheckCircle className="h-4 w-4 text-emerald-500" />
               ) : (
                 <XCircle className="h-4 w-4 text-red-500" />
               );
             })()}
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {(() => {
-                const ctaUsed = coachingFeedback?.categoryScores?.closing > 0 || 
-                               displayData.cta_used !== undefined ? displayData.cta_used : callData.ctaUsed;
-                return ctaUsed ? 'Yes' : 'No';
-              })()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Clear next steps provided
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+          <div className="text-3xl font-semibold text-slate-900 mb-1">
+            {(() => {
+              const ctaUsed = coachingFeedback?.categoryScores?.closing > 0 || 
+                             displayData.cta_used !== undefined ? displayData.cta_used : callData.ctaUsed;
+              return ctaUsed ? 'Yes' : 'No';
+            })()}
+          </div>
+          <p className="text-xs text-slate-500">Clear next steps provided</p>
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Confidence</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{callData.confidence}</div>
-            <Badge variant="secondary" className="mt-1">
-              {safeDisplayData.sentiment || callData.sentiment}
-            </Badge>
-          </CardContent>
-        </Card>
+        {/* Confidence Tile */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6 hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">CONFIDENCE</span>
+            <TrendingUp className="h-4 w-4 text-slate-400" />
+          </div>
+          <div className="text-3xl font-semibold text-slate-900 mb-1">{callData.confidence}</div>
+          <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 px-2 py-1 text-xs">
+            {safeDisplayData.sentiment || callData.sentiment}
+          </span>
+        </div>
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-4">
@@ -577,138 +634,52 @@ export function PostCallReview() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="lg:col-span-3 space-y-6"
         >
-          {/* Objections Handled */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Objections Handled</CardTitle>
-              <CardDescription>
-                Key objections raised during the call and how they were addressed
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {(() => {
-                  // Check if there were actually objections raised based on coaching feedback
-                  const objectionsRaised = coachingFeedback?.metrics?.objectionsRaised || 0;
-                  const objectionHandlingScore = coachingFeedback?.categoryScores?.objectionHandling || 0;
-                  
-                  // If no objections were raised at all, show that
-                  if (objectionsRaised === 0) {
-                    return (
-                      <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg">
-                        <XCircle className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                        <span className="text-sm text-muted-foreground">No objections were raised during this call</span>
-                      </div>
-                    );
-                  }
-                  
-                  // If objections were raised, show how many were handled based on the score
-                  const handledCount = objectionHandlingScore > 0 ? 
-                    Math.min(objectionsRaised, Math.ceil(objectionHandlingScore / 5)) : 0;
-                  
-                  if (handledCount === 0 && objectionsRaised > 0) {
-                    return (
-                      <div className="flex items-center space-x-3 p-3 bg-red-50 rounded-lg">
-                        <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                        <span className="text-sm text-red-600">
-                          {objectionsRaised} objection(s) raised but not handled effectively
-                        </span>
-                      </div>
-                    );
-                  }
-                  
-                  // Show handled objections
-                  return Array(handledCount).fill(0).map((_, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-3 bg-accent/50 rounded-lg">
-                      <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                      <span className="text-sm">Objection {index + 1} handled effectively</span>
-                    </div>
-                  ));
-                })()}
-              </div>
-            </CardContent>
-          </Card>
+
 
           {/* AI Coaching Feedback */}
-          <Card>
-            <CardHeader>
-              <CardTitle>AI-Generated Coaching Feedback</CardTitle>
-              <CardDescription>
-                Detailed performance analysis tailored to your scenario
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-1">Coaching Feedback</h3>
+                <p className="text-sm text-slate-500">Detailed performance analysis tailored to your scenario</p>
+              </div>
+              <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Lightbulb className="h-4 w-4 text-emerald-600" />
+              </div>
+            </div>
+            <div>
+
+
               {isLoadingCoaching ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
-              ) : safeDisplayData.enhancedScoring ? (
-                <div className="space-y-6">
-                  {/* Enhanced Scoring Display */}
-                  <Tabs defaultValue="strengths" className="w-full">
-                    <TabsList className="grid w-full grid-cols-4">
-                      <TabsTrigger value="strengths">Strengths</TabsTrigger>
-                      <TabsTrigger value="improvements">Areas to Improve</TabsTrigger>
-                      <TabsTrigger value="moments">Key Moments</TabsTrigger>
-                      <TabsTrigger value="tips">Coaching Tips</TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="strengths" className="space-y-3 mt-4">
-                      {safeDisplayData.enhancedScoring.strengths?.map((strength: string, index: number) => (
-                        <div key={index} className="flex items-start space-x-3">
+              ) : safeDisplayData?.enhancedScoring ? (
+                <div className="space-y-4">
+                  {/* Convert enhanced scoring to bullet point format */}
+                  {[
+                    ...(safeDisplayData?.enhancedScoring?.strengths || []),
+                    ...(safeDisplayData?.enhancedScoring?.areasForImprovement || []),
+                    ...(safeDisplayData?.enhancedScoring?.coachingTips || [])
+                  ].map((item: string, index: number) => {
+                    // Determine if it's a strength (thumbs up) or improvement/tip (thumbs down)
+                    const isStrength = index < (safeDisplayData?.enhancedScoring?.strengths?.length || 0);
+                    return (
+                      <div key={index} className="flex items-start space-x-3">
+                        {isStrength ? (
                           <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                          <p className="text-sm">{strength}</p>
-                        </div>
-                      )) || <p className="text-sm text-muted-foreground">No strengths identified</p>}
-                    </TabsContent>
-                    
-                    <TabsContent value="improvements" className="space-y-3 mt-4">
-                      {safeDisplayData.enhancedScoring.areasForImprovement?.map((improvement: string, index: number) => (
-                        <div key={index} className="flex items-start space-x-3">
-                          <TrendingUp className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-                          <p className="text-sm">{improvement}</p>
-                        </div>
-                      )) || <p className="text-sm text-muted-foreground">No improvements identified</p>}
-                    </TabsContent>
-                    
-                    <TabsContent value="moments" className="space-y-3 mt-4">
-                      {safeDisplayData.enhancedScoring.keyMoments?.map((moment: any, index: number) => (
-                        <div key={index} className="space-y-2 p-3 bg-accent/50 rounded-lg">
-                          <p className="text-sm font-medium">{moment.moment}</p>
-                          <p className="text-sm text-muted-foreground">{moment.feedback}</p>
-                        </div>
-                      )) || <p className="text-sm text-muted-foreground">No key moments identified</p>}
-                    </TabsContent>
-                    
-                    <TabsContent value="tips" className="space-y-3 mt-4">
-                      {safeDisplayData.enhancedScoring.coachingTips?.map((tip: string, index: number) => (
-                        <div key={index} className="flex items-start space-x-3">
-                          <CheckCircle className="h-5 w-5 text-teal-500 flex-shrink-0 mt-0.5" />
-                          <p className="text-sm">{tip}</p>
-                        </div>
-                      )) || <p className="text-sm text-muted-foreground">No coaching tips available</p>}
-                    </TabsContent>
-                  </Tabs>
-
-                  {/* Scenario Fit Score */}
-                  <div className="border-t pt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium">Scenario Fit Score</span>
-                      <span className="text-sm font-bold">{safeDisplayData.enhancedScoring.scenarioFit || 0}%</span>
-                    </div>
-                    <Progress value={safeDisplayData.enhancedScoring.scenarioFit || 0} className="mb-2" />
-                    <p className="text-xs text-muted-foreground">
-                      How well you performed for this specific scenario
-                    </p>
-                  </div>
-
-                  {/* Ready for Real Customers */}
-                  <div className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
-                    <span className="text-sm font-medium">Ready for Similar Real Situations?</span>
-                    <Badge variant={safeDisplayData.enhancedScoring.readyForRealCustomers ? "default" : "secondary"}>
-                      {safeDisplayData.enhancedScoring.readyForRealCustomers ? "Yes" : "Not Yet"}
-                    </Badge>
-                  </div>
+                        ) : (
+                          <ThumbsDown className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                        )}
+                        <p className="text-sm">{item}</p>
+                      </div>
+                    );
+                  })}
+                  {((!safeDisplayData?.enhancedScoring?.strengths || safeDisplayData?.enhancedScoring?.strengths?.length === 0) && 
+                    (!safeDisplayData?.enhancedScoring?.areasForImprovement || safeDisplayData?.enhancedScoring?.areasForImprovement?.length === 0) && 
+                    (!safeDisplayData?.enhancedScoring?.coachingTips || safeDisplayData?.enhancedScoring?.coachingTips?.length === 0)) && (
+                    <p className="text-sm text-muted-foreground">No feedback available</p>
+                  )}
                 </div>
               ) : coachingFeedback ? (
                 <div className="space-y-6">
@@ -783,7 +754,7 @@ export function PostCallReview() {
                     <TabsContent value="next-steps" className="space-y-3 mt-4">
                       {coachingFeedback.nextSteps?.map((step: string, index: number) => (
                         <div key={index} className="flex items-start space-x-3">
-                          <CheckCircle className="h-5 w-5 text-teal-500 flex-shrink-0 mt-0.5" />
+                          <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                           <p className="text-sm">{step}</p>
                         </div>
                       )) || <p className="text-sm text-muted-foreground">No next steps identified</p>}
@@ -806,51 +777,36 @@ export function PostCallReview() {
                       )}
                       <p className="text-sm">{item}</p>
                     </div>
-                  )) : feedback.map((item: string, index: number) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      {index < 2 ? (
-                        <ThumbsUp className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <ThumbsDown className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-                      )}
-                      <p className="text-sm">{item}</p>
-                    </div>
-                  ))}
+                  )) : (
+                    <p className="text-sm text-muted-foreground">No feedback available</p>
+                  )}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Call Recording and Transcript in a grid */}
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Call Recording */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Headphones className="h-5 w-5" />
-                  Call Recording
-                </CardTitle>
-                <CardDescription>
-                  Listen to the full call recording with waveform visualization
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <AudioPlayer 
-                  audioUrl={hasAudio}
-                  title="Call Recording"
-                  duration={safeDisplayData.duration}
-                  showWaveform={true}
-                  className="w-full"
-                />
-              </CardContent>
-            </Card>
+            <AudioPlayer 
+              audioUrl={hasAudio}
+              title="Call Recording"
+              duration={safeDisplayData.duration}
+              showWaveform={true}
+              className="w-full"
+            />
 
             {/* Call Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Call Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-1">Call Details</h3>
+                </div>
+                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Phone className="h-4 w-4 text-blue-600" />
+                </div>
+              </div>
+              <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Duration:</span>
                   <span>
@@ -871,20 +827,8 @@ export function PostCallReview() {
                   <span className="text-muted-foreground">Status:</span>
                   <span>{callSaved ? 'Saved' : 'Not Saved'}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Type:</span>
-                  <span>Discovery Call (Outbound Generated)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Prospect:</span>
-                  <span>C-Level</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Difficulty:</span>
-                  <span>Hard (4/5)</span>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
 
@@ -898,37 +842,43 @@ export function PostCallReview() {
           className="space-y-6"
         >
           {/* Manager Comments */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Manager Comments</CardTitle>
-              <CardDescription>
-                Add your feedback and notes
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-1">Manager Comments</h3>
+                <p className="text-sm text-slate-500">Add your feedback and notes</p>
+              </div>
+              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <FileText className="h-4 w-4 text-purple-600" />
+              </div>
+            </div>
+            <div className="space-y-4">
               <Textarea
                 placeholder="Add your comments about this call..."
                 value={managerComments}
                 onChange={(e) => setManagerComments(e.target.value)}
-                className="min-h-[100px]"
+                className="min-h-[100px] rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
               />
-              <Button className="w-full">
+              <Button className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium">
                 Save Comments
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Certification */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Certification Level</CardTitle>
-              <CardDescription>
-                Set the certification level for this performance
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-1">Certification Level</h3>
+                <p className="text-sm text-slate-500">Set the certification level for this performance</p>
+              </div>
+              <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Award className="h-4 w-4 text-amber-600" />
+              </div>
+            </div>
+            <div className="space-y-4">
               <Select value={certificationLevel} onValueChange={setCertificationLevel}>
-                <SelectTrigger>
+                <SelectTrigger className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary">
                   <SelectValue placeholder="Select certification level" />
                 </SelectTrigger>
                 <SelectContent>
@@ -938,12 +888,12 @@ export function PostCallReview() {
                   <SelectItem value="platinum">Platinum - Expert Level</SelectItem>
                 </SelectContent>
               </Select>
-              <Button className="w-full" disabled={!certificationLevel}>
+              <Button className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium" disabled={!certificationLevel}>
                 <Award className="mr-2 h-4 w-4" />
                 Certify Performance
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </motion.div>
       </div>
     </div>

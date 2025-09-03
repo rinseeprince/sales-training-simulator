@@ -5,7 +5,7 @@ import { useSupabaseAuth } from '@/components/supabase-auth-provider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Check, Star, Zap, Crown, Heart } from 'lucide-react';
+import { Check, Star, Zap, Crown, Heart, Rocket, Users, Building, Sparkles, ArrowRight, Mail } from 'lucide-react';
 import Link from 'next/link';
 
 const plans = [
@@ -14,6 +14,9 @@ const plans = [
     price: '$0',
     period: 'forever',
     description: 'Full access during our beta period',
+    icon: Rocket,
+    iconColor: 'text-emerald-600',
+    iconBg: 'bg-emerald-100',
     features: [
       'Unlimited simulations',
       'Advanced AI responses',
@@ -33,6 +36,9 @@ const plans = [
     price: '$29',
     period: 'per month',
     description: 'Premium features for power users',
+    icon: Users,
+    iconColor: 'text-blue-600',
+    iconBg: 'bg-blue-100',
     features: [
       'Everything in Free Beta',
       'Team collaboration',
@@ -50,6 +56,9 @@ const plans = [
     price: 'Custom',
     period: 'per month',
     description: 'For teams and organizations',
+    icon: Building,
+    iconColor: 'text-purple-600',
+    iconBg: 'bg-purple-100',
     features: [
       'Everything in Pro',
       'Custom training',
@@ -82,86 +91,140 @@ export function PricingPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="text-center mb-12">
+    <div className="max-w-7xl mx-auto space-y-8">
+      {/* Streamlined Hero Section */}
+      <div className="text-center mb-8">
         <div className="flex justify-center mb-4">
-          <Badge className="bg-teal-500 text-white px-4 py-2">
+          <div className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 text-xs font-medium">
+            <Sparkles className="w-3 h-3 mr-1" />
             Free Beta Access
-          </Badge>
+          </div>
         </div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground mb-4">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 mb-2">
           Start Training Today
         </h1>
-        <p className="text-muted-foreground max-w-2xl mx-auto">
+        <p className="text-sm text-slate-500 max-w-xl mx-auto">
           We're in beta and offering full access for free. Help us improve by providing feedback!
         </p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-        {plans.map((plan) => (
-          <Card
-            key={plan.name}
-            className={`relative ${
-              plan.popular
-                ? 'border-2 border-teal-500 shadow-xl scale-105'
-                : 'border border-border opacity-75'
-            }`}
-          >
-            {plan.popular && (
-              <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-teal-500 text-white">
-                <Heart className="w-4 h-4 mr-1" />
-                Free Beta
-              </Badge>
-            )}
+      <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+        {plans.map((plan) => {
+          const IconComponent = plan.icon;
+          return (
+            <div
+              key={plan.name}
+              className={`relative bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5 p-8 ${
+                plan.popular
+                  ? 'ring-2 ring-primary/20 scale-105 hover:scale-[1.02]'
+                  : 'hover:border-slate-300'
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                  <div className="inline-flex items-center rounded-full bg-primary text-white px-4 py-2 text-sm font-medium shadow-lg">
+                    <Heart className="w-4 h-4 mr-1" />
+                    Most Popular
+                  </div>
+                </div>
+              )}
 
-                          <CardHeader className="text-center">
-                <CardTitle className="text-lg font-bold">{plan.name}</CardTitle>
-                <div className="mt-4">
-                  <span className="text-2xl font-bold">{plan.price}</span>
+              {/* Header with Icon */}
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{plan.name}</h3>
+                  <p className="text-sm text-slate-500">{plan.description}</p>
+                </div>
+                <div className={`w-12 h-12 ${plan.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 ml-4`}>
+                  <IconComponent className={`h-6 w-6 ${plan.iconColor}`} />
+                </div>
+              </div>
+
+              {/* Pricing */}
+              <div className="mb-8">
+                <div className="flex items-baseline">
+                  <span className="text-3xl font-semibold text-slate-900">{plan.price}</span>
                   {plan.period !== 'forever' && (
-                    <span className="text-muted-foreground">/{plan.period}</span>
+                    <span className="text-sm text-slate-500 ml-1">/{plan.period}</span>
                   )}
                 </div>
-                <CardDescription className="mt-2">{plan.description}</CardDescription>
-              </CardHeader>
+              </div>
 
-            <CardContent>
+              {/* Features */}
               <ul className="space-y-3 mb-8">
                 {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-center">
-                    <Check className="h-5 w-5 text-teal-500 mr-3 flex-shrink-0" />
-                    <span className="text-foreground">{feature}</span>
+                  <li key={feature} className="flex items-start">
+                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3 mt-0.5">
+                      <Check className="h-3 w-3 text-emerald-600" />
+                    </div>
+                    <span className="text-sm text-slate-700">{feature}</span>
                   </li>
                 ))}
               </ul>
 
+              {/* CTA Button */}
               <Button
-                className={`w-full ${
+                className={`w-full h-12 rounded-xl font-medium transition-all duration-200 ${
                   plan.popular
-                    ? 'bg-teal-600 hover:bg-teal-700'
-                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                    ? 'bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
                 }`}
                 onClick={() => handleAction(plan)}
-                disabled={!plan.popular}
+                disabled={!plan.popular && plan.action !== 'contact'}
               >
-                {plan.buttonText}
+                {plan.popular ? (
+                  <>
+                    {plan.buttonText}
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </>
+                ) : plan.action === 'contact' ? (
+                  <>
+                    <Mail className="w-4 h-4 mr-2" />
+                    {plan.buttonText}
+                  </>
+                ) : (
+                  plan.buttonText
+                )}
               </Button>
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
       <div className="text-center mt-12">
-        <div className="bg-card rounded-lg p-6 shadow-sm max-w-2xl mx-auto">
-          <h3 className="text-lg font-semibold mb-2">Why Free Beta?</h3>
-          <p className="text-muted-foreground mb-4">
-            We're building the best sales training platform and need your feedback to make it perfect. 
-            Use all features for free and help us improve!
-          </p>
-          <div className="flex justify-center space-x-4 text-sm text-muted-foreground">
-            <span>✓ No credit card required</span>
-            <span>✓ Full feature access</span>
-            <span>✓ Cancel anytime</span>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-8 max-w-4xl mx-auto">
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Why Free Beta?</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                We're building the best sales training platform and need your feedback to make it perfect. 
+                Use all features for free and help us improve!
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 ml-6">
+              <Heart className="h-6 w-6 text-primary" />
+            </div>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-6 text-sm">
+            <div className="flex items-center justify-center md:justify-start">
+              <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
+                <Check className="h-3 w-3 text-emerald-600" />
+              </div>
+              <span className="text-slate-700">No credit card required</span>
+            </div>
+            <div className="flex items-center justify-center md:justify-start">
+              <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
+                <Check className="h-3 w-3 text-emerald-600" />
+              </div>
+              <span className="text-slate-700">Full feature access</span>
+            </div>
+            <div className="flex items-center justify-center md:justify-start">
+              <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
+                <Check className="h-3 w-3 text-emerald-600" />
+              </div>
+              <span className="text-slate-700">Cancel anytime</span>
+            </div>
           </div>
         </div>
       </div>

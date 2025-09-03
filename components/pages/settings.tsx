@@ -37,100 +37,101 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Compressed Hero Bar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] px-6 py-4 h-20"
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
+          <p className="text-sm text-slate-500">
             Manage your account settings and preferences
           </p>
         </div>
       </motion.div>
 
       <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="preferences">Preferences</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-        </TabsList>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-2">
+          <TabsList className="grid w-full grid-cols-4 bg-slate-50 rounded-lg">
+            <TabsTrigger value="profile" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Profile</TabsTrigger>
+            <TabsTrigger value="notifications" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Notifications</TabsTrigger>
+            <TabsTrigger value="preferences" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Preferences</TabsTrigger>
+            <TabsTrigger value="appearance" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Appearance</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="profile" className="space-y-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
+            className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
           >
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <User className="mr-2 h-5 w-5" />
-                  Profile Information
-                </CardTitle>
-                <CardDescription>
-                  Update your personal information and profile settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center space-x-6">
-                  <Avatar className="w-20 h-20">
-                    <AvatarImage src="/placeholder.svg" />
-                    <AvatarFallback className="text-lg">
-                      {user?.name?.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <Button variant="outline">
-                      <Upload className="mr-2 h-4 w-4" />
-                      Change Avatar
-                    </Button>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      JPG, PNG or GIF. Max size 2MB.
-                    </p>
-                  </div>
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1 flex items-center">
+                <User className="mr-2 h-5 w-5 text-primary" />
+                Profile Information
+              </h3>
+              <p className="text-sm text-slate-500">Update your personal information and profile settings</p>
+            </div>
+            <div className="space-y-6">
+              <div className="flex items-center space-x-6">
+                <Avatar className="w-20 h-20 ring-2 ring-slate-200">
+                  <AvatarImage src="/placeholder.svg" />
+                  <AvatarFallback className="text-lg bg-primary text-white">
+                    {user?.name?.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50">
+                    <Upload className="mr-2 h-4 w-4" />
+                    Change Avatar
+                  </Button>
+                  <p className="text-sm text-slate-500 mt-2">
+                    JPG, PNG or GIF. Max size 2MB.
+                  </p>
                 </div>
+              </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input id="name" defaultValue={user?.name} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" defaultValue={user?.email} />
-                  </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Full Name</Label>
+                  <Input id="name" defaultValue={user?.name} className="border-slate-200 focus:ring-primary" />
                 </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
-                    <Input id="role" value={user?.subscription_status} disabled />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="department">Department</Label>
-                    <Select defaultValue="sales">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sales">Sales</SelectItem>
-                        <SelectItem value="marketing">Marketing</SelectItem>
-                        <SelectItem value="support">Support</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Email</Label>
+                  <Input id="email" type="email" defaultValue={user?.email} className="border-slate-200 focus:ring-primary" />
                 </div>
+              </div>
 
-                <Button onClick={handleSaveProfile}>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Changes
-                </Button>
-              </CardContent>
-            </Card>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="role" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Role</Label>
+                  <Input id="role" value={user?.subscription_status} disabled className="border-slate-200 bg-slate-50" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="department" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Department</Label>
+                  <Select defaultValue="sales">
+                    <SelectTrigger className="border-slate-200 focus:ring-primary">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sales">Sales</SelectItem>
+                      <SelectItem value="marketing">Marketing</SelectItem>
+                      <SelectItem value="support">Support</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Button onClick={handleSaveProfile} className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
+                <Save className="mr-2 h-4 w-4" />
+                Save Changes
+              </Button>
+            </div>
           </motion.div>
         </TabsContent>
 
@@ -139,23 +140,21 @@ export function SettingsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
+            className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
           >
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Bell className="mr-2 h-5 w-5" />
-                  Notification Preferences
-                </CardTitle>
-                <CardDescription>
-                  Choose how you want to be notified about important updates
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1 flex items-center">
+                <Bell className="mr-2 h-5 w-5 text-primary" />
+                Notification Preferences
+              </h3>
+              <p className="text-sm text-slate-500">Choose how you want to be notified about important updates</p>
+            </div>
+            <div className="space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <Label htmlFor="email-notifications">Email Notifications</Label>
-                      <p className="text-sm text-muted-foreground">
+                      <Label htmlFor="email-notifications" className="text-sm font-medium text-slate-900">Email Notifications</Label>
+                      <p className="text-sm text-slate-500">
                         Receive updates about your training progress
                       </p>
                     </div>
@@ -170,8 +169,8 @@ export function SettingsPage() {
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <Label htmlFor="push-notifications">Push Notifications</Label>
-                      <p className="text-sm text-muted-foreground">
+                      <Label htmlFor="push-notifications" className="text-sm font-medium text-slate-900">Push Notifications</Label>
+                      <p className="text-sm text-slate-500">
                         Get notified about new scenarios and reviews
                       </p>
                     </div>
@@ -186,8 +185,8 @@ export function SettingsPage() {
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <Label htmlFor="sms-notifications">SMS Notifications</Label>
-                      <p className="text-sm text-muted-foreground">
+                      <Label htmlFor="sms-notifications" className="text-sm font-medium text-slate-900">SMS Notifications</Label>
+                      <p className="text-sm text-slate-500">
                         Urgent notifications via text message
                       </p>
                     </div>
@@ -201,12 +200,11 @@ export function SettingsPage() {
                   </div>
                 </div>
 
-                <Button onClick={handleSaveNotifications}>
+                <Button onClick={handleSaveNotifications} className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
                   <Save className="mr-2 h-4 w-4" />
                   Save Preferences
                 </Button>
-              </CardContent>
-            </Card>
+            </div>
           </motion.div>
         </TabsContent>
 
@@ -215,22 +213,20 @@ export function SettingsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
+            className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
           >
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Shield className="mr-2 h-5 w-5" />
-                  Training Preferences
-                </CardTitle>
-                <CardDescription>
-                  Customize your training experience
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1 flex items-center">
+                <Shield className="mr-2 h-5 w-5 text-primary" />
+                Training Preferences
+              </h3>
+              <p className="text-sm text-slate-500">Customize your training experience</p>
+            </div>
+            <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <Label htmlFor="auto-save">Auto-save Scenarios</Label>
-                    <p className="text-sm text-muted-foreground">
+                    <Label htmlFor="auto-save" className="text-sm font-medium text-slate-900">Auto-save Scenarios</Label>
+                    <p className="text-sm text-slate-500">
                       Automatically save your scenario progress
                     </p>
                   </div>
@@ -245,8 +241,8 @@ export function SettingsPage() {
 
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <Label htmlFor="subtitles">Show Subtitles by Default</Label>
-                    <p className="text-sm text-muted-foreground">
+                    <Label htmlFor="subtitles" className="text-sm font-medium text-slate-900">Show Subtitles by Default</Label>
+                    <p className="text-sm text-slate-500">
                       Display subtitles during voice simulations
                     </p>
                   </div>
@@ -260,16 +256,16 @@ export function SettingsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Voice Volume</Label>
+                  <Label className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Voice Volume</Label>
                   <div className="flex items-center space-x-4">
-                    <Volume2 className="h-4 w-4" />
+                    <Volume2 className="h-4 w-4 text-slate-400" />
                     <Select 
                       value={preferences.voiceVolume} 
                       onValueChange={(value) => 
                         setPreferences(prev => ({ ...prev, voiceVolume: value }))
                       }
                     >
-                      <SelectTrigger className="w-32">
+                      <SelectTrigger className="w-32 border-slate-200 focus:ring-primary">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -283,12 +279,11 @@ export function SettingsPage() {
                   </div>
                 </div>
 
-                <Button>
+                <Button className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
                   <Save className="mr-2 h-4 w-4" />
                   Save Preferences
                 </Button>
-              </CardContent>
-            </Card>
+            </div>
           </motion.div>
         </TabsContent>
 
@@ -297,22 +292,20 @@ export function SettingsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
+            className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
           >
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Palette className="mr-2 h-5 w-5" />
-                  Appearance Settings
-                </CardTitle>
-                <CardDescription>
-                  Customize the look and feel of your interface
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1 flex items-center">
+                <Palette className="mr-2 h-5 w-5 text-primary" />
+                Appearance Settings
+              </h3>
+              <p className="text-sm text-slate-500">Customize the look and feel of your interface</p>
+            </div>
+            <div className="space-y-6">
                 <div className="space-y-2">
-                  <Label>Theme</Label>
+                  <Label className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Theme</Label>
                   <Select value={theme} onValueChange={setTheme}>
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-48 border-slate-200 focus:ring-primary">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -321,28 +314,27 @@ export function SettingsPage() {
                       <SelectItem value="system">System</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-slate-500">
                     Choose your preferred color scheme
                   </p>
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="font-medium">Preview</h4>
-                  <div className="p-4 border rounded-lg bg-card">
+                  <h4 className="font-medium text-slate-900">Preview</h4>
+                  <div className="p-4 border border-slate-200 rounded-lg bg-white">
                     <div className="flex items-center space-x-4 mb-4">
                       <div className="w-12 h-12 bg-primary rounded-full"></div>
                       <div>
-                        <h5 className="font-medium">Sample Card</h5>
-                        <p className="text-sm text-muted-foreground">
+                        <h5 className="font-medium text-slate-900">Sample Card</h5>
+                        <p className="text-sm text-slate-500">
                           This is how your interface will look
                         </p>
                       </div>
                     </div>
-                    <Button size="sm">Sample Button</Button>
+                    <Button size="sm" className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium">Sample Button</Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
           </motion.div>
         </TabsContent>
       </Tabs>

@@ -38,39 +38,41 @@ export function AdminPanel() {
   const [autoApproval, setAutoApproval] = useState(false)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Compressed Hero Bar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] px-6 py-4 h-20"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Admin Panel</h1>
-            <p className="text-muted-foreground mt-2">
-              Manage team performance, scenarios, and system settings
-            </p>
-          </div>
-          <div className="flex space-x-2">
-            <Button variant="outline">
-              <Download className="mr-2 h-4 w-4" />
-              Export Data
-            </Button>
-            <Button>
-              <Settings className="mr-2 h-4 w-4" />
-              System Settings
-            </Button>
-          </div>
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Admin Panel</h1>
+          <p className="text-sm text-slate-500">
+            Manage team performance, scenarios, and system settings
+          </p>
+        </div>
+        <div className="flex space-x-2">
+          <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50">
+            <Download className="mr-2 h-4 w-4" />
+            Export Data
+          </Button>
+          <Button className="bg-primary hover:bg-primary/90 text-white">
+            <Settings className="mr-2 h-4 w-4" />
+            System Settings
+          </Button>
         </div>
       </motion.div>
 
       <Tabs defaultValue="leaderboard" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
-          <TabsTrigger value="reviews">Review Queue</TabsTrigger>
-          <TabsTrigger value="scenarios">Scenario Library</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-2">
+          <TabsList className="grid w-full grid-cols-4 bg-slate-50 rounded-lg">
+            <TabsTrigger value="leaderboard" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Leaderboard</TabsTrigger>
+            <TabsTrigger value="reviews" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Review Queue</TabsTrigger>
+            <TabsTrigger value="scenarios" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Scenario Library</TabsTrigger>
+            <TabsTrigger value="settings" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Settings</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="leaderboard" className="space-y-6">
           <motion.div

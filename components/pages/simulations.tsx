@@ -40,6 +40,8 @@ import {
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { EnhancedScoring } from '@/lib/types'
+import { ReviewModal } from '@/components/ui/review-modal'
 
 interface Simulation {
   id: string
@@ -52,6 +54,7 @@ interface Simulation {
   objections_handled?: number
   cta_used?: boolean
   sentiment?: string
+  enhanced_scoring?: EnhancedScoring
 }
 
 export function Simulations() {
@@ -65,6 +68,8 @@ export function Simulations() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [simulationToDelete, setSimulationToDelete] = useState<Simulation | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
 
   // Fetch simulations
   useEffect(() => {
@@ -122,9 +127,10 @@ export function Simulations() {
       }
     })
 
-  const getScoreBadge = (score: number) => {
+  const getScoreBadge = (simulation: Simulation) => {
+    const score = simulation.enhanced_scoring?.overallScore || simulation.score;
     if (score >= 90) return <Badge className="bg-green-500">Excellent</Badge>
-    if (score >= 80) return <Badge className="bg-teal-500">Good</Badge>
+    if (score >= 80) return <Badge className="bg-primary">Good</Badge>
     if (score >= 70) return <Badge className="bg-yellow-500">Fair</Badge>
     return <Badge variant="destructive">Needs Work</Badge>
   }
@@ -136,7 +142,8 @@ export function Simulations() {
   }
 
   const handleSimulationClick = (simulationId: string) => {
-    router.push(`/review?callId=${simulationId}`)
+    setSelectedCallId(simulationId)
+    setReviewModalOpen(true)
   }
 
   const handleDeleteClick = (e: React.MouseEvent, simulation: Simulation) => {
@@ -181,23 +188,22 @@ export function Simulations() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Compressed Hero Bar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] px-6 py-4 h-20"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">All Simulations</h1>
-            <p className="text-muted-foreground mt-2">
-              Review and analyze your training sessions
-            </p>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold">{simulations.length}</div>
-            <div className="text-sm text-muted-foreground">Total Simulations</div>
-          </div>
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">All Simulations</h1>
+          <p className="text-sm text-slate-500">
+            Review and analyze your training sessions
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-semibold text-slate-900">{simulations.length}</div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Total Simulations</div>
         </div>
       </motion.div>
 
@@ -206,41 +212,59 @@ export function Simulations() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="flex flex-col sm:flex-row gap-4"
+        className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
       >
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search simulations..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+            />
+          </div>
+          
+          <div className="flex items-center space-x-3">
+            <Select value={filterScore} onValueChange={setFilterScore}>
+              <SelectTrigger className="w-full sm:w-48 rounded-full border-slate-200 px-4 py-2 focus:ring-primary bg-slate-50 hover:bg-slate-100">
+                <Filter className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="Filter by score" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Scores</SelectItem>
+                <SelectItem value="high">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                    <span>Excellent (90+)</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="medium">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-primary rounded-full"></div>
+                    <span>Good (70-89)</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="low">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                    <span>Needs Work (&lt;70)</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-full sm:w-48 rounded-full border-slate-200 px-4 py-2 focus:ring-primary bg-slate-50 hover:bg-slate-100">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Date (Newest)</SelectItem>
+                <SelectItem value="score">Score (Highest)</SelectItem>
+                <SelectItem value="duration">Duration (Longest)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        
-        <Select value={filterScore} onValueChange={setFilterScore}>
-          <SelectTrigger className="w-full sm:w-48">
-            <Filter className="mr-2 h-4 w-4" />
-            <SelectValue placeholder="Filter by score" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Scores</SelectItem>
-            <SelectItem value="high">High (90+)</SelectItem>
-            <SelectItem value="medium">Medium (70-89)</SelectItem>
-            <SelectItem value="low">Low (&lt;70)</SelectItem>
-          </SelectContent>
-        </Select>
-        
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-full sm:w-48">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="date">Date (Newest)</SelectItem>
-            <SelectItem value="score">Score (Highest)</SelectItem>
-            <SelectItem value="duration">Duration (Longest)</SelectItem>
-          </SelectContent>
-        </Select>
       </motion.div>
 
       {/* Simulations Grid */}
@@ -251,21 +275,27 @@ export function Simulations() {
         className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
       >
         {filteredSimulations.length === 0 ? (
-          <div className="col-span-full text-center py-12">
-            <Phone className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No simulations found</h3>
-            <p className="text-muted-foreground mb-4">
-              {searchTerm || filterScore !== 'all' 
-                ? 'Try adjusting your search or filters'
-                : 'Start your first simulation to see it here'
-              }
-            </p>
-            <Link href="/scenario-builder">
-              <Button>
-                <Play className="mr-2 h-4 w-4" />
-                Start New Simulation
-              </Button>
-            </Link>
+          <div className="col-span-full">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-12">
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                  <Phone className="h-8 w-8 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">No simulations found</h3>
+                <p className="text-slate-500 text-center mb-6 max-w-md">
+                  {searchTerm || filterScore !== 'all' 
+                    ? 'Try adjusting your search or filters'
+                    : 'Start your first simulation to see it here'
+                  }
+                </p>
+                <Link href="/scenario-builder">
+                  <Button className="bg-primary hover:bg-primary/90 text-white">
+                    <Play className="mr-2 h-4 w-4" />
+                    Start New Simulation
+                  </Button>
+                </Link>
+              </div>
+            </div>
           </div>
         ) : (
           filteredSimulations.map((simulation, index) => (
@@ -275,114 +305,154 @@ export function Simulations() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.1 * index }}
             >
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-[1.02]"
+              <div 
+                className="cursor-pointer bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5 p-6"
                 onClick={() => handleSimulationClick(simulation.id)}
               >
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg line-clamp-2">
-                        {simulation.scenario_name}
-                      </CardTitle>
-                      <CardDescription className="mt-2">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="h-4 w-4" />
-                          <span>{new Date(simulation.created_at).toLocaleDateString()}</span>
-                        </div>
-                      </CardDescription>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                    <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Phone className="h-6 w-6 text-primary" />
                     </div>
-                    <div className="flex flex-col items-end space-y-2">
-                      <div className="flex items-center space-x-2">
-                        {getScoreBadge(simulation.score)}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              className="text-red-600 focus:text-red-600"
-                              onClick={(e) => handleDeleteClick(e, simulation)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg font-semibold text-slate-900 truncate mb-2">
+                        {simulation.scenario_name}
+                      </h3>
+                      <div className="flex items-center space-x-2 text-xs text-slate-500">
+                        <Calendar className="h-3 w-3" />
+                        <span>{new Date(simulation.created_at).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <Clock className="h-3 w-3" />
+                        <span>{formatDuration(simulation.duration)}</span>
                       </div>
-                      {simulation.audio_url && (
-                        <Badge variant="outline" className="text-xs">
-                          <Play className="mr-1 h-3 w-3" />
-                          Audio
-                        </Badge>
-                      )}
                     </div>
                   </div>
-                </CardHeader>
+                  <div className="flex flex-col items-end space-y-2 flex-shrink-0 ml-4">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          className="text-red-600 focus:text-red-600"
+                          onClick={(e) => handleDeleteClick(e, simulation)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
                 
-                <CardContent className="space-y-4">
-                  {/* Score and Duration */}
+                <div className="space-y-4">
+                  {/* Score Display */}
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Target className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-2xl font-bold">{simulation.score}/100</span>
+                    <div className="flex items-center space-x-3">
+                      <div className="text-center">
+                        <div className="text-3xl font-semibold text-slate-900 mb-1">
+                          {simulation.enhanced_scoring?.overallScore || simulation.score}
+                        </div>
+                        <div className="text-xs text-slate-500 uppercase tracking-wide font-medium">Score</div>
+                      </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{formatDuration(simulation.duration)}</span>
+                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                        (simulation.enhanced_scoring?.overallScore || simulation.score) >= 90 
+                          ? 'bg-emerald-50 text-emerald-700' 
+                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 80 
+                          ? 'bg-primary/10 text-primary' 
+                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 70 
+                          ? 'bg-amber-50 text-amber-700' 
+                          : 'bg-red-50 text-red-700'
+                      }`}>
+                        {(simulation.enhanced_scoring?.overallScore || simulation.score) >= 90 
+                          ? 'Excellent' 
+                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 80 
+                          ? 'Good' 
+                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 70 
+                          ? 'Fair' 
+                          : 'Needs Work'}
+                      </span>
+                      {simulation.audio_url && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
 
                   {/* Progress Bar */}
-                  <div className="w-full bg-muted rounded-full h-2">
+                  <div className="w-full bg-slate-100 rounded-full h-2">
                     <div 
-                      className="bg-primary h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${simulation.score}%` }}
+                      className="h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${simulation.enhanced_scoring?.overallScore || simulation.score}%`,
+                        backgroundColor: (simulation.enhanced_scoring?.overallScore || simulation.score) >= 90 
+                          ? '#10b981' 
+                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 80
+                          ? '#048998'
+                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 70 
+                          ? '#f59e0b'
+                          : '#ef4444'
+                      }}
                     />
                   </div>
 
-                  {/* Quick Stats */}
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <div className="text-muted-foreground">Talk Ratio</div>
-                      <div className="font-medium">
-                        {simulation.talk_ratio ? `${simulation.talk_ratio}%` : 'N/A'}
+                  {/* Additional metrics if available */}
+                  {(simulation.talk_ratio || simulation.objections_handled !== undefined || simulation.cta_used !== undefined) && (
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <div className="flex items-center space-x-4 text-xs text-slate-500">
+                        {simulation.talk_ratio && (
+                          <div className="flex items-center space-x-1">
+                            <span>Talk Ratio:</span>
+                            <span className="font-medium">{Math.round(simulation.talk_ratio * 100)}%</span>
+                          </div>
+                        )}
+                        {simulation.objections_handled !== undefined && (
+                          <div className="flex items-center space-x-1">
+                            <span>Objections:</span>
+                            <span className="font-medium">{simulation.objections_handled}</span>
+                          </div>
+                        )}
+                        {simulation.cta_used !== undefined && (
+                          <div className={`flex items-center space-x-1 ${simulation.cta_used ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            <span>CTA:</span>
+                            <span className="font-medium">{simulation.cta_used ? 'Yes' : 'No'}</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Areas for Improvement</div>
-                      <div className="font-medium">
-                        {simulation.objections_handled || 0}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* CTA Status */}
-                  {simulation.cta_used !== undefined && (
-                    <div className="flex items-center space-x-2">
-                      {simulation.cta_used ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <Clock className="h-4 w-4 text-yellow-500" />
-                      )}
-                      <span className="text-sm">
-                        {simulation.cta_used ? 'CTA Used' : 'No CTA'}
-                      </span>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </motion.div>
           ))
         )}
       </motion.div>
+
+      {/* Review Modal */}
+      <ReviewModal
+        isOpen={reviewModalOpen}
+        onClose={() => {
+          setReviewModalOpen(false)
+          setSelectedCallId(null)
+        }}
+        callId={selectedCallId}
+        title={selectedCallId ? simulations.find(s => s.id === selectedCallId)?.scenario_name : undefined}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

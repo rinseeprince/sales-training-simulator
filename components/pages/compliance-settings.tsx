@@ -26,23 +26,23 @@ export function ComplianceSettings() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Compressed Hero Bar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] px-6 py-4 h-20"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Compliance Settings</h1>
-            <p className="text-muted-foreground mt-2">
-              Manage data privacy, GDPR compliance, and user consent settings
-            </p>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Shield className="h-5 w-5 text-green-500" />
-            <span className="text-sm font-medium text-green-600">Compliant</span>
-          </div>
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Compliance Settings</h1>
+          <p className="text-sm text-slate-500">
+            Manage data privacy, GDPR compliance, and user consent settings
+          </p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Shield className="h-5 w-5 text-emerald-500" />
+          <span className="text-sm font-medium text-emerald-600">Compliant</span>
         </div>
       </motion.div>
 
@@ -225,7 +225,7 @@ export function ComplianceSettings() {
                 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <Clock className="h-4 w-4 text-teal-500" />
+                    <Clock className="h-4 w-4 text-primary" />
                     <span className="text-sm">Data Retention</span>
                   </div>
                   <Badge variant="outline">
