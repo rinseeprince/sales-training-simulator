@@ -74,40 +74,40 @@ export function Homepage() {
           <Button 
             variant="ghost" 
             size="sm" 
-            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2'} text-muted-foreground hover:text-foreground hover:bg-muted`}
+            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2.5'} py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-normal`}
             onClick={() => router.push('/pricing')}
           >
-            <DollarSign className="w-4 h-4" />
+            <DollarSign className="h-4 w-4 stroke-[1.5]" />
             {sidebarOpen && <span className="ml-3">Pricing</span>}
           </Button>
           
           <Button 
             variant="ghost" 
             size="sm" 
-            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2'} text-muted-foreground hover:text-foreground hover:bg-muted`}
+            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2.5'} py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-normal`}
             onClick={handleAdminPanelClick}
           >
-            <User className="w-4 h-4" />
+            <User className="h-4 w-4 stroke-[1.5]" />
             {sidebarOpen && <span className="ml-3">Admin Panel</span>}
           </Button>
           
           <Button 
             variant="ghost" 
             size="sm" 
-            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2'} text-muted-foreground hover:text-foreground hover:bg-muted`}
+            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2.5'} py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-normal`}
             onClick={() => router.push('/compliance')}
           >
-            <Shield className="w-4 h-4" />
+            <Shield className="h-4 w-4 stroke-[1.5]" />
             {sidebarOpen && <span className="ml-3">Compliance</span>}
           </Button>
           
           <Button 
             variant="ghost" 
             size="sm" 
-            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2'} text-muted-foreground hover:text-foreground hover:bg-muted`}
+            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2.5'} py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-normal`}
             onClick={() => router.push('/settings')}
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="h-4 w-4 stroke-[1.5]" />
             {sidebarOpen && <span className="ml-3">Settings</span>}
           </Button>
         </nav>
@@ -117,19 +117,19 @@ export function Homepage() {
           <Button 
             variant="ghost" 
             size="sm" 
-            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2'} text-muted-foreground hover:text-foreground hover:bg-muted`}
+            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2.5'} py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-normal`}
             onClick={() => router.push('/auth/signin')}
           >
-            <LogIn className="w-4 h-4" />
+            <LogIn className="h-4 w-4 stroke-[1.5]" />
             {sidebarOpen && <span className="ml-3">Sign In</span>}
           </Button>
           <Button 
             variant="ghost" 
             size="sm" 
-            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2'} text-muted-foreground hover:text-foreground hover:bg-muted`}
+            className={`w-full justify-start ${sidebarOpen ? 'px-3' : 'px-2.5'} py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-normal`}
             onClick={() => router.push('/auth/signup')}
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="h-4 w-4 stroke-[1.5]" />
             {sidebarOpen && <span className="ml-3">Sign Up</span>}
           </Button>
         </div>
@@ -142,10 +142,10 @@ export function Homepage() {
           <div className="max-w-2xl w-full text-center space-y-8">
             {/* Hero Section */}
             <div className="space-y-4">
-              <h1 className="text-4xl font-bold text-foreground">
+              <h1 className="text-3xl font-semibold text-slate-900">
                 What's on the agenda today?
               </h1>
-              <p className="text-lg text-muted-foreground">
+              <p className="text-base font-medium text-slate-600">
                 Practice your sales skills with AI-powered roleplays
               </p>
             </div>
