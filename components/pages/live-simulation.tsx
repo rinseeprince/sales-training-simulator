@@ -1093,7 +1093,7 @@ export function LiveSimulation() {
                       <Button
                         onClick={handleStartUserRecording}
                         disabled={isAISpeaking}
-                        className="flex items-center space-x-2 rounded-2xl bg-primary hover:bg-primary/90 text-white shadow-sm"
+                        className="flex items-center space-x-2 rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-3 font-medium"
                         size="lg"
                       >
                         <Mic className="h-4 w-4" />
