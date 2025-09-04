@@ -61,8 +61,15 @@ export default function RootLayout({
                       if (!closedCleanly) {
                         console.log('🧹 Detected unclean session closure, cleaning up...');
                         
-                        // Clear potentially corrupted session data
-                        sessionStorage.clear();
+                        // FIXED: Clear only specific sessionStorage keys, NOT all sessionStorage
+                        // This preserves Supabase auth tokens that might be in sessionStorage
+                        const sessionTempKeys = ['temp_call_', 'scenario_builder_', 'simulation_state', 'tab_id', 'app_session_state'];
+                        Object.keys(sessionStorage).forEach(key => {
+                          if (sessionTempKeys.some(prefix => key.startsWith(prefix))) {
+                            sessionStorage.removeItem(key);
+                            console.log('🗑️ Cleared stale session data:', key);
+                          }
+                        });
                         
                         // Clear temporary localStorage entries
                         const tempKeys = ['temp_call_', 'currentScenario', 'scenario_builder_', 'simulation_state'];
@@ -97,7 +104,14 @@ export default function RootLayout({
                   setupUnloadHandling: function() {
                     const cleanup = () => {
                       try {
-                        sessionStorage.clear();
+                        // FIXED: Clear only specific sessionStorage keys, NOT all sessionStorage
+                        // This preserves Supabase auth tokens
+                        const sessionTempKeys = ['temp_call_', 'scenario_builder_', 'simulation_state', 'tab_id', 'app_session_state'];
+                        Object.keys(sessionStorage).forEach(key => {
+                          if (sessionTempKeys.some(prefix => key.startsWith(prefix))) {
+                            sessionStorage.removeItem(key);
+                          }
+                        });
                         const tempKeys = ['temp_call_', 'currentScenario', 'scenario_builder_', 'simulation_state'];
                         Object.keys(localStorage).forEach(key => {
                           if (tempKeys.some(prefix => key.startsWith(prefix))) {

@@ -504,10 +504,17 @@ export function SettingsPage() {
                         <Button
                           onClick={async () => {
                             if (confirm('Fix session issues will clean up corrupted session data. Continue?')) {
-                              // Inline session cleanup
+                              // Inline session cleanup (FIXED to preserve Supabase auth)
                               try {
                                 const tempKeys = ['temp_call_', 'currentScenario', 'scenario_builder_', 'simulation_state'];
-                                sessionStorage.clear();
+                                const sessionTempKeys = ['temp_call_', 'scenario_builder_', 'simulation_state', 'tab_id', 'app_session_state'];
+                                
+                                // Clear only specific sessionStorage keys, preserve Supabase auth
+                                Object.keys(sessionStorage).forEach(key => {
+                                  if (sessionTempKeys.some(prefix => key.startsWith(prefix))) {
+                                    sessionStorage.removeItem(key);
+                                  }
+                                });
                                 Object.keys(localStorage).forEach(key => {
                                   if (tempKeys.some(prefix => key.startsWith(prefix))) {
                                     localStorage.removeItem(key);
