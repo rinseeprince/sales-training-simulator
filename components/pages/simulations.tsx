@@ -418,7 +418,7 @@ export function Simulations() {
                         {simulation.talk_ratio && (
                           <div className="flex items-center space-x-1">
                             <span>Talk Ratio:</span>
-                            <span className="font-medium">{Math.round(simulation.talk_ratio * 100)}%</span>
+                            <span className="font-medium">{Math.round(simulation.talk_ratio)}%</span>
                           </div>
                         )}
                         {simulation.objections_handled !== undefined && (
