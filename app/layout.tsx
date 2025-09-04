@@ -36,32 +36,69 @@ export default function RootLayout({
           </SupabaseAuthProvider>
         </ThemeProvider>
         
-        {/* Cache clearing script for existing users */}
+        {/* Smart cache management script */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Clear old caches on load to prevent stale content
+              // Smart cache initialization
               (function() {
-                if ('caches' in window) {
-                  caches.keys().then(function(names) {
-                    names.forEach(function(name) {
-                      if (name.includes('repscore') || name.includes('next')) {
-                        caches.delete(name);
+                // Only clear caches if we detect a version mismatch
+                const checkVersion = async () => {
+                  try {
+                    const response = await fetch('/api/version', { cache: 'no-cache' });
+                    if (response.ok) {
+                      const server = await response.json();
+                      const stored = localStorage.getItem('app_cache_version');
+                      
+                      if (!stored) {
+                        localStorage.setItem('app_cache_version', JSON.stringify(server));
+                        return;
                       }
-                    });
-                  }).catch(function(err) {
-                    console.warn('Cache cleanup failed:', err);
-                  });
-                }
+                      
+                      const current = JSON.parse(stored);
+                      if (current.version !== server.version || current.buildTime !== server.buildTime) {
+                        console.log('🔄 Version change detected, clearing caches...');
+                        
+                        // Clear only app caches
+                        if ('caches' in window) {
+                          caches.keys().then(names => {
+                            names.forEach(name => {
+                              if (name.includes('next') || name.includes('static') || name.includes('repscore')) {
+                                caches.delete(name);
+                              }
+                            });
+                          });
+                        }
+                        
+                        // Clear temporary session data only
+                        const tempKeys = ['temp_call_', 'currentScenario', 'scenario_builder_', 'simulation_state'];
+                        Object.keys(sessionStorage).forEach(key => {
+                          if (tempKeys.some(prefix => key.startsWith(prefix))) {
+                            sessionStorage.removeItem(key);
+                          }
+                        });
+                        
+                        localStorage.setItem('app_cache_version', JSON.stringify(server));
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('Version check failed:', e);
+                  }
+                };
                 
-                // Clear old localStorage entries that might cause issues
-                try {
-                  const oldKeys = ['old-auth-token', 'cached-scenarios', 'app-state'];
-                  oldKeys.forEach(function(key) {
-                    localStorage.removeItem(key);
+                checkVersion();
+                
+                // Initialize cache manager when DOM is ready
+                if (document.readyState === 'loading') {
+                  document.addEventListener('DOMContentLoaded', () => {
+                    import('/lib/cache-manager.js').then(module => {
+                      module.CacheManager.initialize();
+                    }).catch(e => console.warn('Cache manager init failed:', e));
                   });
-                } catch (err) {
-                  console.warn('localStorage cleanup failed:', err);
+                } else {
+                  import('/lib/cache-manager.js').then(module => {
+                    module.CacheManager.initialize();
+                  }).catch(e => console.warn('Cache manager init failed:', e));
                 }
               })();
             `,

@@ -14,6 +14,7 @@ import { User, Bell, Shield, Palette, Save, Upload, MessageSquare, Volume2, Refr
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useTheme } from 'next-themes'
 import { clearAllCache, clearAuthState, forceAppRefresh, clearUserData, emergencyLogout } from '@/lib/auth-cleanup'
+import { CacheManager } from '@/lib/cache-manager'
 import { checkForUpdates, APP_VERSION } from '@/lib/version-check'
 import { toast } from '@/components/ui/use-toast'
 
@@ -500,6 +501,19 @@ export function SettingsPage() {
                         These actions cannot be undone and will affect your account data.
                       </p>
                       <div className="space-y-2">
+                        <Button
+                          onClick={async () => {
+                            if (confirm('Force refresh will clear all app cache and reload. Continue?')) {
+                              await CacheManager.forceRefresh();
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="border-blue-300 text-blue-700 hover:bg-blue-50 mr-2"
+                        >
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Force App Refresh
+                        </Button>
                         <Button
                           onClick={async () => {
                             if (confirm('Emergency logout will force sign you out and clear all auth data. Continue?')) {
