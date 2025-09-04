@@ -36,13 +36,31 @@ export default function RootLayout({
           </SupabaseAuthProvider>
         </ThemeProvider>
         
-        {/* Smart cache management script */}
+        {/* Session management and smart cache initialization */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Smart cache initialization
+              // Initialize session and cache management
               (function() {
-                // Only clear caches if we detect a version mismatch
+                console.log('🚀 Starting app initialization...');
+                
+                // Initialize session manager first (handles tab close issues)
+                const initSessionManager = () => {
+                  import('/lib/session-manager.js').then(module => {
+                    module.SessionManager.initialize();
+                    console.log('✅ Session manager initialized');
+                  }).catch(e => console.warn('Session manager init failed:', e));
+                };
+                
+                // Initialize cache manager (handles version updates)
+                const initCacheManager = () => {
+                  import('/lib/cache-manager.js').then(module => {
+                    module.CacheManager.initialize();
+                    console.log('✅ Cache manager initialized');
+                  }).catch(e => console.warn('Cache manager init failed:', e));
+                };
+                
+                // Smart version checking (only when needed)
                 const checkVersion = async () => {
                   try {
                     const response = await fetch('/api/version', { cache: 'no-cache' });
@@ -59,24 +77,16 @@ export default function RootLayout({
                       if (current.version !== server.version || current.buildTime !== server.buildTime) {
                         console.log('🔄 Version change detected, clearing caches...');
                         
-                        // Clear only app caches
+                        // Clear only app caches (not aggressive)
                         if ('caches' in window) {
                           caches.keys().then(names => {
                             names.forEach(name => {
-                              if (name.includes('next') || name.includes('static') || name.includes('repscore')) {
+                              if (name.includes('next') || name.includes('static')) {
                                 caches.delete(name);
                               }
                             });
                           });
                         }
-                        
-                        // Clear temporary session data only
-                        const tempKeys = ['temp_call_', 'currentScenario', 'scenario_builder_', 'simulation_state'];
-                        Object.keys(sessionStorage).forEach(key => {
-                          if (tempKeys.some(prefix => key.startsWith(prefix))) {
-                            sessionStorage.removeItem(key);
-                          }
-                        });
                         
                         localStorage.setItem('app_cache_version', JSON.stringify(server));
                       }
@@ -86,19 +96,17 @@ export default function RootLayout({
                   }
                 };
                 
-                checkVersion();
-                
-                // Initialize cache manager when DOM is ready
+                // Initialize everything
                 if (document.readyState === 'loading') {
                   document.addEventListener('DOMContentLoaded', () => {
-                    import('/lib/cache-manager.js').then(module => {
-                      module.CacheManager.initialize();
-                    }).catch(e => console.warn('Cache manager init failed:', e));
+                    initSessionManager();
+                    initCacheManager();
+                    checkVersion();
                   });
                 } else {
-                  import('/lib/cache-manager.js').then(module => {
-                    module.CacheManager.initialize();
-                  }).catch(e => console.warn('Cache manager init failed:', e));
+                  initSessionManager();
+                  initCacheManager(); 
+                  checkVersion();
                 }
               })();
             `,

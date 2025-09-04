@@ -131,35 +131,23 @@ export class CacheManager {
 
   /**
    * Clear only application-related caches, preserve user data
+   * Simplified to be less aggressive
    */
   private static async clearApplicationCache(): Promise<void> {
     try {
-      // Clear browser caches
+      // Only clear static asset caches (less aggressive)
       if ('caches' in window) {
         const cacheNames = await caches.keys();
-        const appCaches = cacheNames.filter(name => 
-          name.includes('next') || 
-          name.includes('static') || 
-          name.includes('repscore')
+        const staticCaches = cacheNames.filter(name => 
+          name.includes('static') && !name.includes('user')
         );
         
-        await Promise.all(appCaches.map(name => caches.delete(name)));
-        console.log('🗑️ Cleared application caches:', appCaches);
+        await Promise.all(staticCaches.map(name => caches.delete(name)));
+        console.log('🗑️ Cleared static caches:', staticCaches);
       }
       
-      // Clear only stale session data, preserve user preferences
-      const keysToRemove = [
-        'temp_call_',
-        'currentScenario',
-        'scenario_builder_',
-        'simulation_state'
-      ];
-      
-      Object.keys(sessionStorage).forEach(key => {
-        if (keysToRemove.some(prefix => key.startsWith(prefix))) {
-          sessionStorage.removeItem(key);
-        }
-      });
+      // Don't clear session storage here - let SessionManager handle it
+      console.log('ℹ️ Session cleanup delegated to SessionManager');
       
     } catch (error) {
       console.warn('Cache clearing failed:', error);

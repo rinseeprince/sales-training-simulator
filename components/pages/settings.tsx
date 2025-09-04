@@ -15,6 +15,7 @@ import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useTheme } from 'next-themes'
 import { clearAllCache, clearAuthState, forceAppRefresh, clearUserData, emergencyLogout } from '@/lib/auth-cleanup'
 import { CacheManager } from '@/lib/cache-manager'
+import { SessionManager } from '@/lib/session-manager'
 import { checkForUpdates, APP_VERSION } from '@/lib/version-check'
 import { toast } from '@/components/ui/use-toast'
 
@@ -503,6 +504,19 @@ export function SettingsPage() {
                       <div className="space-y-2">
                         <Button
                           onClick={async () => {
+                            if (confirm('Fix session issues will clean up corrupted session data. Continue?')) {
+                              SessionManager.forceCleanup();
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="border-green-300 text-green-700 hover:bg-green-50 mr-2"
+                        >
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Fix Session Issues
+                        </Button>
+                        <Button
+                          onClick={async () => {
                             if (confirm('Force refresh will clear all app cache and reload. Continue?')) {
                               await CacheManager.forceRefresh();
                             }
@@ -561,10 +575,11 @@ export function SettingsPage() {
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <h4 className="font-medium text-blue-900 mb-2">Troubleshooting Tips</h4>
                 <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• If the app won't load, try clearing cache first</li>
-                  <li>• Use force refresh if you're seeing old content</li>
-                  <li>• Check for updates if features seem broken</li>
-                  <li>• Clear all data as a last resort for persistent issues</li>
+                  <li>• <strong>App won't load after closing tab?</strong> Use "Fix Session Issues"</li>
+                  <li>• <strong>Seeing old content?</strong> Try "Force App Refresh"</li>
+                  <li>• <strong>Features seem broken?</strong> Check for updates first</li>
+                  <li>• <strong>Still having issues?</strong> Use "Emergency Logout" as last resort</li>
+                  <li>• <strong>Pro tip:</strong> Always logout properly to prevent session issues</li>
                 </ul>
               </div>
             </div>
