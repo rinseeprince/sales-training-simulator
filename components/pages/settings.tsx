@@ -15,7 +15,6 @@ import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useTheme } from 'next-themes'
 import { clearAllCache, clearAuthState, forceAppRefresh, clearUserData, emergencyLogout } from '@/lib/auth-cleanup'
 import { CacheManager } from '@/lib/cache-manager'
-import { SessionManager } from '@/lib/session-manager'
 import { checkForUpdates, APP_VERSION } from '@/lib/version-check'
 import { toast } from '@/components/ui/use-toast'
 
@@ -505,7 +504,40 @@ export function SettingsPage() {
                         <Button
                           onClick={async () => {
                             if (confirm('Fix session issues will clean up corrupted session data. Continue?')) {
-                              SessionManager.forceCleanup();
+                              // Inline session cleanup
+                              try {
+                                const tempKeys = ['temp_call_', 'currentScenario', 'scenario_builder_', 'simulation_state'];
+                                sessionStorage.clear();
+                                Object.keys(localStorage).forEach(key => {
+                                  if (tempKeys.some(prefix => key.startsWith(prefix))) {
+                                    localStorage.removeItem(key);
+                                  }
+                                });
+                                
+                                if ('caches' in window) {
+                                  caches.keys().then(names => {
+                                    names.forEach(name => {
+                                      if (name.includes('next') || name.includes('static')) {
+                                        caches.delete(name);
+                                      }
+                                    });
+                                  });
+                                }
+                                
+                                toast({
+                                  title: "Session Fixed",
+                                  description: "Corrupted session data has been cleared.",
+                                });
+                                
+                                setTimeout(() => window.location.reload(), 1000);
+                              } catch (error) {
+                                console.error('Session cleanup failed:', error);
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to clean session data.",
+                                  variant: "destructive",
+                                });
+                              }
                             }
                           }}
                           variant="outline"
