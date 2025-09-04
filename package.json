@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
-    "dev": "next dev",
+    "build": "NEXT_PUBLIC_APP_VERSION=$npm_package_version BUILD_TIME=$(date -u +\"%Y-%m-%dT%H:%M:%SZ\") next build",
+    "dev": "NEXT_PUBLIC_APP_VERSION=$npm_package_version next dev",
     "lint": "next lint",
     "start": "next start"
   },

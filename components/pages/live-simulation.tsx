@@ -1299,14 +1299,28 @@ export function LiveSimulation() {
         onClose={() => {
           setReviewModalOpen(false)
           setReviewCallId(null)
-          // Reset simulation state and redirect to scenario builder
+          // Reset simulation state and redirect to dashboard
           setIsProcessingEndCall(false)
           setAnalysisProgress('')
           // Clean up any temporary call data
           if (reviewCallId) {
             sessionStorage.removeItem(`temp_call_${reviewCallId}`)
           }
-          router.push('/scenario-builder')
+          
+          // Clear scenario data to prevent simulation page from redirecting
+          localStorage.removeItem('currentScenario')
+          
+          // Use setTimeout to ensure modal closes first, then navigate
+          setTimeout(() => {
+            console.log('🏠 Redirecting to dashboard after call completion')
+            // Try router first, fallback to window.location if needed
+            try {
+              router.push('/dashboard')
+            } catch (error) {
+              console.warn('Router failed, using window.location:', error)
+              window.location.href = '/dashboard'
+            }
+          }, 100)
         }}
         callId={reviewCallId}
         title={scenarioData?.title}

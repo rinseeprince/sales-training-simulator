@@ -111,29 +111,79 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
   }, []);
 
   /**
-   * Logout function
+   * Enhanced Logout function with better error handling and cleanup
    */
   const logout = useCallback(async (): Promise<void> => {
-    try {
-      const result = await signOut();
-      console.log('Logout result:', result);
-      
-      if (result.success) {
-        setUser(null);
-        router.push('/');
-      } else {
-        console.error('Logout failed:', result.message);
-        // Still try to clear user state and redirect
-        setUser(null);
-        router.push('/');
-      }
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Still try to clear user state and redirect
-      setUser(null);
-      router.push('/');
+    // Prevent multiple concurrent logout attempts
+    if (isLoading) {
+      console.log('🚪 Logout already in progress, ignoring');
+      return;
     }
-  }, [router]);
+
+    console.log('🚪 Starting logout process...');
+    setIsLoading(true);
+    
+    try {
+      // Clear user state immediately to prevent UI flickering
+      setUser(null);
+      
+      // Attempt Supabase signout with timeout
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Logout timeout')), 5000)
+      );
+      
+      const logoutPromise = signOut();
+      
+      try {
+        const result = await Promise.race([logoutPromise, timeoutPromise]);
+        console.log('✅ Logout result:', result);
+      } catch (timeoutError) {
+        console.warn('⚠️ Logout API timeout, proceeding with local cleanup:', timeoutError);
+      }
+      
+      // Force clear all auth-related storage
+      try {
+        // Clear Supabase specific storage
+        const supabaseKeys = Object.keys(localStorage).filter(key => 
+          key.includes('supabase') || key.includes('sb-')
+        );
+        supabaseKeys.forEach(key => localStorage.removeItem(key));
+        
+        // Clear session storage
+        sessionStorage.clear();
+        
+        // Clear auth cookies
+        const authCookies = ['sb-access-token', 'sb-refresh-token'];
+        authCookies.forEach(cookie => {
+          document.cookie = `${cookie}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+        });
+      } catch (storageError) {
+        console.warn('⚠️ Storage cleanup error:', storageError);
+      }
+      
+      console.log('🔄 Redirecting to home page...');
+      
+      // Use window.location for more reliable navigation
+      window.location.href = '/';
+      
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      
+      // Even if everything fails, clear state and redirect
+      setUser(null);
+      
+      // Fallback navigation
+      try {
+        router.push('/');
+      } catch (routerError) {
+        console.error('Router failed, using window.location:', routerError);
+        window.location.href = '/';
+      }
+    } finally {
+      // Reset loading state after a delay to prevent immediate re-clicks
+      setTimeout(() => setIsLoading(false), 2000);
+    }
+  }, [router, isLoading]);
 
   /**
    * Resend verification email

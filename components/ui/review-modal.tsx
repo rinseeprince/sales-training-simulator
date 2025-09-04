@@ -35,10 +35,9 @@ export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps
       url.searchParams.set('reviewCallId', callId)
       window.history.pushState({}, '', url.toString())
     } else if (!isOpen) {
-      // Remove callId from URL when modal closes
-      const url = new URL(window.location.href)
-      url.searchParams.delete('reviewCallId')
-      window.history.replaceState({}, '', url.toString())
+      // Don't manipulate URL when closing - let parent handle navigation
+      // This prevents conflicts with router.push() calls
+      console.log('📝 Review modal closed, letting parent handle navigation')
     }
   }, [isOpen, callId])
 

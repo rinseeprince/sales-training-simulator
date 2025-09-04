@@ -40,6 +40,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }
     return true
   })
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { user, logout } = useSupabaseAuth()
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
@@ -101,13 +102,30 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="text-white/80 hover:text-white hover:bg-white/10 h-8 w-8" 
-              onClick={() => {
+              className={`text-white/80 hover:text-white hover:bg-white/10 h-8 w-8 ${
+                isLoggingOut ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              disabled={isLoggingOut}
+              onClick={async () => {
+                if (isLoggingOut) return; // Prevent multiple clicks
+                
                 console.log('Logout button clicked');
-                logout();
+                setIsLoggingOut(true);
+                
+                try {
+                  await logout();
+                } finally {
+                  // Reset after delay to prevent rapid re-clicks
+                  setTimeout(() => setIsLoggingOut(false), 2000);
+                }
               }}
+              title={isLoggingOut ? 'Signing out...' : 'Sign out'}
             >
-              <LogOut className="h-4 w-4" />
+              {isLoggingOut ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
