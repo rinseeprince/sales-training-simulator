@@ -25,7 +25,14 @@ if (!supabaseAnonKey) {
 }
 
 // Initialize Supabase client for client-side operations
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
 
 // Auth types
 export interface AuthUser {
