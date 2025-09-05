@@ -7,7 +7,7 @@ import { MainLayout } from '@/components/layout/main-layout'
 import { LiveSimulation } from '@/components/pages/live-simulation'
 
 export default function SimulationPage() {
-  const { user } = useSupabaseAuth()
+  const { user, isLoading } = useSupabaseAuth()
   const router = useRouter()
 
   // Force redirect to scenario builder - this page should only be accessed through scenario builder
@@ -38,6 +38,14 @@ export default function SimulationPage() {
       return
     }
   }, [router])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
 
   if (!user) {
     return null

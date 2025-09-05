@@ -52,6 +52,15 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
       try {
         console.log('AUTH PROVIDER: Initializing authentication...');
         
+        // First, try to restore session from Supabase
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        console.log('AUTH PROVIDER: Initial session check:', session ? 'Session found' : 'No session');
+        
+        if (session) {
+          // If we have a session, load the user immediately
+          await loadUser();
+        }
+        
         // Set up auth state listener
         const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
           async (event, session) => {
@@ -65,13 +74,18 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
             } else if (event === 'TOKEN_REFRESHED' && session?.user) {
               const user = await getCurrentUser();
               setUser(user);
+            } else if (event === 'USER_UPDATED' && session?.user) {
+              const user = await getCurrentUser();
+              setUser(user);
             }
           }
         );
 
-        // Load initial user state
-        console.log('AUTH PROVIDER: Loading initial user state...');
-        await loadUser();
+        // If no session was found, still try to load user (in case of race condition)
+        if (!session) {
+          await loadUser();
+        }
+        
         console.log('AUTH PROVIDER: Setting isLoading to false');
         setIsLoading(false);
 
