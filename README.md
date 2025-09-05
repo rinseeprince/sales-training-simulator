@@ -782,3 +782,4 @@ MIT License - see LICENSE file for details # sales-training-simulator
 # Force redeploy Thu Aug 21 23:16:44 BST 2025
 # Force deployment with fixed env vars Fri Aug 22 00:18:09 BST 2025
 # Auth caching fix - trigger deployment
+# Testing auth caching fix deployment
