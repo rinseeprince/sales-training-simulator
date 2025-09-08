@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { authUserId, name } = body;
+    const { authUserId, name, avatar_url } = body;
     
     if (!authUserId) {
       return NextResponse.json({ 
@@ -85,22 +85,31 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    if (!name || name.trim() === '') {
-      return NextResponse.json({ 
-        error: 'Name is required',
-        success: false 
-      }, { status: 400 });
+    const supabaseAdmin = createSupabaseAdmin();
+
+    // Prepare update data
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (name !== undefined) {
+      if (!name || name.trim() === '') {
+        return NextResponse.json({ 
+          error: 'Name cannot be empty',
+          success: false 
+        }, { status: 400 });
+      }
+      updateData.name = name.trim();
     }
 
-    const supabaseAdmin = createSupabaseAdmin();
+    if (avatar_url !== undefined) {
+      updateData.avatar_url = avatar_url;
+    }
 
     // Update the simple_users record for this auth user
     const { data: updatedProfile, error } = await supabaseAdmin
       .from('simple_users')
-      .update({ 
-        name: name.trim(),
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('auth_user_id', authUserId)
       .select()
       .single();
@@ -109,10 +118,7 @@ export async function PUT(request: NextRequest) {
       // Try with direct id match as fallback
       const { data: fallbackUpdate, error: fallbackError } = await supabaseAdmin
         .from('simple_users')
-        .update({ 
-          name: name.trim(),
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', authUserId)
         .select()
         .single();
@@ -127,9 +133,15 @@ export async function PUT(request: NextRequest) {
 
       // Also update Supabase auth metadata for consistency
       try {
-        await supabaseAdmin.auth.admin.updateUserById(authUserId, {
-          user_metadata: { name: name.trim() }
-        });
+        const metadataUpdate: any = {};
+        if (updateData.name) metadataUpdate.name = updateData.name;
+        if (updateData.avatar_url !== undefined) metadataUpdate.avatar_url = updateData.avatar_url;
+        
+        if (Object.keys(metadataUpdate).length > 0) {
+          await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+            user_metadata: metadataUpdate
+          });
+        }
       } catch (metadataErr) {
         console.warn('Failed to update auth metadata (non-critical):', metadataErr);
       }
@@ -143,9 +155,15 @@ export async function PUT(request: NextRequest) {
 
     // Also update Supabase auth metadata for consistency
     try {
-      await supabaseAdmin.auth.admin.updateUserById(authUserId, {
-        user_metadata: { name: name.trim() }
-      });
+      const metadataUpdate: any = {};
+      if (updateData.name) metadataUpdate.name = updateData.name;
+      if (updateData.avatar_url !== undefined) metadataUpdate.avatar_url = updateData.avatar_url;
+      
+      if (Object.keys(metadataUpdate).length > 0) {
+        await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+          user_metadata: metadataUpdate
+        });
+      }
     } catch (metadataErr) {
       console.warn('Failed to update auth metadata (non-critical):', metadataErr);
     }

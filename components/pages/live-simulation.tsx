@@ -505,6 +505,44 @@ export function LiveSimulation() {
     if (!user) return
     
     try {
+      // Increment simulation count immediately when starting
+      console.log('Incrementing simulation count for user:', user.id)
+      const incrementResponse = await fetch('/api/increment-simulation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      
+      const incrementData = await incrementResponse.json()
+      
+      if (!incrementData.success && incrementData.error === 'Simulation limit reached') {
+        toast({
+          title: "Simulation Limit Reached",
+          description: "You've reached your free simulation limit. Please upgrade to continue.",
+          variant: "destructive",
+          action: (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => router.push('/pricing')}
+            >
+              Upgrade
+            </Button>
+          )
+        })
+        return
+      }
+      
+      // Show remaining simulations if getting low
+      if (incrementData.remaining && incrementData.remaining > 0 && incrementData.remaining <= 5) {
+        toast({
+          title: "Simulations Remaining",
+          description: `You have ${incrementData.remaining} free simulation${incrementData.remaining === 1 ? '' : 's'} left.`,
+        })
+      }
+      
       // Generate call ID with proper UUID format
       const newCallId = crypto.randomUUID()
       console.log('Generated call ID (UUID):', newCallId)
@@ -529,6 +567,11 @@ export function LiveSimulation() {
       resetConversation() // Clear any previous conversation history
     } catch (error) {
       console.error('Failed to start recording:', error)
+      toast({
+        title: "Error",
+        description: "Failed to start simulation. Please try again.",
+        variant: "destructive"
+      })
     }
   }
 

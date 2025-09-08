@@ -102,6 +102,12 @@ export function Dashboard() {
     certifications: 0,
     improvement: 0
   })
+  const [simulationLimit, setSimulationLimit] = useState<{
+    count: number;
+    limit: number;
+    remaining: number;
+    isPaid: boolean;
+  } | null>(null)
 
   // Fetch calls and scenarios data
   useEffect(() => {
@@ -119,6 +125,22 @@ export function Dashboard() {
         }
 
         const actualUserId = profileData.userProfile.id;
+        
+        // Check simulation limit
+        try {
+          const limitResponse = await fetch(`/api/check-simulation-limit?userId=${user.id}`)
+          const limitData = await limitResponse.json()
+          if (limitData.success) {
+            setSimulationLimit({
+              count: limitData.count || 0,
+              limit: limitData.limit || 50,
+              remaining: limitData.remaining === -1 ? -1 : (limitData.remaining || 50),
+              isPaid: limitData.is_paid || false
+            })
+          }
+        } catch (error) {
+          console.error('Failed to check simulation limit:', error)
+        }
         
         // Fetch calls
         const callsResponse = await fetch(`/api/calls?userId=${actualUserId}`)
@@ -333,6 +355,46 @@ export function Dashboard() {
           </div>
         </div>
       </motion.div>
+
+      {/* Simulation Limit Card (for free users) */}
+      {simulationLimit && !simulationLimit.isPaid && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-6"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Free Plan Usage</h3>
+              <p className="text-sm text-slate-600 mb-3">
+                {simulationLimit.remaining > 0 
+                  ? `You have ${simulationLimit.remaining} simulation${simulationLimit.remaining === 1 ? '' : 's'} remaining out of ${simulationLimit.limit} monthly`
+                  : 'You have reached your monthly simulation limit'}
+              </p>
+              <Progress 
+                value={(simulationLimit.count / simulationLimit.limit) * 100} 
+                className="h-2 mb-3"
+              />
+              <div className="flex items-center gap-4 text-xs text-slate-500">
+                <span>{simulationLimit.count} used</span>
+                <span>•</span>
+                <span>{simulationLimit.remaining > 0 ? `${simulationLimit.remaining} remaining` : 'Limit reached'}</span>
+              </div>
+            </div>
+            <div className="ml-6">
+              <Link href="/pricing">
+                <Button 
+                  variant={simulationLimit.remaining === 0 ? "default" : "outline"}
+                  className="whitespace-nowrap"
+                >
+                  {simulationLimit.remaining === 0 ? 'Upgrade Now' : 'View Plans'}
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Recent Simulations */}

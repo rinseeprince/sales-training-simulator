@@ -97,6 +97,43 @@ export function ScenarioBuilder() {
       return
     }
 
+    // Check simulation limit for free users (just for display, actual increment happens when recording starts)
+    if (user) {
+      try {
+        const response = await fetch(`/api/check-simulation-limit?userId=${user.id}`)
+        const data = await response.json()
+        
+        if (!data.canSimulate) {
+          toast({
+            title: "Simulation Limit Reached",
+            description: data.message || "You've reached your free simulation limit. Please upgrade to continue.",
+            variant: "destructive",
+            action: (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => router.push('/pricing')}
+              >
+                Upgrade
+              </Button>
+            )
+          })
+          return
+        }
+        
+        // Show remaining simulations for free users (informational only)
+        if (data.remaining && data.remaining > 0 && data.remaining <= 10) {
+          toast({
+            title: "Simulations Remaining",
+            description: `You have ${data.remaining} free simulation${data.remaining === 1 ? '' : 's'} left. Count will be used when you start recording.`,
+          })
+        }
+      } catch (error) {
+        console.error('Failed to check simulation limit:', error)
+        // Continue anyway if check fails - will be enforced when recording starts
+      }
+    }
+
     // Auto-save scenario if saveReuse is enabled
     if (scenarioData.saveReuse) {
       const saved = await saveScenarioToDatabase()

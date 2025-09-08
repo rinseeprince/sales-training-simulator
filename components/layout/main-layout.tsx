@@ -51,6 +51,18 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     if (user?.id) {
       loadUserProfile()
     }
+  }, [user?.id, user?.avatar_url])
+
+  // Listen for avatar updates
+  useEffect(() => {
+    const handleAvatarUpdate = () => {
+      loadUserProfile()
+    }
+
+    window.addEventListener('avatar-updated', handleAvatarUpdate)
+    return () => {
+      window.removeEventListener('avatar-updated', handleAvatarUpdate)
+    }
   }, [user?.id])
 
   const loadUserProfile = async () => {
@@ -61,7 +73,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       const data = await response.json()
       
       if (data.success && data.userProfile) {
-        setAvatarUrl(data.userProfile.avatar_url || null)
+        // Add timestamp to prevent caching
+        if (data.userProfile.avatar_url) {
+          setAvatarUrl(`${data.userProfile.avatar_url}?t=${Date.now()}`)
+        } else {
+          setAvatarUrl(null)
+        }
       }
     } catch (error) {
       console.error('Failed to load user profile:', error)
@@ -346,7 +363,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               !sidebarOpen && "justify-center"
             )}>
               <Avatar className="h-7 w-7 ring-1 ring-slate-200">
-                <AvatarImage src={avatarUrl || user?.avatar_url || "/placeholder.svg"} />
+                <AvatarImage 
+                  src={avatarUrl || user?.avatar_url || "/placeholder.svg"} 
+                  key={avatarUrl || user?.avatar_url}
+                />
                 <AvatarFallback className="bg-primary text-white text-xs">
                   {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
                 </AvatarFallback>

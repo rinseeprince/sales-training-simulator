@@ -36,12 +36,12 @@ export function SettingsPage() {
     voiceVolume: '80'
   })
 
-  // Load user profile on mount
+  // Load user profile on mount and when user changes
   useEffect(() => {
     if (user?.id) {
       loadUserProfile()
     }
-  }, [user?.id])
+  }, [user?.id, user?.avatar_url])
 
   const loadUserProfile = async () => {
     if (!user?.id) return
@@ -52,7 +52,12 @@ export function SettingsPage() {
       
       if (data.success && data.userProfile) {
         setName(data.userProfile.name || '')
-        setAvatarUrl(data.userProfile.avatar_url || null)
+        // Add timestamp to avatar URL to prevent caching
+        if (data.userProfile.avatar_url) {
+          setAvatarUrl(`${data.userProfile.avatar_url}?t=${Date.now()}`)
+        } else {
+          setAvatarUrl(null)
+        }
       }
     } catch (error) {
       console.error('Failed to load user profile:', error)
@@ -116,13 +121,19 @@ export function SettingsPage() {
       const data = await response.json()
 
       if (data.success) {
-        setAvatarUrl(data.avatarUrl)
+        // Add timestamp to prevent caching issues
+        const avatarUrlWithTimestamp = `${data.avatarUrl}?t=${Date.now()}`
+        setAvatarUrl(avatarUrlWithTimestamp)
         toast({
           title: "Avatar Updated",
           description: "Your avatar has been updated successfully.",
         })
         // Refresh user data
         await refreshUser()
+        // Reload the profile to get the latest avatar
+        await loadUserProfile()
+        // Dispatch event to update sidebar
+        window.dispatchEvent(new Event('avatar-updated'))
       } else {
         throw new Error(data.error || 'Failed to upload avatar')
       }
