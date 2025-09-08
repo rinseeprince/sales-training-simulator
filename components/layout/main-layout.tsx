@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Home, FileText, Phone, BarChart3, Settings, Users, Shield, Menu, X, LogOut, Moon, Sun, BookOpen, History, DollarSign, ChevronDown, ChevronUp, Plus, ArrowLeft, ArrowRight, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -41,9 +41,32 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     return true
   })
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const { user, logout } = useSupabaseAuth()
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
+
+  // Load user profile with avatar
+  useEffect(() => {
+    if (user?.id) {
+      loadUserProfile()
+    }
+  }, [user?.id])
+
+  const loadUserProfile = async () => {
+    if (!user?.id) return
+    
+    try {
+      const response = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const data = await response.json()
+      
+      if (data.success && data.userProfile) {
+        setAvatarUrl(data.userProfile.avatar_url || null)
+      }
+    } catch (error) {
+      console.error('Failed to load user profile:', error)
+    }
+  }
 
   const handleSidebarToggle = (newState: boolean) => {
     setSidebarOpen(newState)
@@ -323,9 +346,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               !sidebarOpen && "justify-center"
             )}>
               <Avatar className="h-7 w-7 ring-1 ring-slate-200">
-                <AvatarImage src="/placeholder.svg" />
+                <AvatarImage src={avatarUrl || user?.avatar_url || "/placeholder.svg"} />
                 <AvatarFallback className="bg-primary text-white text-xs">
-                  {user?.name?.charAt(0).toUpperCase()}
+                  {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               {sidebarOpen && (

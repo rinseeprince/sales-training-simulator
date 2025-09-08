@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,8 +19,12 @@ import { checkForUpdates, APP_VERSION } from '@/lib/version-check'
 import { toast } from '@/components/ui/use-toast'
 
 export function SettingsPage() {
-  const { user } = useSupabaseAuth()
+  const { user, refreshUser } = useSupabaseAuth()
   const { theme, setTheme } = useTheme()
+  const [name, setName] = useState(user?.name || '')
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [notifications, setNotifications] = useState({
     email: true,
     push: false,
@@ -32,8 +36,105 @@ export function SettingsPage() {
     voiceVolume: '80'
   })
 
-  const handleSaveProfile = () => {
-    console.log('Saving profile...')
+  // Load user profile on mount
+  useEffect(() => {
+    if (user?.id) {
+      loadUserProfile()
+    }
+  }, [user?.id])
+
+  const loadUserProfile = async () => {
+    if (!user?.id) return
+    
+    try {
+      const response = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const data = await response.json()
+      
+      if (data.success && data.userProfile) {
+        setName(data.userProfile.name || '')
+        setAvatarUrl(data.userProfile.avatar_url || null)
+      }
+    } catch (error) {
+      console.error('Failed to load user profile:', error)
+    }
+  }
+
+  const handleSaveProfile = async () => {
+    if (!user?.id || isSavingProfile) return
+    
+    setIsSavingProfile(true)
+    try {
+      const response = await fetch('/api/user-profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          authUserId: user.id,
+          name: name.trim()
+        }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast({
+          title: "Profile Updated",
+          description: "Your profile has been updated successfully.",
+        })
+        // Refresh user data in auth context
+        await refreshUser()
+      } else {
+        throw new Error(data.error || 'Failed to update profile')
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update profile.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSavingProfile(false)
+    }
+  }
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !user?.id) return
+
+    setIsUploadingAvatar(true)
+    try {
+      const formData = new FormData()
+      formData.append('avatar', file)
+      formData.append('userId', user.id)
+
+      const response = await fetch('/api/upload-avatar', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setAvatarUrl(data.avatarUrl)
+        toast({
+          title: "Avatar Updated",
+          description: "Your avatar has been updated successfully.",
+        })
+        // Refresh user data
+        await refreshUser()
+      } else {
+        throw new Error(data.error || 'Failed to upload avatar')
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to upload avatar.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUploadingAvatar(false)
+    }
   }
 
   const handleSaveNotifications = () => {
@@ -164,15 +265,36 @@ export function SettingsPage() {
             <div className="space-y-6">
               <div className="flex items-center space-x-6">
                 <Avatar className="w-20 h-20 ring-2 ring-slate-200">
-                  <AvatarImage src="/placeholder.svg" />
+                  <AvatarImage src={avatarUrl || "/placeholder.svg"} />
                   <AvatarFallback className="text-lg bg-primary text-white">
-                    {user?.name?.charAt(0).toUpperCase()}
+                    {(name || user?.name || user?.email || 'U').charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50">
-                    <Upload className="mr-2 h-4 w-4" />
-                    Change Avatar
+                  <input
+                    type="file"
+                    id="avatar-upload"
+                    accept="image/jpeg,image/jpg,image/png,image/gif"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                  />
+                  <Button 
+                    variant="outline" 
+                    className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                    onClick={() => document.getElementById('avatar-upload')?.click()}
+                    disabled={isUploadingAvatar}
+                  >
+                    {isUploadingAvatar ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-slate-500 border-t-transparent" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Change Avatar
+                      </>
+                    )}
                   </Button>
                   <p className="text-sm text-slate-500 mt-2">
                     JPG, PNG or GIF. Max size 2MB.
@@ -183,11 +305,23 @@ export function SettingsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Full Name</Label>
-                  <Input id="name" defaultValue={user?.name} className="border-slate-200 focus:ring-primary" />
+                  <Input 
+                    id="name" 
+                    value={name || ''}
+                    onChange={(e) => setName(e.target.value)}
+                    className="border-slate-200 focus:ring-primary" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Email</Label>
-                  <Input id="email" type="email" defaultValue={user?.email} className="border-slate-200 focus:ring-primary" />
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    value={user?.email || ''} 
+                    className="border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed" 
+                    disabled
+                    readOnly
+                  />
                 </div>
               </div>
 
@@ -211,9 +345,22 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              <Button onClick={handleSaveProfile} className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
+              <Button 
+                onClick={handleSaveProfile} 
+                className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium"
+                disabled={isSavingProfile}
+              >
+                {isSavingProfile ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </>
+                )}
               </Button>
             </div>
           </motion.div>

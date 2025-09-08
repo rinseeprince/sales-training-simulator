@@ -39,6 +39,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name?: string;
+  avatar_url?: string;
   email_verified: boolean;
   subscription_status?: string;
   created_at: string;
@@ -231,7 +232,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     let profile = null;
     const { data, error: profileError } = await supabaseClient
       .from('simple_users')
-      .select('name, subscription_status')
+      .select('name, subscription_status, avatar_url')
       .eq('auth_user_id', user.id)
       .single();
     
@@ -244,6 +245,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       id: user.id,
       email: user.email!,
       name: profile?.name || user.user_metadata?.name,
+      avatar_url: profile?.avatar_url || user.user_metadata?.avatar_url,
       email_verified: !!user.email_confirmed_at,
       subscription_status: profile?.subscription_status || 'free',
       created_at: user.created_at,
