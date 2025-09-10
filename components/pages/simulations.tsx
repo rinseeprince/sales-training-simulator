@@ -70,14 +70,18 @@ export function Simulations() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<'user' | 'manager' | 'admin'>('user')
+  const [viewScope, setViewScope] = useState<'my' | 'all'>('my')
+  const [selectedRep, setSelectedRep] = useState<string>('')
+  const [reps, setReps] = useState<Array<{id: string, name: string, email: string}>>([])
 
-  // Fetch simulations
+  // Fetch user role and simulations
   useEffect(() => {
-    const fetchSimulations = async () => {
+    const fetchData = async () => {
       if (!user) return
       
       try {
-        // Get the correct user ID from simple_users table
+        // Get the user profile with role
         const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
         const profileData = await profileResponse.json();
         
@@ -87,21 +91,72 @@ export function Simulations() {
         }
 
         const actualUserId = profileData.userProfile.id;
+        const role = profileData.userProfile.role || 'user';
+        setUserRole(role);
         
-        const response = await fetch(`/api/calls?userId=${actualUserId}`)
+        // Set default view scope based on role
+        if (role === 'manager' || role === 'admin') {
+          setViewScope('all');
+          
+          // Fetch list of reps for filtering
+          const repsResponse = await fetch('/api/users?role=user');
+          if (repsResponse.ok) {
+            const repsData = await repsResponse.json();
+            setReps(repsData.users || []);
+          }
+        } else {
+          setViewScope('my');
+        }
+        
+        // Fetch simulations based on scope
+        const scope = (role === 'manager' || role === 'admin') ? 'all' : 'my';
+        const response = await fetch(`/api/calls?scope=${scope}&userId=${actualUserId}`)
         if (response.ok) {
           const data = await response.json()
           setSimulations(data.calls || [])
         }
       } catch (error) {
-        console.error('Error fetching simulations:', error)
+        console.error('Error fetching data:', error)
       } finally {
         setLoading(false)
       }
     }
     
-    fetchSimulations()
+    fetchData()
   }, [user])
+
+  // Refetch simulations when filters change
+  const refetchSimulations = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileData = await profileResponse.json();
+      const actualUserId = profileData.userProfile.id;
+      
+      let url = `/api/calls?scope=${viewScope}&userId=${actualUserId}`;
+      if (selectedRep && viewScope === 'all') {
+        url += `&repId=${selectedRep}`;
+      }
+      
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setSimulations(data.calls || []);
+      }
+    } catch (error) {
+      console.error('Error refetching simulations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewScope || selectedRep) {
+      refetchSimulations();
+    }
+  }, [viewScope, selectedRep])
 
   // Filter and sort simulations
   const filteredSimulations = simulations

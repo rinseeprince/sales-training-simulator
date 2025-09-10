@@ -6,6 +6,7 @@ import { Home, FileText, Phone, BarChart3, Settings, Users, Shield, Menu, X, Log
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
+import { NotificationBell } from '@/components/ui/notifications'
 import { useTheme } from 'next-themes'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -119,6 +120,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center space-x-4">
+            <NotificationBell />
+            
             <Button
               variant="ghost"
               size="icon"
