@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST: Create new scenario assignment
+// POST: Create a new scenario assignment
 export async function POST(req: NextRequest) {
   try {
     const user = await authenticateWithRBAC(req);
@@ -133,89 +133,128 @@ export async function POST(req: NextRequest) {
       scenarioId, 
       assignToUsers, 
       assignToTeam, 
-      deadline 
+      deadline,
+      assignerName // Add assigner name
     } = body;
 
-    if (!scenarioId) {
-      return NextResponse.json({ error: 'scenarioId is required' }, { status: 400 });
-    }
-
-    if (!assignToUsers && !assignToTeam) {
-      return NextResponse.json({ error: 'Must assign to users or a team' }, { status: 400 });
+    if (!scenarioId || (!assignToUsers && !assignToTeam)) {
+      return NextResponse.json(
+        { error: 'Scenario ID and assignment target required' },
+        { status: 400 }
+      );
     }
 
     const supabase = createSupabaseAdmin();
-
-    // Verify scenario exists
-    const { data: scenario } = await supabase
-      .from('scenarios')
-      .select('id, title')
-      .eq('id', scenarioId)
-      .single();
-
-    if (!scenario) {
-      return NextResponse.json({ error: 'Scenario not found' }, { status: 404 });
-    }
-
-    const assignments: Partial<ScenarioAssignment>[] = [];
+    const assignments = [];
 
     // Create assignments for individual users
     if (assignToUsers && Array.isArray(assignToUsers)) {
       for (const userId of assignToUsers) {
-        assignments.push({
-          scenario_id: scenarioId,
-          assigned_by: user.user.id,
-          assigned_to_user: userId,
-          deadline: deadline || null,
-          status: 'not_started'
-        });
+        const { data, error } = await supabase
+          .from('scenario_assignments')
+          .insert({
+            scenario_id: scenarioId,
+            assigned_by: user.user.id,
+            assigned_to_user: userId,
+            deadline: deadline || null,
+            status: 'not_started'
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          assignments.push(data);
+          
+          // Create notification for the assigned user with assigner's name
+          await supabase
+            .from('notifications')
+            .insert({
+              recipient_id: userId,
+              type: 'assignment_created',
+              entity_type: 'scenario_assignment',
+              entity_id: data.id,
+              payload: {
+                scenario_id: scenarioId,
+                assignment_id: data.id,
+                deadline: deadline,
+                assigned_by_name: assignerName || 'Your manager' // Use assigner name
+              },
+              triggered_at: new Date().toISOString()
+            });
+        }
       }
     }
 
     // Create assignment for team
     if (assignToTeam) {
-      assignments.push({
-        scenario_id: scenarioId,
-        assigned_by: user.user.id,
-        assigned_to_team: assignToTeam,
-        deadline: deadline || null,
-        status: 'not_started'
-      });
-    }
+      // Get all users in the team
+      const { data: teamUsers } = await supabase
+        .from('simple_users')
+        .select('id')
+        .eq('team_id', assignToTeam);
 
-    // Insert assignments
-    const { data, error } = await supabase
-      .from('scenario_assignments')
-      .insert(assignments)
-      .select();
+      if (teamUsers) {
+        for (const teamUser of teamUsers) {
+          const { data, error } = await supabase
+            .from('scenario_assignments')
+            .insert({
+              scenario_id: scenarioId,
+              assigned_by: user.user.id,
+              assigned_to_user: teamUser.id,
+              assigned_to_team: assignToTeam,
+              deadline: deadline || null,
+              status: 'not_started'
+            })
+            .select()
+            .single();
 
-    if (error) {
-      console.error('Error creating assignments:', error);
-      return NextResponse.json({ error: 'Failed to create assignments' }, { status: 500 });
+          if (!error && data) {
+            assignments.push(data);
+            
+            // Create notification with assigner's name
+            await supabase
+              .from('notifications')
+              .insert({
+                recipient_id: teamUser.id,
+                type: 'assignment_created',
+                entity_type: 'scenario_assignment',
+                entity_id: data.id,
+                payload: {
+                  scenario_id: scenarioId,
+                  assignment_id: data.id,
+                  deadline: deadline,
+                  assigned_by_name: assignerName || 'Your manager', // Use assigner name
+                  team_assignment: true
+                },
+                triggered_at: new Date().toISOString()
+              });
+          }
+        }
+      }
     }
 
     // Log activity
     await logActivity(
       user.user.id,
-      'create_assignments',
+      'create_assignment',
       'scenario_assignment',
       scenarioId,
-      { 
-        assignedTo: assignToUsers || assignToTeam,
-        count: assignments.length,
-        deadline 
+      {
+        assignments_created: assignments.length,
+        assigned_to_users: assignToUsers,
+        assigned_to_team: assignToTeam
       },
       req
     );
 
-    return NextResponse.json({ 
-      success: true, 
-      assignments: data,
-      message: `Created ${assignments.length} assignment(s)` 
+    return NextResponse.json({
+      assignments,
+      message: `Successfully created ${assignments.length} assignment(s)`,
+      total: assignments.length
     });
 
   } catch (error) {
-    console.error('Assignments POST error:', error);
+    console.error('Assignment creation error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

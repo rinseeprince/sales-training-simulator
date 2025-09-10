@@ -4,655 +4,788 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { 
-  Play, 
-  Save, 
-  Mic, 
-  Settings, 
-  User, 
-  MessageSquare, 
-  Volume2, 
-  Lightbulb, 
-  CheckCircle, 
-  Info,
-  Users,
-  Building,
-  CalendarIcon,
-  UserPlus,
-  Send
-} from 'lucide-react'
-import { useSupabaseAuth } from '@/components/supabase-auth-provider'
+import { Play, Save, Settings, TrendingUp, Mic, FileText, User, MessageSquare, Lightbulb, BookOpen, Folder, Building, Users, CalendarIcon, Check, Search } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
+import { useToast } from '@/hooks/use-toast'
+import { REGIONAL_VOICES, getVoicesByRegion } from '@/lib/voice-constants'
 
-
-interface User {
+interface SearchUser {
   id: string
   name: string
   email: string
   role: string
-  team_id?: string
-}
-
-interface Team {
-  id: string
-  name: string
-  description?: string
 }
 
 export function ScenarioBuilder() {
-  const { user } = useSupabaseAuth()
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [scenarioTitle, setScenarioTitle] = useState('')
-  const [prospectName, setProspectName] = useState('')
-  const [prospectVoice, setProspectVoice] = useState('rachel')
-  const [scenarioDescription, setScenarioDescription] = useState('')
-  const [saveForReuse, setSaveForReuse] = useState(false)
-  
+  const { user } = useSupabaseAuth()
+  const { toast } = useToast()
+  const [isSaving, setIsSaving] = useState(false)
+  const [scenarioData, setScenarioData] = useState({
+    title: '',
+    prompt: '',
+    prospectName: '', // Add prospect name field
+    voice: '',
+    saveReuse: false
+  })
+  const [savedScenarios, setSavedScenarios] = useState([])
+
   // RBAC-related states
   const [userRole, setUserRole] = useState<'user' | 'manager' | 'admin'>('user')
   const [isCompanyScenario, setIsCompanyScenario] = useState(false)
-  const [assignToUsers, setAssignToUsers] = useState<string[]>([])
-  const [assignToTeam, setAssignToTeam] = useState<string>('')
   const [assignmentDeadline, setAssignmentDeadline] = useState<Date | undefined>()
-  const [availableUsers, setAvailableUsers] = useState<User[]>([])
-  const [availableTeams, setAvailableTeams] = useState<Team[]>([])
   const [showAssignment, setShowAssignment] = useState(false)
+  
+  // User search states
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchUser[]>([])
+  const [selectedUsers, setSelectedUsers] = useState<SearchUser[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [userDomain, setUserDomain] = useState<string>('')
 
-  // Fetch user role and available users/teams
+  // Load saved scenarios and check for edit mode
   useEffect(() => {
-    const fetchRoleAndTeams = async () => {
-      if (!user) return
-
+    loadSavedScenarios()
+    fetchUserRole()
+    
+    // Check if we're editing a scenario
+    const editScenario = localStorage.getItem('editScenario')
+    if (editScenario) {
       try {
-        // Get user profile with role
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
-        const profileData = await profileResponse.json()
-        
-        if (profileData.success && profileData.userProfile) {
-          const role = profileData.userProfile.role || 'user'
-          setUserRole(role)
-          
-          // If manager or admin, fetch users and teams
-          if (role === 'manager' || role === 'admin') {
-            // Fetch users
-            const usersResponse = await fetch('/api/users?role=user')
-            if (usersResponse.ok) {
-              const usersData = await usersResponse.json()
-              setAvailableUsers(usersData.users || [])
-            }
-            
-            // Fetch teams
-            const teamsResponse = await fetch('/api/teams')
-            if (teamsResponse.ok) {
-              const teamsData = await teamsResponse.json()
-              setAvailableTeams(teamsData.teams || [])
-            }
-          }
-        }
+        const parsed = JSON.parse(editScenario)
+        setScenarioData(parsed)
+        localStorage.removeItem('editScenario')
       } catch (error) {
-        console.error('Error fetching role and teams:', error)
+        console.error('Failed to load edit scenario:', error)
       }
     }
-
-    fetchRoleAndTeams()
   }, [user])
 
-  const handleStartSimulation = async () => {
-    if (!scenarioDescription.trim()) {
-      toast.error('Please provide a scenario description')
+  const fetchUserRole = async () => {
+    if (!user) return
+
+    try {
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const profileData = await profileResponse.json()
+      
+      if (profileData.success && profileData.userProfile) {
+        const role = profileData.userProfile.role || 'user'
+        setUserRole(role)
+        
+        // Extract domain from user's email
+        const email = profileData.userProfile.email || user.email
+        if (email) {
+          const domain = email.split('@')[1]
+          setUserDomain(domain)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user role:', error)
+    }
+  }
+
+  const searchUsers = async (query: string) => {
+    if (!query || query.length < 2) {
+      setSearchResults([])
       return
     }
 
-    setLoading(true)
+    setIsSearching(true)
+    try {
+      const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}&domain=${userDomain}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSearchResults(data.users || [])
+      }
+    } catch (error) {
+      console.error('Error searching users:', error)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery) {
+        searchUsers(searchQuery)
+      } else {
+        setSearchResults([])
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  const loadSavedScenarios = async () => {
+    if (!user) return
     
     try {
-      // Save scenario if requested
-      let scenarioId = null
-      if (saveForReuse || isCompanyScenario || showAssignment) {
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user?.id}`)
-        const profileData = await profileResponse.json()
-        
-        if (!profileData.success) {
-          throw new Error('Failed to get user profile')
-        }
-
-        const saveResponse = await fetch('/api/scenarios', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: scenarioTitle || 'Untitled Scenario',
-            prompt: scenarioDescription,
-            prospectName: prospectName || 'Prospect',
-            voice: prospectVoice,
-            userId: profileData.userProfile.id,
-            is_company_generated: isCompanyScenario
-          })
-        })
-
-        if (!saveResponse.ok) {
-          throw new Error('Failed to save scenario')
-        }
-
-        const saveData = await saveResponse.json()
-        scenarioId = saveData.scenarioId
-        
-        if (saveForReuse || isCompanyScenario) {
-          toast.success('Scenario saved successfully!')
-        }
+      // Get the correct user ID from simple_users table
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.success) {
+        console.error('Failed to get user profile:', profileData.error);
+        return;
       }
 
-      // Create assignments if needed
-      if (showAssignment && scenarioId && (assignToUsers.length > 0 || assignToTeam)) {
-        const assignmentResponse = await fetch('/api/scenario-assignments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scenarioId,
-            assignToUsers: assignToUsers.length > 0 ? assignToUsers : undefined,
-            assignToTeam: assignToTeam || undefined,
-            deadline: assignmentDeadline?.toISOString()
-          })
-        })
+      const actualUserId = profileData.userProfile.id;
+      
+      const response = await fetch(`/api/scenarios?userId=${actualUserId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSavedScenarios(data.scenarios || [])
+      }
+    } catch (error) {
+      console.error('Error loading saved scenarios:', error)
+    }
+  }
 
-        if (assignmentResponse.ok) {
-          const assignmentData = await assignmentResponse.json()
-          toast.success(assignmentData.message || 'Assignments created successfully!')
-        } else {
-          toast.error('Failed to create assignments')
+  const handleLoadScenario = (scenario: any) => {
+    console.log('🔍 Loading saved scenario:', scenario);
+    setScenarioData({
+      title: scenario.title,
+      prompt: scenario.prompt,
+      prospectName: scenario.prospect_name || '', // Load saved prospect name
+      voice: scenario.voice || '',
+      saveReuse: true
+    })
+    console.log('🔍 Set scenario data with prospectName:', scenario.prospect_name);
+    
+    toast({
+      title: "Scenario Loaded",
+      description: `Loaded "${scenario.title}" successfully`,
+    })
+  }
+
+  const handleStartSimulation = async () => {
+    // Validate required fields
+    if (!scenarioData.title || !scenarioData.prompt) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in the scenario title and description before starting.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Check simulation limit for free users (just for display, actual increment happens when recording starts)
+    if (user) {
+      try {
+        const response = await fetch(`/api/check-simulation-limit?userId=${user.id}`)
+        const data = await response.json()
+        
+        if (!data.canSimulate) {
+          toast({
+            title: "Simulation Limit Reached",
+            description: data.message || "You've reached your free simulation limit. Please upgrade to continue.",
+            variant: "destructive",
+            action: (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => router.push('/pricing')}
+              >
+                Upgrade
+              </Button>
+            )
+          })
+          return
         }
+        
+        // Show remaining simulations for free users (informational only)
+        if (data.remaining && data.remaining > 0 && data.remaining <= 10) {
+          toast({
+            title: "Simulations Remaining",
+            description: `You have ${data.remaining} free simulation${data.remaining === 1 ? '' : 's'} left. Count will be used when you start recording.`,
+          })
+        }
+      } catch (error) {
+        console.error('Failed to check simulation limit:', error)
+        // Continue anyway if check fails - will be enforced when recording starts
+      }
+    }
+
+    // Auto-save scenario if saveReuse is enabled or if it's a company scenario
+    if (scenarioData.saveReuse || isCompanyScenario || showAssignment) {
+      const saved = await saveScenarioToDatabase()
+      if (!saved) {
+        return // Don't proceed if save failed
+      }
+    }
+
+    // Save scenario data to localStorage for simulation page
+    const simulationData = {
+      title: scenarioData.title,
+      prompt: scenarioData.prompt,
+      prospectName: scenarioData.prospectName,
+      voice: scenarioData.voice,
+      timestamp: Date.now()
+    }
+    console.log('🔍 Saving to localStorage:', simulationData);
+    console.log('🔍 scenarioData.prospectName:', scenarioData.prospectName);
+    localStorage.setItem('currentScenario', JSON.stringify(simulationData))
+    
+    // Navigate to simulation
+    router.push('/simulation')
+  }
+
+  const saveScenarioToDatabase = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to save scenarios.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!scenarioData.title || !scenarioData.prompt) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in the scenario title and description.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    setIsSaving(true)
+    
+    try {
+      // Get the correct user ID from simple_users table
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.success) {
+        throw new Error('Failed to get user profile: ' + profileData.error);
       }
 
-      // Navigate to simulation
-      const params = new URLSearchParams({
-        prompt: scenarioDescription,
-        prospectName: prospectName || 'Prospect',
-        voice: prospectVoice
+      const actualUserId = profileData.userProfile.id;
+      const userName = profileData.userProfile.name || profileData.userProfile.email?.split('@')[0] || 'Manager';
+      
+      const response = await fetch('/api/scenarios', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: scenarioData.title,
+          prompt: scenarioData.prompt,
+          prospectName: scenarioData.prospectName,
+          voice: scenarioData.voice,
+          userId: actualUserId,
+          is_company_generated: isCompanyScenario
+        }),
       })
 
-      router.push(`/simulation?${params.toString()}`)
+      if (response.ok) {
+        const result = await response.json()
+        
+        // Create assignments if needed
+        if (showAssignment && result.scenarioId && selectedUsers.length > 0) {
+          const assignmentResponse = await fetch('/api/scenario-assignments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              scenarioId: result.scenarioId,
+              assignToUsers: selectedUsers.map(u => u.id),
+              deadline: assignmentDeadline?.toISOString(),
+              assignerName: userName // Pass the assigner's name
+            })
+          })
+
+          if (assignmentResponse.ok) {
+            toast({
+              title: "Assignments Created",
+              description: `Scenario assigned to ${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''}`,
+            })
+          }
+        }
+        
+        toast({
+          title: "Scenario Saved",
+          description: "Your scenario has been saved successfully.",
+        })
+        console.log('Scenario saved:', result)
+        return true
+      } else {
+        const error = await response.text()
+        throw new Error(error)
+      }
     } catch (error) {
-      console.error('Error starting simulation:', error)
-      toast.error('Failed to start simulation')
+      console.error('Failed to save scenario:', error)
+      toast({
+        title: "Save Failed",
+        description: error instanceof Error ? error.message : "Failed to save scenario. Please try again.",
+        variant: "destructive",
+      })
+      return false
     } finally {
-      setLoading(false)
+      setIsSaving(false)
     }
   }
 
   const handleSaveScenario = async () => {
-    if (!scenarioTitle.trim() || !scenarioDescription.trim()) {
-      toast.error('Please provide both title and description')
-      return
-    }
-
-    setSaving(true)
-    
-    try {
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user?.id}`)
-      const profileData = await profileResponse.json()
-      
-      if (!profileData.success) {
-        throw new Error('Failed to get user profile')
-      }
-
-      const response = await fetch('/api/scenarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: scenarioTitle,
-          prompt: scenarioDescription,
-          prospectName: prospectName || 'Prospect',
-          voice: prospectVoice,
-          userId: profileData.userProfile.id,
-          is_company_generated: isCompanyScenario
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to save scenario')
-      }
-
-      const data = await response.json()
-      
-      // Create assignments if needed
-      if (showAssignment && data.scenarioId && (assignToUsers.length > 0 || assignToTeam)) {
-        await fetch('/api/scenario-assignments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scenarioId: data.scenarioId,
-            assignToUsers: assignToUsers.length > 0 ? assignToUsers : undefined,
-            assignToTeam: assignToTeam || undefined,
-            deadline: assignmentDeadline?.toISOString()
-          })
-        })
-      }
-      
-      toast.success('Scenario saved successfully!')
-      
-      // Reset form
-      setScenarioTitle('')
-      setScenarioDescription('')
-      setProspectName('')
-      setSaveForReuse(false)
-      setIsCompanyScenario(false)
-      setAssignToUsers([])
-      setAssignToTeam('')
-      setAssignmentDeadline(undefined)
-      setShowAssignment(false)
-    } catch (error) {
-      console.error('Error saving scenario:', error)
-      toast.error('Failed to save scenario')
-    } finally {
-      setSaving(false)
-    }
+    await saveScenarioToDatabase()
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
+    <div className="space-y-6">
+      {/* Compressed Hero Bar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
+        className="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] px-6 py-4 h-20"
       >
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Scenario Builder</h1>
-          <p className="text-gray-600 mt-2">Create your sales scenario to start a live simulation</p>
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Scenario Builder</h1>
+          <p className="text-sm text-slate-500">
+            Create your sales scenario to start a live simulation
+          </p>
         </div>
+      </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Scenario Details</CardTitle>
-                <CardDescription>Define the basic parameters of your sales simulation</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+      <div className="space-y-6">
+        {/* Load Saved Scenario Section */}
+        {savedScenarios.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.05 }}
+            className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
+          >
+            <div className="mb-6">
+              <div className="flex items-start justify-between mb-2">
                 <div>
-                  <Label htmlFor="scenario-title">Scenario Title</Label>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-1">Load Saved Scenario</h3>
+                  <p className="text-sm text-slate-500">Start with a previously saved scenario template</p>
+                </div>
+                <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Folder className="h-4 w-4 text-emerald-600" />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="saved-scenario-select" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Choose a saved scenario</Label>
+              <Select onValueChange={(value) => {
+                if (value && value !== 'none') {
+                  const scenario = savedScenarios.find((s: any) => s.id === value)
+                  if (scenario) {
+                    handleLoadScenario(scenario)
+                  }
+                }
+              }}>
+                <SelectTrigger className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary">
+                  <SelectValue placeholder="Select a saved scenario to load..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select a scenario...</SelectItem>
+                  {savedScenarios.map((scenario: any) => (
+                    <SelectItem key={scenario.id} value={scenario.id}>
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex-1">
+                          <div className="font-medium">{scenario.title}</div>
+                          <div className="text-xs text-slate-500">
+                            {scenario.voice && `${scenario.voice}`}
+                          </div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </motion.div>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Main Form - Takes 2 columns */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="lg:col-span-2 space-y-6"
+          >
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+              <div className="mb-6">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-1">Scenario Details</h3>
+                    <p className="text-sm text-slate-500">Define the basic parameters of your sales simulation</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="save-reuse"
+                      checked={scenarioData.saveReuse}
+                      onCheckedChange={(checked) => setScenarioData(prev => ({ ...prev, saveReuse: checked }))}
+                    />
+                    <Label htmlFor="save-reuse" className="text-sm text-slate-700">Save for reuse</Label>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="title" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Scenario Title</Label>
                   <Input
-                    id="scenario-title"
+                    id="title"
                     placeholder="e.g., Enterprise Software Demo Call"
-                    value={scenarioTitle}
-                    onChange={(e) => setScenarioTitle(e.target.value)}
-                    className="mt-2"
+                    value={scenarioData.title}
+                    onChange={(e) => setScenarioData(prev => ({ ...prev, title: e.target.value }))}
+                    className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="prospect-name">Prospect Name</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="prospectName" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Prospect Name</Label>
                     <Input
-                      id="prospect-name"
+                      id="prospectName"
                       placeholder="e.g., Sarah Johnson"
-                      value={prospectName}
-                      onChange={(e) => setProspectName(e.target.value)}
-                      className="mt-2"
+                      value={scenarioData.prospectName}
+                      onChange={(e) => setScenarioData(prev => ({ ...prev, prospectName: e.target.value }))}
+                      className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
                     />
                   </div>
-
-                  <div>
-                    <Label htmlFor="prospect-voice">Prospect Voice</Label>
-                    <Select value={prospectVoice} onValueChange={setProspectVoice}>
-                      <SelectTrigger className="mt-2">
+                  
+                  <div className="space-y-2">
+                    <Label className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Prospect Voice</Label>
+                    <Select value={scenarioData.voice} onValueChange={(value) => setScenarioData(prev => ({ ...prev, voice: value }))}>
+                      <SelectTrigger className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary">
                         <SelectValue placeholder="Select prospect voice" />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="rachel">Rachel (Female)</SelectItem>
-                        <SelectItem value="drew">Drew (Male)</SelectItem>
-                        <SelectItem value="clyde">Clyde (Male)</SelectItem>
-                        <SelectItem value="paul">Paul (Male)</SelectItem>
-                        <SelectItem value="domi">Domi (Female)</SelectItem>
-                        <SelectItem value="dave">Dave (Male)</SelectItem>
-                        <SelectItem value="fin">Fin (Male)</SelectItem>
-                        <SelectItem value="bella">Bella (Female)</SelectItem>
-                        <SelectItem value="antoni">Antoni (Male)</SelectItem>
-                        <SelectItem value="thomas">Thomas (Male)</SelectItem>
-                        <SelectItem value="charlie">Charlie (Male)</SelectItem>
-                        <SelectItem value="emily">Emily (Female)</SelectItem>
-                        <SelectItem value="elli">Elli (Female)</SelectItem>
-                        <SelectItem value="callum">Callum (Male)</SelectItem>
-                        <SelectItem value="patrick">Patrick (Male)</SelectItem>
-                        <SelectItem value="harry">Harry (Male)</SelectItem>
-                        <SelectItem value="liam">Liam (Male)</SelectItem>
-                        <SelectItem value="dorothy">Dorothy (Female)</SelectItem>
-                        <SelectItem value="josh">Josh (Male)</SelectItem>
-                        <SelectItem value="arnold">Arnold (Male)</SelectItem>
-                        <SelectItem value="charlotte">Charlotte (Female)</SelectItem>
-                        <SelectItem value="matilda">Matilda (Female)</SelectItem>
-                        <SelectItem value="matthew">Matthew (Male)</SelectItem>
-                        <SelectItem value="james">James (Male)</SelectItem>
-                        <SelectItem value="joseph">Joseph (Male)</SelectItem>
-                        <SelectItem value="jeremy">Jeremy (Male)</SelectItem>
-                        <SelectItem value="michael">Michael (Male)</SelectItem>
-                        <SelectItem value="ethan">Ethan (Male)</SelectItem>
-                        <SelectItem value="gigi">Gigi (Female)</SelectItem>
-                        <SelectItem value="freya">Freya (Female)</SelectItem>
-                        <SelectItem value="grace">Grace (Female)</SelectItem>
-                        <SelectItem value="daniel">Daniel (Male)</SelectItem>
-                        <SelectItem value="serena">Serena (Female)</SelectItem>
-                        <SelectItem value="adam">Adam (Male)</SelectItem>
-                        <SelectItem value="nicole">Nicole (Female)</SelectItem>
-                        <SelectItem value="jessie">Jessie (Male)</SelectItem>
-                        <SelectItem value="ryan">Ryan (Male)</SelectItem>
-                        <SelectItem value="sam">Sam (Male)</SelectItem>
-                        <SelectItem value="glinda">Glinda (Female)</SelectItem>
-                        <SelectItem value="giovanni">Giovanni (Male)</SelectItem>
-                        <SelectItem value="mimi">Mimi (Female)</SelectItem>
+                      <SelectContent className="max-h-80">
+                        {Object.entries(getVoicesByRegion()).map(([region, voices]) => (
+                          <div key={region}>
+                            {/* Region Header */}
+                            <div className="px-2 py-1.5 text-xs font-semibold text-slate-600 bg-slate-50 border-b border-slate-100 flex items-center space-x-2">
+                              <span>{voices[0]?.flagEmoji}</span>
+                              <span>{region === 'US' ? 'United States' : 'United Kingdom'} Accent</span>
+                            </div>
+                            
+                            {/* Voice Options for this Region */}
+                            {voices.map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                <div className="flex items-center space-x-3">
+                                  <span className="text-lg">{voice.flagEmoji}</span>
+                                  <div className="flex items-center space-x-2">
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs capitalize ${
+                                        voice.style === 'professional' ? 'border-blue-200 text-blue-700 bg-blue-50' :
+                                        voice.style === 'executive' ? 'border-purple-200 text-purple-700 bg-purple-50' :
+                                        'border-green-200 text-green-700 bg-green-50'
+                                      }`}
+                                    >
+                                      {voice.style}
+                                    </Badge>
+                                    <span className="font-medium">{voice.gender === 'MALE' ? 'Male' : 'Female'}</span>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                            
+                            {/* Add some spacing between regions */}
+                            {region !== 'UK' && <div className="h-2" />}
+                          </div>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="scenario-description">Prospect & Scenario Description</Label>
-                  <Textarea
-                    id="scenario-description"
-                    placeholder="Describe your prospect and scenario naturally..."
-                    value={scenarioDescription}
-                    onChange={(e) => setScenarioDescription(e.target.value)}
-                    className="mt-2 min-h-[200px]"
-                  />
+                <div className="border-t border-slate-100 pt-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="prompt" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Prospect & Scenario Description</Label>
+                    <Textarea
+                      id="prompt"
+                      placeholder="Describe your prospect and scenario naturally..."
+                      className="min-h-[175px] rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+                      value={scenarioData.prompt}
+                      onChange={(e) => setScenarioData(prev => ({ ...prev, prompt: e.target.value }))}
+                    />
+                  </div>
                 </div>
 
-                {/* Manager/Admin Features */}
+                {/* Manager/Admin Features - Subtle Integration */}
                 {(userRole === 'manager' || userRole === 'admin') && (
-                  <Card className="border-primary/20 bg-primary/5">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Building className="h-5 w-5" />
-                        Manager Options
-                      </CardTitle>
-                      <CardDescription>Additional options for managers and admins</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="company-scenario">Company Scenario</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Mark as official company training material
-                          </p>
-                        </div>
-                        <Switch
-                          id="company-scenario"
-                          checked={isCompanyScenario}
-                          onCheckedChange={setIsCompanyScenario}
-                        />
+                  <div className="border-t border-slate-100 pt-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Building className="h-4 w-4 text-primary" />
+                        <Label htmlFor="company-scenario" className="text-sm text-slate-700">Company Scenario</Label>
                       </div>
+                      <Switch
+                        id="company-scenario"
+                        checked={isCompanyScenario}
+                        onCheckedChange={setIsCompanyScenario}
+                      />
+                    </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="assign-scenario">Assign to Users/Teams</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Assign this scenario for training
-                          </p>
-                        </div>
-                        <Switch
-                          id="assign-scenario"
-                          checked={showAssignment}
-                          onCheckedChange={setShowAssignment}
-                        />
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Users className="h-4 w-4 text-primary" />
+                        <Label htmlFor="assign-users" className="text-sm text-slate-700">Assign to Users</Label>
                       </div>
+                      <Switch
+                        id="assign-users"
+                        checked={showAssignment}
+                        onCheckedChange={setShowAssignment}
+                      />
+                    </div>
 
-                      {showAssignment && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          className="space-y-4 pt-4 border-t"
-                        >
-                          <div>
-                            <Label>Assign to Users</Label>
-                            <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
-                              {availableUsers.map((u) => (
-                                <div key={u.id} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={u.id}
-                                    checked={assignToUsers.includes(u.id)}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        setAssignToUsers([...assignToUsers, u.id])
-                                      } else {
-                                        setAssignToUsers(assignToUsers.filter(id => id !== u.id))
-                                      }
-                                    }}
-                                  />
-                                  <label
-                                    htmlFor={u.id}
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    {showAssignment && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="space-y-4 pl-6"
+                      >
+                        {/* User Search */}
+                        <div className="space-y-2">
+                          <Label className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">
+                            Search Users ({userDomain})
+                          </Label>
+                          <Popover open={searchQuery.length > 0}>
+                            <PopoverTrigger asChild>
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                  placeholder="Search by name or email..."
+                                  value={searchQuery}
+                                  onChange={(e) => setSearchQuery(e.target.value)}
+                                  className="pl-10 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+                                />
+                              </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[400px] p-0" align="start">
+                              <Command>
+                                <CommandGroup>
+                                  {isSearching && (
+                                    <CommandItem disabled>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2" />
+                                      Searching...
+                                    </CommandItem>
+                                  )}
+                                  {!isSearching && searchResults.length === 0 && searchQuery && (
+                                    <CommandItem disabled>No users found</CommandItem>
+                                  )}
+                                  {searchResults.map((searchUser) => (
+                                    <CommandItem
+                                      key={searchUser.id}
+                                      onSelect={() => {
+                                        if (!selectedUsers.find(u => u.id === searchUser.id)) {
+                                          setSelectedUsers([...selectedUsers, searchUser])
+                                        }
+                                        setSearchQuery('')
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between w-full">
+                                        <div>
+                                          <div className="font-medium">{searchUser.name}</div>
+                                          <div className="text-sm text-slate-500">{searchUser.email}</div>
+                                        </div>
+                                        {selectedUsers.find(u => u.id === searchUser.id) && (
+                                          <Check className="h-4 w-4 text-primary" />
+                                        )}
+                                      </div>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+
+                        {/* Selected Users */}
+                        {selectedUsers.length > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">
+                              Selected Users ({selectedUsers.length})
+                            </Label>
+                            <div className="space-y-2">
+                              {selectedUsers.map((selectedUser) => (
+                                <div key={selectedUser.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+                                  <div>
+                                    <div className="text-sm font-medium">{selectedUser.name}</div>
+                                    <div className="text-xs text-slate-500">{selectedUser.email}</div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedUsers(selectedUsers.filter(u => u.id !== selectedUser.id))}
                                   >
-                                    {u.name} ({u.email})
-                                  </label>
+                                    Remove
+                                  </Button>
                                 </div>
                               ))}
                             </div>
                           </div>
+                        )}
 
-                          <div>
-                            <Label htmlFor="assign-team">Or Assign to Team</Label>
-                            <Select value={assignToTeam} onValueChange={setAssignToTeam}>
-                              <SelectTrigger className="mt-2">
-                                <SelectValue placeholder="Select a team" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="">None</SelectItem>
-                                {availableTeams.map((team) => (
-                                  <SelectItem key={team.id} value={team.id}>
-                                    {team.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div>
-                            <Label>Assignment Deadline</Label>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  className={cn(
-                                    "w-full justify-start text-left font-normal mt-2",
-                                    !assignmentDeadline && "text-muted-foreground"
-                                  )}
-                                >
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {assignmentDeadline ? format(assignmentDeadline, "PPP") : "Select deadline"}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                  mode="single"
-                                  selected={assignmentDeadline}
-                                  onSelect={setAssignmentDeadline}
-                                  initialFocus
-                                />
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                        </motion.div>
-                      )}
-                    </CardContent>
-                  </Card>
+                        {/* Deadline */}
+                        <div className="space-y-2">
+                          <Label className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Assignment Deadline</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full justify-start text-left font-normal rounded-lg border-slate-200",
+                                  !assignmentDeadline && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {assignmentDeadline ? format(assignmentDeadline, "PPP") : "Select deadline (optional)"}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                              <Calendar
+                                mode="single"
+                                selected={assignmentDeadline}
+                                onSelect={setAssignmentDeadline}
+                                initialFocus
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      </motion.div>
+                    )}
+                  </div>
                 )}
 
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="save-for-reuse"
-                    checked={saveForReuse}
-                    onCheckedChange={setSaveForReuse}
-                  />
-                  <Label htmlFor="save-for-reuse">Save for reuse</Label>
-                </div>
-
-                <div className="flex gap-4">
+                <div className="border-t border-slate-100 pt-6">
                   <Button
                     onClick={handleStartSimulation}
-                    disabled={loading || !scenarioDescription.trim()}
-                    className="flex-1"
+                    disabled={!scenarioData.title || !scenarioData.prompt}
+                    className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
                   >
-                    {loading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                        Starting...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="mr-2 h-4 w-4" />
-                        Start Simulation
-                      </>
-                    )}
+                    <Play className="mr-2 h-4 w-4" />
+                    Start Live Simulation
                   </Button>
-
-                  {(saveForReuse || isCompanyScenario) && (
-                    <Button
-                      onClick={handleSaveScenario}
-                      disabled={saving || !scenarioTitle.trim() || !scenarioDescription.trim()}
-                      variant="outline"
-                    >
-                      {saving ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="mr-2 h-4 w-4" />
-                          Save Only
-                        </>
-                      )}
-                    </Button>
-                  )}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </div>
+          </motion.div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
+          {/* Right Sidebar - Takes 1 column */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="space-y-6"
+          >
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-1 flex items-center">
+                  <Settings className="mr-2 h-5 w-5 text-primary" />
                   Quick Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+                </h3>
+              </div>
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Volume2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Prospect Voice</span>
-                  </div>
-                  <Badge variant="secondary">
-                    {prospectVoice ? prospectVoice.charAt(0).toUpperCase() + prospectVoice.slice(1) : 'Not set'}
-                  </Badge>
+                  <span className="text-sm text-slate-700">Prospect Voice</span>
+                  <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 px-3 py-1 text-sm font-medium">
+                    <Mic className="mr-1 h-3 w-3" />
+                    {scenarioData.voice ? 
+                      (() => {
+                        const voice = REGIONAL_VOICES.find(v => v.id === scenarioData.voice);
+                        return voice ? `${voice.flagEmoji} ${voice.name}` : 'Legacy Voice';
+                      })()
+                      : 'Not set'
+                    }
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Save className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Save for Reuse</span>
-                  </div>
-                  <Badge variant="secondary">{saveForReuse ? 'Yes' : 'No'}</Badge>
+                  <span className="text-sm text-slate-700">Save for Reuse</span>
+                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                    scenarioData.saveReuse ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {scenarioData.saveReuse ? 'Yes' : 'No'}
+                  </span>
                 </div>
                 {(userRole === 'manager' || userRole === 'admin') && (
                   <>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">Company Scenario</span>
-                      </div>
-                      <Badge variant="secondary">{isCompanyScenario ? 'Yes' : 'No'}</Badge>
+                      <span className="text-sm text-slate-700">Company Scenario</span>
+                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                        isCompanyScenario ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {isCompanyScenario ? 'Yes' : 'No'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">Assignments</span>
-                      </div>
-                      <Badge variant="secondary">
-                        {showAssignment ? `${assignToUsers.length + (assignToTeam ? 1 : 0)}` : 'None'}
-                      </Badge>
+                      <span className="text-sm text-slate-700">Assigned Users</span>
+                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                        selectedUsers.length > 0 ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {selectedUsers.length}
+                      </span>
                     </div>
                   </>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Lightbulb className="h-5 w-5" />
-                  Tips
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <User className="h-4 w-4 text-primary mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Write Human Scenarios</p>
-                      <p className="text-xs text-muted-foreground">
-                        Describe the prospect like a real person with specific motivations, challenges, and personality traits.
-                      </p>
-                    </div>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+              <div className="mb-6">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-1">Tips</h3>
+                  </div>
+                  <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Lightbulb className="h-4 w-4 text-amber-600" />
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <MessageSquare className="h-4 w-4 text-primary mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Include Context</p>
-                      <p className="text-xs text-muted-foreground">
-                        Explain how this conversation came about - was it inbound, outbound, referral? This context shapes everything.
-                      </p>
-                    </div>
+              </div>
+              <div className="space-y-3 text-sm">
+                <div className="p-3 bg-primary/5 rounded-lg border border-primary/10">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <User className="h-4 w-4 text-primary" />
+                    <p className="font-medium text-primary">Write Human Scenarios</p>
                   </div>
+                  <p className="text-primary/80">
+                    Describe the prospect like a real person with specific motivations, challenges, and personality traits.
+                  </p>
                 </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle className="h-4 w-4 text-primary mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Be Specific</p>
-                      <p className="text-xs text-muted-foreground">
-                        The more detail you provide, the more realistic and valuable the practice will be.
-                      </p>
-                    </div>
+                <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <MessageSquare className="h-4 w-4 text-emerald-600" />
+                    <p className="font-medium text-emerald-900">Include Context</p>
                   </div>
+                  <p className="text-emerald-700">
+                    Explain how this conversation came about - was it inbound, outbound, referral? This context shapes everything.
+                  </p>
                 </div>
-
-                {(userRole === 'manager' || userRole === 'admin') && (
-                  <div className="pt-4 border-t">
-                    <div className="flex items-start gap-2">
-                      <Info className="h-4 w-4 text-primary mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium">Manager Features</p>
-                        <p className="text-xs text-muted-foreground">
-                          As a {userRole}, you can create company scenarios and assign them to team members with deadlines.
-                        </p>
-                      </div>
-                    </div>
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <TrendingUp className="h-4 w-4 text-amber-600" />
+                    <p className="font-medium text-amber-900">Be Specific</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                  <p className="text-amber-700">
+                    "Busy but interested" is better than difficulty levels. "Burned by vendors before" sets clear expectations.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
-      </motion.div>
+
+
+
+      </div>
     </div>
   )
 }
