@@ -14,6 +14,7 @@ import { Play, Save, Settings, TrendingUp, Mic, FileText, User, MessageSquare, L
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
+import { REGIONAL_VOICES, getVoicesByRegion } from '@/lib/voice-constants'
 
 
 export function ScenarioBuilder() {
@@ -24,6 +25,7 @@ export function ScenarioBuilder() {
   const [scenarioData, setScenarioData] = useState({
     title: '',
     prompt: '',
+    prospectName: '', // Add prospect name field
     voice: '',
     saveReuse: false
   })
@@ -73,12 +75,15 @@ export function ScenarioBuilder() {
   }
 
   const handleLoadScenario = (scenario: any) => {
+    console.log('🔍 Loading saved scenario:', scenario);
     setScenarioData({
       title: scenario.title,
       prompt: scenario.prompt,
+      prospectName: scenario.prospect_name || '', // Load saved prospect name
       voice: scenario.voice || '',
       saveReuse: true
     })
+    console.log('🔍 Set scenario data with prospectName:', scenario.prospect_name);
     
     toast({
       title: "Scenario Loaded",
@@ -146,9 +151,12 @@ export function ScenarioBuilder() {
     const simulationData = {
       title: scenarioData.title,
       prompt: scenarioData.prompt,
+      prospectName: scenarioData.prospectName,
       voice: scenarioData.voice,
       timestamp: Date.now()
     }
+    console.log('🔍 Saving to localStorage:', simulationData);
+    console.log('🔍 scenarioData.prospectName:', scenarioData.prospectName);
     localStorage.setItem('currentScenario', JSON.stringify(simulationData))
     
     // Navigate to simulation
@@ -195,6 +203,7 @@ export function ScenarioBuilder() {
         body: JSON.stringify({
           title: scenarioData.title,
           prompt: scenarioData.prompt,
+          prospectName: scenarioData.prospectName,
           voice: scenarioData.voice,
           userId: actualUserId
         }),
@@ -336,50 +345,59 @@ export function ScenarioBuilder() {
                   />
                 </div>
 
-                <div className="border-t border-slate-100 pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">AI Voice</Label>
+                    <Label htmlFor="prospectName" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Prospect Name</Label>
+                    <Input
+                      id="prospectName"
+                      placeholder="e.g., Sarah Johnson"
+                      value={scenarioData.prospectName}
+                      onChange={(e) => setScenarioData(prev => ({ ...prev, prospectName: e.target.value }))}
+                      className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Prospect Voice</Label>
                     <Select value={scenarioData.voice} onValueChange={(value) => setScenarioData(prev => ({ ...prev, voice: value }))}>
                       <SelectTrigger className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary">
-                        <SelectValue placeholder="Select AI voice" />
+                        <SelectValue placeholder="Select prospect voice" />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="professional-male">
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">Professional</Badge>
-                            <span>Male</span>
+                      <SelectContent className="max-h-80">
+                        {Object.entries(getVoicesByRegion()).map(([region, voices]) => (
+                          <div key={region}>
+                            {/* Region Header */}
+                            <div className="px-2 py-1.5 text-xs font-semibold text-slate-600 bg-slate-50 border-b border-slate-100 flex items-center space-x-2">
+                              <span>{voices[0]?.flagEmoji}</span>
+                              <span>{region === 'US' ? 'United States' : 'United Kingdom'} Accent</span>
+                            </div>
+                            
+                            {/* Voice Options for this Region */}
+                            {voices.map((voice) => (
+                              <SelectItem key={voice.id} value={voice.id}>
+                                <div className="flex items-center space-x-3">
+                                  <span className="text-lg">{voice.flagEmoji}</span>
+                                  <div className="flex items-center space-x-2">
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs capitalize ${
+                                        voice.style === 'professional' ? 'border-blue-200 text-blue-700 bg-blue-50' :
+                                        voice.style === 'executive' ? 'border-purple-200 text-purple-700 bg-purple-50' :
+                                        'border-green-200 text-green-700 bg-green-50'
+                                      }`}
+                                    >
+                                      {voice.style}
+                                    </Badge>
+                                    <span className="font-medium">{voice.gender === 'MALE' ? 'Male' : 'Female'}</span>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                            
+                            {/* Add some spacing between regions */}
+                            {region !== 'UK' && <div className="h-2" />}
                           </div>
-                        </SelectItem>
-                        <SelectItem value="professional-female">
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">Professional</Badge>
-                            <span>Female</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="executive-male">
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">Executive</Badge>
-                            <span>Male</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="executive-female">
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">Executive</Badge>
-                            <span>Female</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="casual-male">
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">Casual</Badge>
-                            <span>Male</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="casual-female">
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">Casual</Badge>
-                            <span>Female</span>
-                          </div>
-                        </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -428,10 +446,16 @@ export function ScenarioBuilder() {
               </div>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-700">Voice</span>
+                  <span className="text-sm text-slate-700">Prospect Voice</span>
                   <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 px-3 py-1 text-sm font-medium">
                     <Mic className="mr-1 h-3 w-3" />
-                    {scenarioData.voice ? scenarioData.voice.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not set'}
+                    {scenarioData.voice ? 
+                      (() => {
+                        const voice = REGIONAL_VOICES.find(v => v.id === scenarioData.voice);
+                        return voice ? `${voice.flagEmoji} ${voice.name}` : 'Legacy Voice';
+                      })()
+                      : 'Not set'
+                    }
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

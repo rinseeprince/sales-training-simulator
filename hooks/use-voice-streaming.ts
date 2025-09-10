@@ -413,7 +413,7 @@ export function useVoiceStreaming(onAudioPlay?: (audioElement: HTMLAudioElement)
       console.log('Starting streaming with request:', requestBody);
       console.log('Updated conversation history:', updatedHistory);
 
-      // Create EventSource for SSE - using updated API that prioritizes user prompts
+      // Create EventSource for SSE - using original API
       const response = await fetch('/api/stream-gpt-voice', {
         method: 'POST',
         headers: {

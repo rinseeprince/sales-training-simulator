@@ -17,6 +17,7 @@ export function Homepage() {
 
   const handleRunScenario = () => {
     if (prompt.trim()) {
+      // For homepage, require authentication first - limits will be checked in the actual app
       setIsSignUpOpen(true)
     }
   }

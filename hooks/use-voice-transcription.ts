@@ -135,18 +135,20 @@ export function useVoiceTranscription(config: TranscriptionConfig = {}) {
           noiseSuppression: true,
           autoGainControl: true,
           sampleRate: 16000, // Whisper prefers 16kHz
+          channelCount: 1,   // Mono for voice
         } 
       });
       
       console.log('Microphone access granted, stream tracks:', stream.getTracks().length);
       streamRef.current = stream;
       
-      console.log('Creating MediaRecorder...');
+      console.log('Creating MediaRecorder with compression...');
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
+        mimeType: 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 64000 // 64kbps for voice quality
       });
       
-      console.log('MediaRecorder created successfully');
+      console.log('MediaRecorder created successfully with 64kbps compression');
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       

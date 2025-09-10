@@ -49,6 +49,9 @@ export interface Call {
   id: string;
   rep_id: string;
   scenario_name: string;
+  scenario_prompt?: string;
+  scenario_prospect_name?: string;
+  scenario_voice?: string;
   transcript: CallTranscript[];
   score: number;
   talk_ratio: number;
@@ -128,6 +131,18 @@ export interface VoiceSettings {
   similarityBoost?: number;
   style?: number;
   useSpeakerBoost?: boolean;
+  region?: 'US' | 'UK';
+}
+
+export interface RegionalVoice {
+  id: string;
+  name: string;
+  gender: 'MALE' | 'FEMALE';
+  style: 'professional' | 'executive' | 'casual';
+  region: 'US' | 'UK';
+  languageCode: string;
+  googleVoiceName: string;
+  flagEmoji: string;
 }
 
 export interface StartSimulationRequest {

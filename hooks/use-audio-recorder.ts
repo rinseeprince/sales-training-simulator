@@ -56,35 +56,55 @@ export function useAudioRecorder(): AudioRecorderState & AudioRecorderActions {
     try {
       setError(null)
       
-      // Request microphone access
+      // Request microphone access with optimized settings for compression
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 44100,
+          sampleRate: 22050, // Lower sample rate for voice (was 44100)
+          channelCount: 1,    // Mono instead of stereo for voice
         } 
       })
       
       streamRef.current = stream
       
-      // Create MediaRecorder with fallback MIME types
+      // Create MediaRecorder with fallback MIME types and compression
       let mimeType = 'audio/webm;codecs=opus'
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'audio/webm'
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'audio/mp4'
-          if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = ''
-          }
+      let recordingOptions: MediaRecorderOptions = {}
+      
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        // Opus codec - set low bitrate for compression
+        recordingOptions = {
+          mimeType: mimeType,
+          audioBitsPerSecond: 64000 // 64kbps for voice quality
         }
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        recordingOptions = {
+          mimeType: 'audio/webm',
+          audioBitsPerSecond: 64000
+        }
+        mimeType = 'audio/webm'
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        recordingOptions = {
+          mimeType: 'audio/mp4',
+          audioBitsPerSecond: 64000
+        }
+        mimeType = 'audio/mp4'
+      } else {
+        // Fallback - no specific mime type but still try compression
+        recordingOptions = {
+          audioBitsPerSecond: 64000
+        }
+        mimeType = 'default'
       }
       
-      console.log('Using MIME type:', mimeType || 'default')
+      console.log('Using recording options for compression:', {
+        mimeType: mimeType,
+        audioBitsPerSecond: recordingOptions.audioBitsPerSecond
+      })
       
-      const mediaRecorder = new MediaRecorder(stream, mimeType ? {
-        mimeType: mimeType
-      } : undefined)
+      const mediaRecorder = new MediaRecorder(stream, recordingOptions)
       
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []

@@ -17,10 +17,12 @@ import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { AudioWaveform } from '@/components/ui/audio-waveform'
 import { ReviewModal } from '@/components/ui/review-modal'
 import { useToast } from '@/hooks/use-toast'
+import { getPhoneRingGenerator } from '@/lib/phone-ring-generator'
 
 interface ScenarioData {
   title: string
   prompt: string
+  prospectName?: string
   duration: string
   voice: string
   enableStreaming: boolean
@@ -45,6 +47,7 @@ export function LiveSimulation() {
   const [analysisProgress, setAnalysisProgress] = useState<string>('')
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reviewCallId, setReviewCallId] = useState<string | null>(null)
+  const [isRinging, setIsRinging] = useState(false)
   
   // Push-to-talk state
   const [isUserRecording, setIsUserRecording] = useState(false)
@@ -80,19 +83,24 @@ export function LiveSimulation() {
 
   // Load scenario data from localStorage
   useEffect(() => {
+    console.log('🔄 Live simulation loading, checking for scenario data...');
     const savedScenario = localStorage.getItem('currentScenario')
+    console.log('🔄 Found scenario in localStorage:', savedScenario ? 'Yes' : 'No');
     if (savedScenario) {
       try {
         const parsed = JSON.parse(savedScenario)
+        console.log('🔄 Parsed scenario data:', parsed);
         
         // Check if scenario data is recent (within last hour)
         const isRecent = parsed.timestamp && (Date.now() - parsed.timestamp) < 3600000
+        console.log('🔄 Scenario is recent:', isRecent, 'timestamp:', parsed.timestamp, 'age:', parsed.timestamp ? (Date.now() - parsed.timestamp) / 1000 / 60 : 'no timestamp', 'minutes');
         
         if (isRecent) {
           setScenarioData(parsed)
-          console.log('Loaded scenario data:', parsed)
+          console.log('🔄 Loaded scenario data successfully:', parsed)
         } else {
           // Scenario data is stale, clear it and redirect
+          console.log('🔄 Scenario data is stale, redirecting to builder');
           localStorage.removeItem('currentScenario')
           router.push('/scenario-builder')
           return
@@ -122,7 +130,7 @@ export function LiveSimulation() {
     scenarioPrompt: "",
     persona: "",
     voiceSettings: {
-      voiceId: '21m00Tcm4TlvDq8ikWAM', // Default ElevenLabs voice
+      voiceId: 'professional-male-us', // Default US professional male voice
       stability: 0.5,
       similarityBoost: 0.5,
       style: 0.0,
@@ -134,21 +142,14 @@ export function LiveSimulation() {
   // Update scenario config when data loads
   useEffect(() => {
     if (scenarioData) {
-      // Map voice selection to ElevenLabs voice ID
-      const voiceMap: { [key: string]: string } = {
-        'professional-male': '21m00Tcm4TlvDq8ikWAM',
-        'professional-female': 'EXAVITQu4vr4xnSDxMaL',
-        'executive-male': 'pNInz6obpgDQGcFmaJgB',
-        'executive-female': 'VR6AewLTigWG4xSOukaG',
-        'casual-male': 'yoZ06aMxZJJ28mfd3POQ',
-        'casual-female': 'ThT5KcBeYPX3keUQqHPh'
-      };
+      // No need for voice mapping - pass the voice ID directly
+      // The new regional voice IDs (like 'casual-female-uk') will be handled by the backend
       
       scenarioConfig.current = {
         scenarioPrompt: scenarioData.prompt, // Use the prompt directly - no more complex generation
         persona: null as any, // No longer using complex persona parameters
         voiceSettings: {
-          voiceId: voiceMap[scenarioData.voice] || '21m00Tcm4TlvDq8ikWAM',
+          voiceId: scenarioData.voice || 'professional-male-us', // Use the voice ID directly, fallback to US professional male
           stability: 0.5,
           similarityBoost: 0.5,
           style: 0.0,
@@ -337,7 +338,7 @@ export function LiveSimulation() {
         if (transcribedText && transcribedText.trim()) {
           console.log('Auto-sending transcribed message:', transcribedText)
           
-          // Automatically send to AI
+          // Automatically send to AI (original simple approach)
           await startStreaming(transcribedText.trim(), {
             scenarioPrompt: scenarioConfig.current.scenarioPrompt,
             persona: scenarioConfig.current.persona,
@@ -373,7 +374,7 @@ export function LiveSimulation() {
       
       setCanSendMessage(false)
       
-      // Send to AI streaming
+      // Send to AI streaming (original simple approach)
       await startStreaming(currentUserMessage, {
         scenarioPrompt: scenarioConfig.current.scenarioPrompt,
         persona: scenarioConfig.current.persona,
@@ -505,6 +506,14 @@ export function LiveSimulation() {
     if (!user) return
     
     try {
+      // Play phone ring sound before starting the call
+      console.log('Playing call ring sound...');
+      setIsRinging(true);
+      const phoneRing = getPhoneRingGenerator();
+      await phoneRing.playCallStartRing();
+      setIsRinging(false);
+      console.log('Call ring finished, starting call...');
+      
       // Increment simulation count immediately when starting
       console.log('Incrementing simulation count for user:', user.id)
       const incrementResponse = await fetch('/api/increment-simulation', {
@@ -565,6 +574,106 @@ export function LiveSimulation() {
       setCurrentUserMessage('')
       setCanSendMessage(false)
       resetConversation() // Clear any previous conversation history
+      
+      // Auto-generate prospect greeting after a short delay (simulating pickup)
+      setTimeout(async () => {
+        // Play phone pickup sound first
+        console.log('Playing phone pickup sound...');
+        const phoneRing = getPhoneRingGenerator();
+        await phoneRing.playPickupSound();
+        console.log('Phone pickup sound finished');
+        
+        // Small delay after pickup sound before greeting
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        console.log('Generating prospect greeting...')
+        
+        // Use the prospect name from the scenario data, or fallback to a default
+        console.log('🔍 Debug prospect name:', {
+          scenarioData: scenarioData,
+          prospectName: scenarioData?.prospectName,
+          trimmed: scenarioData?.prospectName?.trim(),
+          fallback: scenarioData?.prospectName?.trim() || 'Alex'
+        });
+        const prospectName = scenarioData?.prospectName?.trim() || 'Alex';
+        const greetingMessage = `Hello, ${prospectName} speaking.`;
+        
+        console.log('Auto-generating prospect greeting:', greetingMessage);
+        
+        // Generate the greeting directly and play it (no need to go through streaming)
+        try {
+          // Add greeting to conversation history
+          const greetingHistoryItem = {
+            role: 'ai' as const,
+            content: greetingMessage,
+            timestamp: new Date().toISOString()
+          };
+          
+          // We need to manually update the conversation history since this isn't going through startStreaming
+          // But first we need access to the conversation history setter
+          console.log('Playing prospect greeting:', greetingMessage);
+          
+          // Generate greeting audio using Google TTS via API
+          try {
+            console.log('Generating Google TTS for greeting:', greetingMessage);
+            
+            const ttsResponse = await fetch('/api/generate-greeting-tts', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                text: greetingMessage,
+                voiceSettings: scenarioConfig.current.voiceSettings
+              })
+            });
+            
+            if (ttsResponse.ok) {
+              const ttsResult = await ttsResponse.json();
+              
+              if (ttsResult.success && ttsResult.audioBase64) {
+                const audioUrl = `data:audio/mpeg;base64,${ttsResult.audioBase64}`;
+                const audio = new Audio(audioUrl);
+                
+                // Register with enhanced recorder for mixed audio
+                if (addAudioToMix) {
+                  addAudioToMix(audio);
+                }
+                
+                // Play the greeting
+                await audio.play();
+                console.log('Google TTS greeting played successfully');
+              } else {
+                throw new Error('TTS generation failed');
+              }
+            } else {
+              throw new Error('TTS API request failed');
+            }
+            
+          } catch (ttsError) {
+            console.error('Google TTS failed for greeting, using speech synthesis fallback:', ttsError);
+            // Fallback to speech synthesis only if Google TTS fails
+            if ('speechSynthesis' in window) {
+              const utterance = new SpeechSynthesisUtterance(greetingMessage);
+              utterance.rate = 0.9;
+              utterance.pitch = 1.0;
+              utterance.volume = 0.8;
+              speechSynthesis.speak(utterance);
+            }
+          }
+          
+        } catch (error) {
+          console.error('Failed to generate prospect greeting:', error);
+          // Fallback to speech synthesis
+          if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(greetingMessage);
+            utterance.rate = 0.9;
+            speechSynthesis.speak(utterance);
+          }
+        }
+        
+      }, 1000); // 1 second delay after ring ends to simulate pickup
+      
     } catch (error) {
       console.error('Failed to start recording:', error)
       toast({
@@ -810,6 +919,8 @@ export function LiveSimulation() {
             repId: actualUserId,
             scenarioName: scenarioData?.title || 'Unnamed Simulation',
             scenarioPrompt: scenarioData?.prompt || '', // Include scenario prompt in temp data
+            scenarioProspectName: scenarioData?.prospectName || '', // Include prospect name for restart
+            scenarioVoice: scenarioData?.voice || 'professional-male-us', // Include voice for restart
             duration: currentTime,
             audioUrl: audioUrl,
             conversationHistory: conversationHistory,
@@ -1186,13 +1297,26 @@ export function LiveSimulation() {
 
             <div className="space-y-3">
               {!isRecording ? (
-                                <Button
-                  onClick={handleStartRecording}
-                  className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
-                >
-                  <Play className="mr-2 h-4 w-4" />
-                  Start Call
-                </Button>
+                isRinging ? (
+                  <Button
+                    disabled
+                    className="w-full rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-primary/20 animate-pulse"></div>
+                    <div className="relative flex items-center justify-center">
+                      <div className="mr-2 h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      <span>Calling...</span>
+                    </div>
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleStartRecording}
+                    className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
+                  >
+                    <Play className="mr-2 h-4 w-4" />
+                    Start Call
+                  </Button>
+                )
               ) : (
                 <>
                   <Button

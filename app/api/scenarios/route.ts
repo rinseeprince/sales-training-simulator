@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
     const { 
       title, 
       prompt, 
+      prospectName,
       duration,
       voice,
       userId
@@ -75,11 +76,12 @@ export async function POST(req: NextRequest) {
       return errorResponse('userId is required');
     }
 
-    // Prepare scenario data - PROMPT-ONLY SYSTEM with duration and voice
+    // Prepare scenario data - PROMPT-ONLY SYSTEM with duration, voice, and prospect name
     const scenarioData = {
       user_id: userId,
       title: title,  // The DB column is 'title', not 'name'
       prompt: prompt,
+      prospect_name: prospectName,
       duration: duration || null,
       voice: voice || null,
       created_at: new Date().toISOString(),

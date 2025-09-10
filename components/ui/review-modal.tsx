@@ -61,7 +61,8 @@ export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps
       <DialogPortal>
         <DialogOverlay className="!z-[9998] backdrop-blur-sm bg-black/60" />
         <DialogPrimitive.Content
-          className="fixed left-[50%] top-[50%] !z-[9999] w-[92vw] max-w-6xl translate-x-[-50%] translate-y-[-50%] border border-slate-200/50 bg-white p-0 duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-97 data-[state=open]:zoom-in-97 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] max-h-[88vh] flex flex-col overflow-hidden [&>button]:hidden rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.15),0_2px_8px_rgba(0,0,0,0.1)]"
+          className="fixed left-[50%] top-[50%] !z-[9999] w-[96vw] max-w-[1400px] translate-x-[-50%] translate-y-[-50%] border border-slate-200/50 bg-white p-0 duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-97 data-[state=open]:zoom-in-97 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] max-h-[92vh] flex flex-col overflow-hidden [&>button]:hidden rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.15),0_2px_8px_rgba(0,0,0,0.1)]"
+          aria-describedby={undefined}
         >
           <DialogHeader className="shrink-0 px-8 py-6 pb-5 border-b border-slate-100/80 bg-white/95 backdrop-blur-sm sticky top-0 z-[110] rounded-t-2xl">
             <div className="flex items-center justify-between">
@@ -87,13 +88,17 @@ export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps
             </div>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-gradient-to-b from-slate-50/30 to-slate-50/60" style={{ maxHeight: 'calc(88vh - 140px)' }}>
+          <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-gradient-to-b from-slate-50/30 to-slate-50/60" style={{ maxHeight: 'calc(92vh - 140px)' }}>
             <div className="px-8 py-6">
-              {callId && (
+              {callId ? (
                 <PostCallReview 
                   modalCallId={callId}
                   isInModal={true}
                 />
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
               )}
             </div>
           </div>

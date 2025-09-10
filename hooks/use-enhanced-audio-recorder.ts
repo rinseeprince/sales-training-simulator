@@ -111,13 +111,14 @@ export function useEnhancedAudioRecorder(): EnhancedAudioRecorderState & Enhance
         console.log('AudioContext resumed')
       }
       
-      // Get microphone stream with ECHO CANCELLATION enabled
+      // Get microphone stream with ECHO CANCELLATION enabled and optimized for compression
       const micStream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,  // CRITICAL: Enable to prevent feedback loop
           noiseSuppression: true,  // Also helps with audio quality
           autoGainControl: true,   // Prevents volume issues
-          sampleRate: 44100,
+          sampleRate: 22050,       // Lower sample rate for voice (was 44100)
+          channelCount: 1,         // Mono instead of stereo for voice
         } 
       })
       
@@ -145,23 +146,42 @@ export function useEnhancedAudioRecorder(): EnhancedAudioRecorderState & Enhance
       
       console.log('Audio mixing nodes created and connected with echo cancellation')
       
-      // Create MediaRecorder with mixed stream
+      // Create MediaRecorder with mixed stream and compression settings
       let mimeType = 'audio/webm;codecs=opus'
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'audio/webm'
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'audio/mp4'
-          if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = ''
-          }
+      let recordingOptions: MediaRecorderOptions = {}
+      
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        // Opus codec - set low bitrate for compression
+        recordingOptions = {
+          mimeType: mimeType,
+          audioBitsPerSecond: 64000 // 64kbps for voice quality
         }
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        recordingOptions = {
+          mimeType: 'audio/webm',
+          audioBitsPerSecond: 64000
+        }
+        mimeType = 'audio/webm'
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        recordingOptions = {
+          mimeType: 'audio/mp4',
+          audioBitsPerSecond: 64000
+        }
+        mimeType = 'audio/mp4'
+      } else {
+        // Fallback - no specific mime type but still try compression
+        recordingOptions = {
+          audioBitsPerSecond: 64000
+        }
+        mimeType = 'default'
       }
       
-      console.log('Using MIME type for mixed recording:', mimeType || 'default')
+      console.log('Using recording options for compression:', {
+        mimeType: mimeType,
+        audioBitsPerSecond: recordingOptions.audioBitsPerSecond
+      })
       
-      const mediaRecorder = new MediaRecorder(mixedStream, mimeType ? {
-        mimeType: mimeType
-      } : undefined)
+      const mediaRecorder = new MediaRecorder(mixedStream, recordingOptions)
       
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []

@@ -27,6 +27,7 @@ interface SavedScenario {
   id: string
   title: string
   prompt: string
+  prospect_name?: string
   duration?: string
   voice?: string
   created_at: string
@@ -85,16 +86,67 @@ export function SavedScenarios() {
     }
   }
 
-  const handleRunScenario = (scenario: SavedScenario) => {
+  const handleRunScenario = async (scenario: SavedScenario) => {
+    // Check simulation limit before proceeding
+    if (user) {
+      try {
+        // Get the correct user ID from simple_users table
+        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+        const profileData = await profileResponse.json();
+        
+        if (!profileData.success) {
+          console.error('Failed to get user profile:', profileData.error);
+          // Continue anyway if profile check fails - will be enforced when recording starts
+        } else {
+          const actualUserId = profileData.userProfile.id;
+          
+          const response = await fetch(`/api/check-simulation-limit?userId=${actualUserId}`)
+          const data = await response.json()
+          
+          if (!data.canSimulate) {
+            toast({
+              title: "Simulation Limit Reached",
+              description: data.message || "You've reached your free simulation limit. Please upgrade to continue.",
+              variant: "destructive",
+              action: (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => router.push('/pricing')}
+                >
+                  Upgrade
+                </Button>
+              )
+            })
+            return
+          }
+          
+          // Show remaining simulations for free users (informational only)
+          if (data.remaining && data.remaining > 0 && data.remaining <= 10) {
+            toast({
+              title: "Simulations Remaining",
+              description: `You have ${data.remaining} free simulation${data.remaining === 1 ? '' : 's'} left. Count will be used when you start recording.`,
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check simulation limit:', error)
+        // Continue anyway if check fails - will be enforced when recording starts
+      }
+    }
+
     // Convert scenario to simulation format
+    console.log('🔍 Running saved scenario:', scenario);
     const simulationData = {
       title: scenario.title,
       prompt: scenario.prompt,
+      prospectName: scenario.prospect_name || '', // Include saved prospect name
       duration: scenario.duration || '5 minutes',
       voice: scenario.voice || 'professional-male',
       saveReuse: false,
       timestamp: Date.now()
     }
+    console.log('🔍 Simulation data for localStorage:', simulationData);
 
     // Save to localStorage and navigate to simulation
     localStorage.setItem('currentScenario', JSON.stringify(simulationData))

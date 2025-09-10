@@ -1,4 +1,6 @@
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
+import { RegionalVoice } from './types';
+import { getRegionalVoiceById } from './voice-constants';
 
 let googleTTSClient: TextToSpeechClient | null = null;
 
@@ -129,98 +131,233 @@ function convertElevenLabsToGoogleTTS(elevenLabsSettings: any = {}) {
  * Get voice-specific adjustments optimized for Chirp 3: HD voices
  * All voices use Chirp 3: HD for ultra-natural speech with perfect intonation
  */
-function getVoiceAdjustments(elevenLabsVoiceId?: string) {
+function getVoiceAdjustments(voiceId?: string) {
   const adjustments: Record<string, { speakingRateMultiplier: number; pitchOffset: number; volumeOffset: number }> = {
-    // Professional voices - Chirp 3: HD Fenrir and Erinome
-    '21m00Tcm4TlvDq8ikWAM': { // professional-male (Chirp3-HD-Fenrir)
-      speakingRateMultiplier: 0.98, // Natural, confident professional pace
-      pitchOffset: 0, // Chirp 3: HD has perfect natural intonation
-      volumeOffset: 2.0 // Clear professional presence
+    // NEW REGIONAL VOICE IDS - US Voices
+    'professional-male-us': {
+      speakingRateMultiplier: 0.98,
+      pitchOffset: 0,
+      volumeOffset: 2.0
     },
-    'EXAVITQu4vr4xnSDxMaL': { // professional-female (Chirp3-HD-Erinome)
-      speakingRateMultiplier: 1.0, // Perfect articulation and confidence
-      pitchOffset: 0, // Chirp 3: HD has perfect natural intonation
-      volumeOffset: 2.0 // Strong, clear presence
+    'professional-female-us': {
+      speakingRateMultiplier: 1.0,
+      pitchOffset: 0,
+      volumeOffset: 2.0
     },
-    
-    // Executive voices - Chirp 3: HD Iapetus and Gacrux for leadership
-    'pNInz6obpgDQGcFmaJgB': { // executive-male (Chirp3-HD-Iapetus)
-      speakingRateMultiplier: 0.95, // Measured, thoughtful executive pace
-      pitchOffset: 0, // Chirp 3: HD has perfect natural intonation
-      volumeOffset: 2.5 // Commanding executive presence
+    'executive-male-us': {
+      speakingRateMultiplier: 0.95,
+      pitchOffset: 0,
+      volumeOffset: 2.5
     },
-    'VR6AewLTigWG4xSOukaG': { // executive-female (Chirp3-HD-Gacrux)
-      speakingRateMultiplier: 0.97, // Authoritative but accessible
-      pitchOffset: 0, // Chirp 3: HD has perfect natural intonation
-      volumeOffset: 2.3 // Strong executive command
+    'executive-female-us': {
+      speakingRateMultiplier: 0.97,
+      pitchOffset: 0,
+      volumeOffset: 2.3
     },
-    
-    // Casual voices - Chirp 3: HD Puck and Zephyr for warmth
-    'yoZ06aMxZJJ28mfd3POQ': { // casual-male (Chirp3-HD-Puck)
-      speakingRateMultiplier: 1.03, // Natural, relaxed conversational flow
-      pitchOffset: 0, // Chirp 3: HD has perfect natural intonation
-      volumeOffset: 1.8 // Comfortable, engaging level
+    'casual-male-us': {
+      speakingRateMultiplier: 1.03,
+      pitchOffset: 0,
+      volumeOffset: 1.8
     },
-    'ThT5KcBeYPX3keUQqHPh': { // casual-female (Chirp3-HD-Zephyr)
-      speakingRateMultiplier: 1.02, // Smooth, friendly delivery
-      pitchOffset: 0, // Chirp 3: HD has perfect natural intonation
-      volumeOffset: 1.8 // Pleasant, warm engagement
+    'casual-female-us': {
+      speakingRateMultiplier: 1.02,
+      pitchOffset: 0,
+      volumeOffset: 1.8
+    },
+
+    // NEW REGIONAL VOICE IDS - UK Voices
+    'professional-male-uk': {
+      speakingRateMultiplier: 0.98,
+      pitchOffset: 0,
+      volumeOffset: 2.0
+    },
+    'professional-female-uk': {
+      speakingRateMultiplier: 1.0,
+      pitchOffset: 0,
+      volumeOffset: 2.0
+    },
+    'executive-male-uk': {
+      speakingRateMultiplier: 0.95,
+      pitchOffset: 0,
+      volumeOffset: 2.5
+    },
+    'executive-female-uk': {
+      speakingRateMultiplier: 0.97,
+      pitchOffset: 0,
+      volumeOffset: 2.3
+    },
+    'casual-male-uk': {
+      speakingRateMultiplier: 1.03,
+      pitchOffset: 0,
+      volumeOffset: 1.8
+    },
+    'casual-female-uk': {
+      speakingRateMultiplier: 1.02,
+      pitchOffset: 0,
+      volumeOffset: 1.8
+    },
+
+    // LEGACY ELEVENLABS VOICE IDS (for backward compatibility)
+    '21m00Tcm4TlvDq8ikWAM': { // professional-male
+      speakingRateMultiplier: 0.98,
+      pitchOffset: 0,
+      volumeOffset: 2.0
+    },
+    'EXAVITQu4vr4xnSDxMaL': { // professional-female
+      speakingRateMultiplier: 1.0,
+      pitchOffset: 0,
+      volumeOffset: 2.0
+    },
+    'pNInz6obpgDQGcFmaJgB': { // executive-male
+      speakingRateMultiplier: 0.95,
+      pitchOffset: 0,
+      volumeOffset: 2.5
+    },
+    'VR6AewLTigWG4xSOukaG': { // executive-female
+      speakingRateMultiplier: 0.97,
+      pitchOffset: 0,
+      volumeOffset: 2.3
+    },
+    'yoZ06aMxZJJ28mfd3POQ': { // casual-male
+      speakingRateMultiplier: 1.03,
+      pitchOffset: 0,
+      volumeOffset: 1.8
+    },
+    'ThT5KcBeYPX3keUQqHPh': { // casual-female
+      speakingRateMultiplier: 1.02,
+      pitchOffset: 0,
+      volumeOffset: 1.8
+    },
+
+    // LEGACY STYLE-ONLY IDS (for backward compatibility)
+    'professional-male': {
+      speakingRateMultiplier: 0.98,
+      pitchOffset: 0,
+      volumeOffset: 2.0
+    },
+    'professional-female': {
+      speakingRateMultiplier: 1.0,
+      pitchOffset: 0,
+      volumeOffset: 2.0
+    },
+    'executive-male': {
+      speakingRateMultiplier: 0.95,
+      pitchOffset: 0,
+      volumeOffset: 2.5
+    },
+    'executive-female': {
+      speakingRateMultiplier: 0.97,
+      pitchOffset: 0,
+      volumeOffset: 2.3
+    },
+    'casual-male': {
+      speakingRateMultiplier: 1.03,
+      pitchOffset: 0,
+      volumeOffset: 1.8
+    },
+    'casual-female': {
+      speakingRateMultiplier: 1.02,
+      pitchOffset: 0,
+      volumeOffset: 1.8
     },
     
     // Default - Chirp 3: HD optimized
     'default': {
       speakingRateMultiplier: 0.98,
-      pitchOffset: 0, // Chirp 3: HD has perfect natural intonation
+      pitchOffset: 0,
       volumeOffset: 2.0
     }
   };
   
-  return adjustments[elevenLabsVoiceId || 'default'] || adjustments['default'];
+  return adjustments[voiceId || 'default'] || adjustments['default'];
 }
 
 /**
- * Map ElevenLabs voice IDs to Google TTS voices
+ * Map regional voice IDs to Google TTS voices (updated for backward compatibility)
  * Using ONLY Chirp 3: HD voices for ultra-natural, human-like speech across all options
  */
 function getGoogleVoiceFromElevenLabs(elevenLabsVoiceId?: string) {
+  // Handle new regional voice IDs
+  const regionalVoice = getRegionalVoiceById(elevenLabsVoiceId || '');
+  if (regionalVoice) {
+    return {
+      name: regionalVoice.googleVoiceName,
+      languageCode: regionalVoice.languageCode,
+      ssmlGender: regionalVoice.gender
+    };
+  }
+
+  // Legacy mappings for backward compatibility
   const voiceMappings: Record<string, { name: string; languageCode: string; ssmlGender: 'MALE' | 'FEMALE' }> = {
-    // Professional voices - Chirp 3: HD for natural business communication
+    // Legacy professional voices - map to US versions for backward compatibility
     '21m00Tcm4TlvDq8ikWAM': { // professional-male
-      name: 'en-US-Chirp3-HD-Fenrir', // Professional male with clear authority
+      name: 'en-US-Chirp3-HD-Fenrir',
       languageCode: 'en-US',
       ssmlGender: 'MALE'
     },
     'EXAVITQu4vr4xnSDxMaL': { // professional-female
-      name: 'en-US-Chirp3-HD-Erinome', // Professional female with confidence
+      name: 'en-US-Chirp3-HD-Erinome',
       languageCode: 'en-US',
       ssmlGender: 'FEMALE'
     },
     
-    // Executive voices - Premium Chirp 3: HD for leadership presence
+    // Legacy executive voices
     'pNInz6obpgDQGcFmaJgB': { // executive-male
-      name: 'en-US-Chirp3-HD-Iapetus', // Authoritative executive male
+      name: 'en-US-Chirp3-HD-Iapetus',
       languageCode: 'en-US',
       ssmlGender: 'MALE'
     },
     'VR6AewLTigWG4xSOukaG': { // executive-female
-      name: 'en-US-Chirp3-HD-Gacrux', // Commanding executive female
+      name: 'en-US-Chirp3-HD-Gacrux',
       languageCode: 'en-US',
       ssmlGender: 'FEMALE'
     },
     
-    // Casual voices - Chirp 3: HD for warm, conversational tone
+    // Legacy casual voices
     'yoZ06aMxZJJ28mfd3POQ': { // casual-male
-      name: 'en-US-Chirp3-HD-Puck', // Friendly, approachable male
+      name: 'en-US-Chirp3-HD-Puck',
       languageCode: 'en-US',
       ssmlGender: 'MALE'
     },
     'ThT5KcBeYPX3keUQqHPh': { // casual-female
-      name: 'en-US-Chirp3-HD-Zephyr', // Warm, engaging female
+      name: 'en-US-Chirp3-HD-Zephyr',
       languageCode: 'en-US',
       ssmlGender: 'FEMALE'
     },
     
-    // Default fallback - Chirp 3: HD professional
+    // Legacy voice styles without regional prefix - map to US
+    'professional-male': {
+      name: 'en-US-Chirp3-HD-Fenrir',
+      languageCode: 'en-US',
+      ssmlGender: 'MALE'
+    },
+    'professional-female': {
+      name: 'en-US-Chirp3-HD-Erinome',
+      languageCode: 'en-US',
+      ssmlGender: 'FEMALE'
+    },
+    'executive-male': {
+      name: 'en-US-Chirp3-HD-Iapetus',
+      languageCode: 'en-US',
+      ssmlGender: 'MALE'
+    },
+    'executive-female': {
+      name: 'en-US-Chirp3-HD-Gacrux',
+      languageCode: 'en-US',
+      ssmlGender: 'FEMALE'
+    },
+    'casual-male': {
+      name: 'en-US-Chirp3-HD-Puck',
+      languageCode: 'en-US',
+      ssmlGender: 'MALE'
+    },
+    'casual-female': {
+      name: 'en-US-Chirp3-HD-Zephyr',
+      languageCode: 'en-US',
+      ssmlGender: 'FEMALE'
+    },
+    
+    // Default fallback - US professional male
     'default': {
       name: 'en-US-Chirp3-HD-Fenrir',
       languageCode: 'en-US', 

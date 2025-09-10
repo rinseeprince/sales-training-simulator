@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
       repId, 
       scenarioName, 
       scenarioPrompt,
+      scenario_prompt,
+      scenario_prospect_name,
+      scenario_voice,
       duration, 
       audioUrl,
       conversationHistory = [],
@@ -310,6 +313,9 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         id: callId, // Use the provided call ID
         rep_id: repId,
         scenario_name: scenarioName,
+        scenario_prompt: scenario_prompt || scenarioPrompt, // Support both field names
+        scenario_prospect_name: scenario_prospect_name,
+        scenario_voice: scenario_voice,
         transcript: transcript,
         score: score,
         talk_ratio: talkRatio,
