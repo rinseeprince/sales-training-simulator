@@ -13,10 +13,15 @@ function createSupabaseAdmin() {
 // GET: Fetch scenario assignments
 export async function GET(req: NextRequest) {
   try {
+    console.log('🔍 Scenario assignments GET API called');
+    
     const user = await authenticateWithRBAC(req);
     if (!user) {
+      console.log('❌ Authentication failed');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    console.log('✅ User authenticated:', { userId: user.user.id, role: user.userRole, teamId: user.teamId });
 
     const { searchParams } = new URL(req.url);
     const scope = searchParams.get('scope') || 'my'; // 'my', 'team', 'all'
@@ -25,93 +30,101 @@ export async function GET(req: NextRequest) {
     const teamId = searchParams.get('teamId');
     const includeCompleted = searchParams.get('includeCompleted') !== 'false';
 
+    console.log('🔍 Query parameters:', { scope, status, repId, teamId, includeCompleted });
+
     const supabase = createSupabaseAdmin();
 
+    // Full query with related data
     let query = supabase
       .from('scenario_assignments')
       .select(`
         *,
-        scenario:scenarios!scenario_id(id, title, prompt, is_company_generated),
-        assigned_by_user:simple_users!assigned_by(id, name, email),
-        assigned_to_user_data:simple_users!assigned_to_user(id, name, email),
-        assigned_to_team_data:teams!assigned_to_team(id, name)
+        scenario:scenarios!scenario_id(id, title, prompt, prospect_name, voice, is_company_generated),
+        assigned_by_user:simple_users!assigned_by(id, name, email)
       `)
       .order('deadline', { ascending: true, nullsFirst: false });
 
     // Apply scope filters
     if (scope === 'my') {
       // User's own assignments
-      query = query.or(`assigned_to_user.eq.${user.user.id},assigned_to_team.eq.${user.teamId}`);
+      console.log('🔍 Applying "my" scope filter for user:', user.user.id, 'team:', user.teamId);
+      if (user.teamId) {
+        query = query.or(`assigned_to_user.eq.${user.user.id},assigned_to_team.eq.${user.teamId}`);
+      } else {
+        query = query.eq('assigned_to_user', user.user.id);
+      }
     } else if (scope === 'team' && user.teamId) {
       // Team assignments (for managers)
       if (!user.isManager) {
+        console.log('❌ User not authorized for team scope');
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
+      console.log('🔍 Applying team scope filter for team:', user.teamId);
       query = query.eq('assigned_to_team', user.teamId);
     } else if (scope === 'all') {
       // All assignments (for managers/admins)
       if (!user.isManager) {
+        console.log('❌ User not authorized for all scope');
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
+      console.log('🔍 Applying "all" scope (no filter)');
       // No additional filter needed
     }
 
     // Apply additional filters
     if (status) {
+      console.log('🔍 Applying status filter:', status);
       query = query.eq('status', status);
     }
     
     if (repId && user.isManager) {
+      console.log('🔍 Applying repId filter:', repId);
       query = query.eq('assigned_to_user', repId);
     }
     
     if (teamId && user.isManager) {
+      console.log('🔍 Applying teamId filter:', teamId);
       query = query.eq('assigned_to_team', teamId);
     }
 
     if (!includeCompleted) {
+      console.log('🔍 Excluding completed assignments');
       query = query.neq('status', 'completed');
     }
 
+    console.log('🔍 Executing query...');
     const { data: assignments, error } = await query;
 
     if (error) {
-      console.error('Error fetching assignments:', error);
-      return NextResponse.json({ error: 'Failed to fetch assignments' }, { status: 500 });
+      console.error('❌ Supabase query error:', error);
+      return NextResponse.json({ 
+        error: 'Failed to fetch assignments',
+        details: error.message 
+      }, { status: 500 });
     }
 
-    // Check for overdue assignments and update their status
-    const now = new Date();
-    const overdueAssignments = assignments?.filter(
-      a => a.deadline && new Date(a.deadline) < now && a.status !== 'completed' && a.status !== 'overdue'
-    ) || [];
-
-    if (overdueAssignments.length > 0) {
-      const overdueIds = overdueAssignments.map(a => a.id);
-      await supabase
-        .from('scenario_assignments')
-        .update({ status: 'overdue' })
-        .in('id', overdueIds);
-
-      // Update local data
-      assignments?.forEach(a => {
-        if (overdueIds.includes(a.id)) {
-          a.status = 'overdue';
-        }
-      });
-    }
+    console.log('✅ Assignments fetched successfully:', assignments?.length || 0);
+    
+    // Log activity
+    await logActivity(
+      user.user.id,
+      'read',
+      'scenario_assignment',
+      undefined,
+      { scope, count: assignments?.length || 0 }
+    );
 
     return NextResponse.json({
-      assignments: assignments || [],
-      total: assignments?.length || 0
+      success: true,
+      assignments: assignments || []
     });
 
   } catch (error) {
-    console.error('Assignments GET error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('❌ Scenario assignments GET error:', error);
+    return NextResponse.json({
+      error: 'Failed to fetch assignments',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
@@ -123,10 +136,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    console.log('🔍 Assignment creation request from user:', {
+      userId: user.user.id,
+      userRole: user.userRole,
+      isManager: user.isManager,
+      isAdmin: user.isAdmin
+    });
+
     // Only managers and admins can create assignments
-    if (!user.isManager) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!user.isManager && !user.isAdmin) {
+      console.log('❌ User not authorized to create assignments:', user.userRole);
+      return NextResponse.json({ error: 'Forbidden - Only managers and admins can create assignments' }, { status: 403 });
     }
+
+    console.log('✅ User authorized to create assignments');
 
     const body = await req.json();
     const { 
@@ -136,6 +159,14 @@ export async function POST(req: NextRequest) {
       deadline,
       assignerName // Add assigner name
     } = body;
+
+    console.log('🔍 Assignment data:', {
+      scenarioId,
+      assignToUsers: assignToUsers?.length,
+      assignToTeam,
+      deadline,
+      assignerName
+    });
 
     if (!scenarioId || (!assignToUsers && !assignToTeam)) {
       return NextResponse.json(

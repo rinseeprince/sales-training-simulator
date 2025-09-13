@@ -34,6 +34,11 @@ export function LiveSimulation() {
   const { user } = useSupabaseAuth()
   const { toast } = useToast()
   const [actualUserId, setActualUserId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<'user' | 'manager' | 'admin'>('user')
+  // Debug user role
+  useEffect(() => {
+    console.log('Live simulation user role:', { userRole, userId: user?.id });
+  }, [userRole, user?.id]);
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [showSubtitles, setShowSubtitles] = useState(true)
@@ -46,6 +51,31 @@ export function LiveSimulation() {
   const [isProcessingEndCall, setIsProcessingEndCall] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState<string>('')
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [loadedFromURL, setLoadedFromURL] = useState(false)
+  const [hasActiveCall, setHasActiveCall] = useState(false)
+  
+  // Debug the review modal state (DISABLED - causing re-renders)
+  // useEffect(() => {
+  //   console.log('🔍 Review modal state changed:', {
+  //     reviewModalOpen,
+  //     hasActiveCall,
+  //     loadedFromURL,
+  //     shouldShow: reviewModalOpen && (hasActiveCall || !loadedFromURL)
+  //   });
+  // }, [reviewModalOpen, hasActiveCall, loadedFromURL]);
+  
+  // Track component lifecycle (DISABLED - causing re-renders)
+  // useEffect(() => {
+  //   console.log('🔄 LiveSimulation component mounted');
+  //   return () => {
+  //     console.log('🔄 LiveSimulation component unmounting');
+  //   };
+  // }, []);
+  
+  // Track URL changes (disabled - causing too many logs)
+  // useEffect(() => {
+  //   console.log('🔍 Current URL:', window.location.href);
+  // });
   const [reviewCallId, setReviewCallId] = useState<string | null>(null)
   const [isRinging, setIsRinging] = useState(false)
   
@@ -72,6 +102,7 @@ export function LiveSimulation() {
         
         if (profileData.success) {
           setActualUserId(profileData.userProfile.id);
+          setUserRole(profileData.userProfile.role || 'user');
         }
       } catch (error) {
         console.error('Error getting user profile:', error);
@@ -81,13 +112,43 @@ export function LiveSimulation() {
     getUserProfile();
   }, [user?.id]);
 
-  // Load scenario data from localStorage
+  // Load scenario data from localStorage OR URL parameters
   useEffect(() => {
     console.log('🔄 Live simulation loading, checking for scenario data...');
-    const savedScenario = localStorage.getItem('currentScenario')
-    console.log('🔄 Found scenario in localStorage:', savedScenario ? 'Yes' : 'No');
-    if (savedScenario) {
-      try {
+    
+    try {
+      // First, check URL parameters (from Play button)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlPrompt = urlParams.get('prompt');
+      const urlProspectName = urlParams.get('prospectName');
+      const urlVoice = urlParams.get('voice');
+      
+      if (urlPrompt) {
+        console.log('🔄 Found scenario data in URL parameters');
+        const urlScenarioData = {
+          title: 'Saved Scenario',
+          prompt: urlPrompt,
+          prospectName: urlProspectName || 'Prospect',
+          duration: '10',
+          voice: urlVoice || 'rachel',
+          enableStreaming: true,
+          timestamp: Date.now()
+        };
+        console.log('🔄 Loading scenario from URL:', urlScenarioData);
+        setScenarioData(urlScenarioData);
+        setLoadedFromURL(true);
+        
+        // Clear any existing localStorage data to avoid conflicts
+        localStorage.removeItem('currentScenario');
+        console.log('🔄 URL scenario loaded successfully, staying on simulation page');
+        return; // EXIT HERE - don't continue to localStorage logic
+      }
+      
+      // Only check localStorage if no URL parameters found
+      const savedScenario = localStorage.getItem('currentScenario')
+      console.log('🔄 Found scenario in localStorage:', savedScenario ? 'Yes' : 'No');
+      
+      if (savedScenario) {
         const parsed = JSON.parse(savedScenario)
         console.log('🔄 Parsed scenario data:', parsed);
         
@@ -98,6 +159,7 @@ export function LiveSimulation() {
         if (isRecent) {
           setScenarioData(parsed)
           console.log('🔄 Loaded scenario data successfully:', parsed)
+          return; // EXIT HERE - scenario loaded successfully
         } else {
           // Scenario data is stale, clear it and redirect
           console.log('🔄 Scenario data is stale, redirecting to builder');
@@ -105,17 +167,17 @@ export function LiveSimulation() {
           router.push('/scenario-builder')
           return
         }
-      } catch (error) {
-        console.error('Failed to parse scenario data:', error)
-        // Clear invalid scenario data and redirect to builder
-        localStorage.removeItem('currentScenario')
+      } else {
+        // No scenario data anywhere, redirect back to builder
+        console.log('🔄 No scenario data found, redirecting to builder');
+        console.log('🔄 This redirect was triggered because no URL params and no localStorage data');
         router.push('/scenario-builder')
         return
       }
-    } else {
-      // No scenario data, redirect back to builder
+    } catch (error) {
+      console.error('🔄 Error in scenario loading useEffect:', error);
+      // On error, redirect to builder
       router.push('/scenario-builder')
-      return
     }
   }, [router])
 
@@ -513,6 +575,9 @@ export function LiveSimulation() {
       await phoneRing.playCallStartRing();
       setIsRinging(false);
       console.log('Call ring finished, starting call...');
+      
+      // Mark that we have an active call
+      setHasActiveCall(true);
       
       // Increment simulation count immediately when starting
       console.log('Incrementing simulation count for user:', user.id)
@@ -979,19 +1044,47 @@ export function LiveSimulation() {
       // Small delay to show the complete message
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Open review modal with the call ID
-      setReviewModalOpen(true)
-      setReviewCallId(callId)
+      // Open review modal with the call ID (but only if we had an active call)
+      if (callId && hasActiveCall) {
+        console.log('🔄 Opening review modal for call:', callId);
+        console.log('🔍 Setting reviewModalOpen to true (success path)');
+        setReviewModalOpen(true)
+        setReviewCallId(callId)
+      } else {
+        console.log('🔄 Not opening review modal - callId:', !!callId, 'hasActiveCall:', hasActiveCall);
+        // If no active call, just redirect back to saved scenarios
+        // DISABLED: Causing infinite redirect loop
+        // if (!hasActiveCall && loadedFromURL) {
+        //   console.log('🔄 Loaded from URL with no active call, redirecting to saved scenarios');
+        //   setTimeout(() => {
+        //     router.push('/saved-scenarios');
+        //   }, 100);
+        // }
+      }
     } catch (error) {
       console.error('Error ending call:', error)
       console.error('End call error details:', {
         message: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : 'No stack trace'
       });
-      // Still open review modal even if upload fails
+      // Still open review modal even if upload fails (but only if there was an active call)
       setIsProcessingEndCall(false);
-      setReviewModalOpen(true)
-      setReviewCallId(callId)
+      if (callId && hasActiveCall) {
+        console.log('🔄 Opening review modal after error for call:', callId);
+        console.log('🔍 Setting reviewModalOpen to true (error path)');
+        setReviewModalOpen(true)
+        setReviewCallId(callId)
+      } else {
+        console.log('🔄 Not opening review modal after error - callId:', !!callId, 'hasActiveCall:', hasActiveCall);
+        // If no active call, just redirect back to saved scenarios
+        // DISABLED: Causing infinite redirect loop
+        // if (!hasActiveCall && loadedFromURL) {
+        //   console.log('🔄 Loaded from URL with no active call, redirecting to saved scenarios after error');
+        //   setTimeout(() => {
+        //     router.push('/saved-scenarios');
+        //   }, 100);
+        // }
+      }
     }
   }
 
@@ -1462,35 +1555,45 @@ export function LiveSimulation() {
 
       {/* Review Modal */}
       <ReviewModal
-        isOpen={reviewModalOpen}
+        isOpen={loadedFromURL ? (reviewModalOpen && hasActiveCall) : reviewModalOpen}
         onClose={() => {
+          console.log('🔍 ReviewModal onClose called - hasActiveCall:', hasActiveCall, 'loadedFromURL:', loadedFromURL);
+          
           setReviewModalOpen(false)
           setReviewCallId(null)
-          // Reset simulation state and redirect to dashboard
-          setIsProcessingEndCall(false)
-          setAnalysisProgress('')
-          // Clean up any temporary call data
-          if (reviewCallId) {
-            sessionStorage.removeItem(`temp_call_${reviewCallId}`)
-          }
           
-          // Clear scenario data to prevent simulation page from redirecting
-          localStorage.removeItem('currentScenario')
-          
-          // Use setTimeout to ensure modal closes first, then navigate
-          setTimeout(() => {
-            console.log('🏠 Redirecting to dashboard after call completion')
-            // Try router first, fallback to window.location if needed
-            try {
-              router.push('/dashboard')
-            } catch (error) {
-              console.warn('Router failed, using window.location:', error)
-              window.location.href = '/dashboard'
+          // Only do cleanup and navigation if there was actually a call
+          if (hasActiveCall) {
+            console.log('🔍 Had active call, doing full cleanup and redirect');
+            // Reset simulation state and redirect to dashboard
+            setIsProcessingEndCall(false)
+            setAnalysisProgress('')
+            // Clean up any temporary call data
+            if (reviewCallId) {
+              sessionStorage.removeItem(`temp_call_${reviewCallId}`)
             }
-          }, 100)
+            
+            // Clear scenario data to prevent simulation page from redirecting
+            localStorage.removeItem('currentScenario')
+            
+            // Use setTimeout to ensure modal closes first, then navigate
+            setTimeout(() => {
+              console.log('🏠 Redirecting to dashboard after call completion')
+              // Try router first, fallback to window.location if needed
+              try {
+                router.push('/dashboard')
+              } catch (error) {
+                console.warn('Router failed, using window.location:', error)
+                window.location.href = '/dashboard'
+              }
+            }, 100)
+          } else {
+            console.log('🔍 No active call, skipping navigation');
+          }
         }}
         callId={reviewCallId}
         title={scenarioData?.title}
+        showUserInfo={userRole === 'manager' || userRole === 'admin'}
       />
     </div>
   )

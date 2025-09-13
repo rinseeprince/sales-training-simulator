@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Call } from '@/lib/types'
+import { authenticatedGet } from '@/lib/api-client'
+import { useLoadingManager } from '@/lib/loading-manager'
 
 interface UseCallDataProps {
   callId?: string
@@ -7,6 +9,7 @@ interface UseCallDataProps {
 }
 
 export function useCallData({ callId, userId }: UseCallDataProps) {
+  const loadingManager = useLoadingManager()
   const [call, setCall] = useState<Call | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,30 +37,34 @@ export function useCallData({ callId, userId }: UseCallDataProps) {
     }
 
     const fetchCall = async () => {
-      setLoading(true)
-      setError(null)
-
+      const callKey = `call-data-${callId}-${userId || 'no-user'}`
+      
       try {
-        const params = new URLSearchParams({ callId })
-        if (userId) {
-          params.append('userId', userId)
-        }
+        await loadingManager.withLoading(callKey, async () => {
+          setLoading(true)
+          setError(null)
 
-        const response = await fetch(`/api/calls?${params}`)
-        
-        if (!response.ok) {
-          const errorData = await response.json()
-          // If call not found and we might have temp data, don't treat as error
-          if (response.status === 404) {
-            setCall(null)
-            setError(null) // Don't set error for not found calls
-            return
+          const params = new URLSearchParams({ callId })
+          if (userId) {
+            params.append('userId', userId)
           }
-          throw new Error(errorData.error || 'Failed to fetch call data')
-        }
 
-        const callData = await response.json()
-        setCall(callData)
+          const response = await authenticatedGet(`/api/calls?${params}`)
+          
+          if (!response.ok) {
+            const errorData = await response.json()
+            // If call not found and we might have temp data, don't treat as error
+            if (response.status === 404) {
+              setCall(null)
+              setError(null) // Don't set error for not found calls
+              return
+            }
+            throw new Error(errorData.error || 'Failed to fetch call data')
+          }
+
+          const callData = await response.json()
+          setCall(callData)
+        })
       } catch (err) {
         console.error('Error fetching call data:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch call data')

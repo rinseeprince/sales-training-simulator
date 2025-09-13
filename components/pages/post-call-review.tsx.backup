@@ -13,7 +13,7 @@ import { useCallData } from '@/hooks/use-call-data'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
-import { authenticatedGet } from '@/lib/api-client'
+import { authenticatedGet, authenticatedPatch } from '@/lib/api-client'
 import { useLoadingManager } from '@/lib/loading-manager'
 
 const callData = {
@@ -479,6 +479,10 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
 
       const actualUserId = profileData.userProfile.id;
       
+      // Check if this simulation was from an assignment
+      const urlParams = new URLSearchParams(window.location.search);
+      const assignmentId = urlParams.get('assignmentId');
+      
       const saveResponse = await fetch('/api/save-call', {
         method: 'POST',
         headers: {
@@ -518,6 +522,27 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
         }
         
         setCallSaved(true)
+        
+        // If this was from an assignment, mark it as completed
+        if (assignmentId) {
+          try {
+            console.log('📋 Marking assignment as completed:', assignmentId)
+            const assignmentResponse = await authenticatedPatch('/api/scenario-assignments', {
+              assignmentId,
+              action: 'complete',
+              callId: tempCallData.callId
+            })
+            
+            if (assignmentResponse.ok) {
+              console.log('✅ Assignment marked as completed')
+            } else {
+              console.error('❌ Failed to mark assignment as completed')
+            }
+          } catch (error) {
+            console.error('❌ Error marking assignment as completed:', error)
+          }
+        }
+        
         // Remove temp data since call is now saved in database
         sessionStorage.removeItem(`temp_call_${callId}`)
         // Navigate to saved simulations page

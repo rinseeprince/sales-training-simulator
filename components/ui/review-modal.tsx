@@ -12,9 +12,10 @@ interface ReviewModalProps {
   onClose: () => void
   callId: string | null
   title?: string
+  showUserInfo?: boolean
 }
 
-export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps) {
+export function ReviewModal({ isOpen, onClose, callId, title, showUserInfo = false }: ReviewModalProps) {
   // Check for reviewCallId in URL on mount to support direct links
   useEffect(() => {
     if (!isOpen) {
@@ -27,6 +28,9 @@ export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps
     }
   }, [])
 
+  // Track if the modal was ever actually opened
+  const [wasEverOpened, setWasEverOpened] = useState(false)
+  
   // Update URL params when modal opens/closes for better UX and back button support
   useEffect(() => {
     if (isOpen && callId) {
@@ -34,12 +38,12 @@ export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps
       const url = new URL(window.location.href)
       url.searchParams.set('reviewCallId', callId)
       window.history.pushState({}, '', url.toString())
-    } else if (!isOpen) {
-      // Don't manipulate URL when closing - let parent handle navigation
-      // This prevents conflicts with router.push() calls
+      setWasEverOpened(true)
+    } else if (!isOpen && wasEverOpened) {
+      // Only log if the modal was actually opened before
       console.log('📝 Review modal closed, letting parent handle navigation')
     }
-  }, [isOpen, callId])
+  }, [isOpen, callId, wasEverOpened])
 
   // Handle browser back button
   useEffect(() => {
@@ -94,6 +98,7 @@ export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps
                 <PostCallReview 
                   modalCallId={callId}
                   isInModal={true}
+                  showUserInfo={showUserInfo}
                 />
               ) : (
                 <div className="flex items-center justify-center h-64">

@@ -42,6 +42,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { EnhancedScoring } from '@/lib/types'
 import { ReviewModal } from '@/components/ui/review-modal'
+import { authenticatedGet } from '@/lib/api-client'
+import { useLoadingManager } from '@/lib/loading-manager'
 
 interface Simulation {
   id: string
@@ -60,6 +62,7 @@ interface Simulation {
 export function Simulations() {
   const { user } = useSupabaseAuth()
   const router = useRouter()
+  const loadingManager = useLoadingManager()
   const [simulations, setSimulations] = useState<Simulation[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -77,10 +80,13 @@ export function Simulations() {
 
   // Fetch user role and simulations
   useEffect(() => {
+    if (!user?.id) return
+    
     const fetchData = async () => {
-      if (!user) return
-      
-      try {
+      await loadingManager.withLoading('simulations-data', async () => {
+        setLoading(true)
+        
+        try {
         // Get the user profile with role
         const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
         const profileData = await profileResponse.json();
@@ -115,11 +121,12 @@ export function Simulations() {
           const data = await response.json()
           setSimulations(data.calls || [])
         }
-      } catch (error) {
-        console.error('Error fetching data:', error)
-      } finally {
-        setLoading(false)
-      }
+        } catch (error) {
+          console.error('Error fetching data:', error)
+        } finally {
+          setLoading(false)
+        }
+      }); // Close loading manager wrapper
     }
     
     fetchData()
@@ -127,24 +134,27 @@ export function Simulations() {
 
   // Refetch simulations when filters change
   const refetchSimulations = async () => {
-    if (!user) return;
+    if (!user?.id) return;
     
-    setLoading(true);
     try {
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-      const profileData = await profileResponse.json();
-      const actualUserId = profileData.userProfile.id;
-      
-      let url = `/api/calls?scope=${viewScope}&userId=${actualUserId}`;
-      if (selectedRep && viewScope === 'all') {
-        url += `&repId=${selectedRep}`;
-      }
-      
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setSimulations(data.calls || []);
-      }
+      await loadingManager.withLoading('refetch-simulations', async () => {
+        setLoading(true);
+        
+        const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`);
+        const profileData = await profileResponse.json();
+        const actualUserId = profileData.userProfile.id;
+        
+        let url = `/api/calls?scope=${viewScope}&userId=${actualUserId}`;
+        if (selectedRep && viewScope === 'all') {
+          url += `&repId=${selectedRep}`;
+        }
+        
+        const response = await authenticatedGet(url);
+        if (response.ok) {
+          const data = await response.json();
+          setSimulations(data.calls || []);
+        }
+      });
     } catch (error) {
       console.error('Error refetching simulations:', error);
     } finally {

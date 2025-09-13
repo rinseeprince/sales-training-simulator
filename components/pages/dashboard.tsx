@@ -8,9 +8,12 @@ import { Progress } from '@/components/ui/progress'
 import { Play, FileText, Clock, CheckCircle, AlertCircle, Trophy, Target, TrendingUp, Phone } from 'lucide-react'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ReviewModal } from '@/components/ui/review-modal'
+import { authenticatedGet } from '@/lib/api-client'
+import { useLoadingManager } from '@/lib/loading-manager'
+
 
 // Type definitions
 interface Call {
@@ -24,9 +27,13 @@ interface Call {
 interface Scenario {
   id: string
   title: string
-  persona: string
-  difficulty: string
+  prompt: string
+  prospect_name?: string
+  voice?: string
+  persona?: string
+  difficulty?: string
   created_at: string
+  user_id: string
 }
 
 interface Stats {
@@ -89,10 +96,11 @@ const savedScenarios = [
 
 export function Dashboard() {
   const { user } = useSupabaseAuth()
-  console.log('Dashboard user object:', user)
   const router = useRouter()
+  const loadingManager = useLoadingManager()
   const [calls, setCalls] = useState<Call[]>([])
   const [scenarios, setScenarios] = useState<Scenario[]>([])
+  const [assignments, setAssignments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
@@ -108,13 +116,38 @@ export function Dashboard() {
     remaining: number;
     isPaid: boolean;
   } | null>(null)
+  
+  // Prevent multiple calls during development
+  const hasFetchedRef = useRef(false)
+
+  // Handle scenario play (works with both scenarios and assignments)
+  const handlePlayScenario = (item: Scenario | any) => {
+    // Check if this is an assignment (has scenario property) or direct scenario
+    if (item.scenario) {
+      // This is an assignment - navigate to assigned scenarios page
+      router.push('/saved-scenarios?tab=assigned');
+    } else {
+      // This is a direct scenario - start simulation immediately
+      const params = new URLSearchParams({
+        prompt: item.prompt,
+        prospectName: item.prospect_name || 'Prospect',
+        voice: item.voice || 'rachel'
+      })
+      
+      router.push(`/simulation?${params.toString()}`)
+    }
+  }
 
   // Fetch calls and scenarios data
   useEffect(() => {
+    if (!user?.id || hasFetchedRef.current) return
+    
     const fetchData = async () => {
-      if (!user) return
-      
-      try {
+      hasFetchedRef.current = true
+      return loadingManager.withLoading('dashboard-data', async () => {
+        setLoading(true)
+        
+        try {
         // Get the correct user ID from simple_users table
         const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
         const profileData = await profileResponse.json();
@@ -128,7 +161,7 @@ export function Dashboard() {
         
         // Check simulation limit
         try {
-          const limitResponse = await fetch(`/api/check-simulation-limit?userId=${user.id}`)
+          const limitResponse = await authenticatedGet(`/api/check-simulation-limit?userId=${user.id}`)
           const limitData = await limitResponse.json()
           if (limitData.success) {
             setSimulationLimit({
@@ -143,7 +176,7 @@ export function Dashboard() {
         }
         
         // Fetch calls
-        const callsResponse = await fetch(`/api/calls?userId=${actualUserId}`)
+        const callsResponse = await authenticatedGet(`/api/calls?userId=${actualUserId}`)
         if (callsResponse.ok) {
           const callsData = await callsResponse.json()
           setCalls(callsData.calls || [])
@@ -162,20 +195,39 @@ export function Dashboard() {
           })
         }
         
-        // Fetch scenarios
-        const scenariosResponse = await fetch(`/api/scenarios?userId=${actualUserId}`)
+        // Fetch scenarios - use auth user ID since scenarios are stored with user_id = auth user ID
+        const scenariosResponse = await authenticatedGet(`/api/scenarios?userId=${user.id}`)
         if (scenariosResponse.ok) {
           const scenariosData = await scenariosResponse.json()
+          console.log('Dashboard scenarios loaded:', scenariosData.scenarios?.length || 0)
           setScenarios(scenariosData.scenarios || [])
+        } else {
+          console.error('Failed to load scenarios:', scenariosResponse.status)
         }
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error)
-      } finally {
-        setLoading(false)
-      }
+        
+        // Fetch assignments
+        const assignmentsResponse = await authenticatedGet('/api/scenario-assignments?scope=my')
+        if (assignmentsResponse.ok) {
+          const assignmentsData = await assignmentsResponse.json()
+          console.log('Dashboard assignments loaded:', assignmentsData.assignments?.length || 0)
+          setAssignments(assignmentsData.assignments || [])
+        } else {
+          console.error('Failed to load assignments:', assignmentsResponse.status)
+        }
+        } catch (error) {
+          console.error('Error fetching dashboard data:', error)
+        } finally {
+          setLoading(false)
+        }
+      }); // Close loading manager wrapper
     }
     
     fetchData()
+    
+    // Reset fetch flag when user changes
+    return () => {
+      hasFetchedRef.current = false
+    }
   }, [user])
 
   const getStatusIcon = (status: string) => {
@@ -203,6 +255,8 @@ export function Dashboard() {
         return <Badge variant="outline">Unknown</Badge>
     }
   }
+
+
 
   return (
     <div className="space-y-6">
@@ -493,6 +547,7 @@ export function Dashboard() {
           <div className="pt-4 border-t border-slate-100 mt-6">
             <Link href="/simulations">
               <Button variant="outline" className="w-full border-slate-200 text-slate-700 hover:bg-slate-50">
+                <Phone className="mr-2 h-4 w-4" />
                 View All Simulations
               </Button>
             </Link>
@@ -507,8 +562,8 @@ export function Dashboard() {
           className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
         >
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-1">Saved Scenarios</h3>
-            <p className="text-sm text-slate-500">Your reusable training templates</p>
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">Assigned Scenarios</h3>
+            <p className="text-sm text-slate-500">Priority training assignments from your manager</p>
           </div>
           
           <div className="space-y-3">
@@ -530,41 +585,76 @@ export function Dashboard() {
                   </div>
                 ))}
               </div>
-            ) : scenarios.length === 0 ? (
+            ) : assignments.length === 0 ? (
               <div className="text-center py-8">
                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <FileText className="h-6 w-6 text-slate-400" />
                 </div>
-                <p className="text-sm text-slate-500 mb-2">No scenarios yet</p>
-                <p className="text-xs text-slate-400">Create your first scenario template</p>
+                <p className="text-sm text-slate-500 mb-2">No assignments yet</p>
+                <p className="text-xs text-slate-400">Your manager will assign training scenarios</p>
               </div>
             ) : (
-              scenarios.slice(0, 3).map((scenario, index) => {
+              assignments.slice(0, 3).map((assignment, index) => {
+                const scenario = assignment.scenario;
                 const emojis = ['📞', '🛒', '🏦', '💼', '🎯', '🚀'];
                 const emoji = emojis[index % emojis.length];
+                
+                // Determine scenario type based on prompt content (more sophisticated detection)
+                const getScenarioType = (prompt: string) => {
+                  const lowerPrompt = prompt.toLowerCase();
+                  
+                  // Look for explicit call type mentions first
+                  if (lowerPrompt.includes('discovery call') || lowerPrompt.includes('discovery') || lowerPrompt.includes('qualification')) {
+                    return { type: 'Discovery', color: 'bg-primary/10 text-primary' };
+                  } else if (lowerPrompt.includes('objection') || lowerPrompt.includes('price') || lowerPrompt.includes('budget') || lowerPrompt.includes('cost')) {
+                    return { type: 'Objections', color: 'bg-amber-50 text-amber-700' };
+                  } else if (lowerPrompt.includes('cold call') || lowerPrompt.includes('cold') || lowerPrompt.includes('outbound') || lowerPrompt.includes('prospecting')) {
+                    return { type: 'Cold Outbound', color: 'bg-blue-50 text-blue-700' };
+                  } else if (lowerPrompt.includes('demo') || lowerPrompt.includes('product demo') || lowerPrompt.includes('presentation') || lowerPrompt.includes('showing')) {
+                    return { type: 'Demo', color: 'bg-purple-50 text-purple-700' };
+                  } else if (lowerPrompt.includes('negotiat') || lowerPrompt.includes('closing') || lowerPrompt.includes('deal') || lowerPrompt.includes('contract')) {
+                    return { type: 'Negotiation', color: 'bg-emerald-50 text-emerald-700' };
+                  } else if (lowerPrompt.includes('follow up') || lowerPrompt.includes('follow-up') || lowerPrompt.includes('check in')) {
+                    return { type: 'Follow-up', color: 'bg-indigo-50 text-indigo-700' };
+                  } else if (lowerPrompt.includes('inbound') || lowerPrompt.includes('enquir') || lowerPrompt.includes('lead')) {
+                    return { type: 'Inbound', color: 'bg-teal-50 text-teal-700' };
+                  } else {
+                    // Default fallback
+                    return { type: 'Sales Call', color: 'bg-slate-50 text-slate-700' };
+                  }
+                };
+                
+                const scenarioType = getScenarioType(scenario.prompt);
+                
                 return (
                   <div
-                    key={scenario.id}
-                    className="flex items-center justify-between p-4 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all duration-150 group"
+                    key={assignment.id}
+                    onClick={() => handlePlayScenario(assignment)}
+                    className="flex items-center justify-between p-4 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all duration-150 group cursor-pointer hover:shadow-sm"
                   >
                     <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0 text-sm">
+                      <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center flex-shrink-0 text-sm group-hover:bg-slate-100">
                         {emoji}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-slate-900 truncate">{scenario.title}</p>
+                        <p className="font-medium text-slate-900 truncate group-hover:text-slate-800">{scenario.title}</p>
                         <div className="flex items-center space-x-2 mt-1">
-                          <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs">
-                            Discovery
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${scenarioType.color}`}>
+                            {scenarioType.type}
                           </span>
-                          <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs">
-                            Medium
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                            assignment.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
+                            assignment.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
+                            'bg-amber-50 text-amber-700'
+                          }`}>
+                            {assignment.status === 'completed' ? 'Completed' : 
+                             assignment.status === 'in_progress' ? 'In Progress' : 'Not Started'}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div className="text-xs text-slate-400 flex-shrink-0">
-                      {new Date(scenario.created_at).toLocaleDateString()}
+                    <div className="text-xs text-slate-400 flex-shrink-0 group-hover:text-slate-500">
+                      {assignment.deadline ? new Date(assignment.deadline).toLocaleDateString() : 'No deadline'}
                     </div>
                   </div>
                 );
@@ -573,11 +663,11 @@ export function Dashboard() {
           </div>
           
           <div className="pt-4 border-t border-slate-100 mt-6">
-            <Link href="/scenario-builder">
-              <Button variant="outline" className="w-full border-slate-200 text-slate-700 hover:bg-slate-50">
-                <FileText className="mr-2 h-4 w-4" />
-                Create New Scenario
-              </Button>
+            <Link href="/saved-scenarios">
+                              <Button variant="outline" className="w-full border-slate-200 text-slate-700 hover:bg-slate-50">
+                  <FileText className="mr-2 h-4 w-4" />
+                  View All Scenarios
+                </Button>
             </Link>
           </div>
         </motion.div>
@@ -661,6 +751,8 @@ export function Dashboard() {
         callId={selectedCallId}
         title={selectedCallId ? calls.find(c => c.id === selectedCallId)?.scenario_name : undefined}
       />
+
+      
     </div>
   )
 }

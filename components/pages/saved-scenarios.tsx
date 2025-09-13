@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,12 +21,14 @@ import {
   Building,
   CheckCircle,
   AlertCircle,
-  Timer
+  Timer,
+  XCircle
 } from 'lucide-react'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
+import { authenticatedGet, authenticatedPatch } from '@/lib/api-client'
 
 interface Scenario {
   id: string
@@ -37,6 +39,7 @@ interface Scenario {
   is_company_generated?: boolean
   created_at: string
   updated_at: string
+  user_id: string
 }
 
 interface ScenarioAssignment {
@@ -58,6 +61,7 @@ interface ScenarioAssignment {
 export function SavedScenarios() {
   const { user } = useSupabaseAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [assignments, setAssignments] = useState<ScenarioAssignment[]>([])
@@ -73,23 +77,42 @@ export function SavedScenarios() {
     }
   }, [user])
 
+  // Handle URL tab parameter
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam === 'assigned') {
+      setActiveTab('assigned-scenarios')
+    }
+  }, [searchParams])
+
   const loadScenarios = async () => {
     try {
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user?.id}`)
+      console.log('🔍 Loading scenarios...')
+      const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user?.id}`)
       const profileData = await profileResponse.json()
       
       if (!profileData.success) {
-        console.error('Failed to get user profile')
+        console.error('❌ Failed to get user profile:', profileData.error)
         return
       }
 
-      const response = await fetch(`/api/scenarios?userId=${profileData.userProfile.id}`)
+      console.log('🔍 Fetching scenarios for user:', profileData.userProfile.id)
+      const response = await authenticatedGet(`/api/scenarios?userId=${profileData.userProfile.id}`)
       if (response.ok) {
         const data = await response.json()
+        console.log('✅ Scenarios loaded:', data.scenarios?.length || 0)
         setScenarios(data.scenarios || [])
+      } else {
+        const errorData = await response.json()
+        console.error('❌ Failed to load scenarios:', errorData)
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to load scenarios",
+          variant: "destructive"
+        })
       }
     } catch (error) {
-      console.error('Error loading scenarios:', error)
+      console.error('❌ Error loading scenarios:', error)
       toast({
         title: "Error",
         description: "Failed to load scenarios",
@@ -102,18 +125,33 @@ export function SavedScenarios() {
 
   const loadAssignments = async () => {
     try {
-      const response = await fetch('/api/scenario-assignments?scope=my')
+      console.log('🔍 Loading assignments...')
+      console.log('🔍 Making request to: /api/scenario-assignments?scope=my')
+      
+      const response = await authenticatedGet('/api/scenario-assignments?scope=my')
+      console.log('🔍 Assignment response status:', response.status)
+      
       if (response.ok) {
         const data = await response.json()
+        console.log('✅ Assignments loaded:', data.assignments?.length || 0)
+        console.log('📋 Assignment data:', data)
         setAssignments(data.assignments || [])
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }))
+        console.error('❌ Failed to load assignments:', errorData)
+        console.error('❌ Response status:', response.status)
+        console.error('❌ Response statusText:', response.statusText)
       }
     } catch (error) {
-      console.error('Error loading assignments:', error)
+      console.error('❌ Error loading assignments:', error)
+      console.error('❌ Error details:', error instanceof Error ? error.message : 'Unknown error')
     }
   }
 
   const handlePlayScenario = (scenario: Scenario | undefined) => {
     if (!scenario) return
+    
+    console.log('🎮 Play scenario clicked:', scenario.title)
     
     const params = new URLSearchParams({
       prompt: scenario.prompt,
@@ -121,10 +159,13 @@ export function SavedScenarios() {
       voice: scenario.voice || 'rachel'
     })
     
+    console.log('🎮 Navigating to simulation with params:', params.toString())
     router.push(`/simulation?${params.toString()}`)
   }
 
   const handleEditScenario = (scenario: Scenario) => {
+    console.log('✏️ Edit scenario clicked:', scenario.title)
+    
     localStorage.setItem('editScenario', JSON.stringify({
       title: scenario.title,
       prompt: scenario.prompt,
@@ -132,6 +173,8 @@ export function SavedScenarios() {
       voice: scenario.voice,
       saveReuse: true
     }))
+    
+    console.log('✏️ Navigating to scenario builder')
     router.push('/scenario-builder')
   }
 
@@ -202,13 +245,9 @@ export function SavedScenarios() {
 
   const handleUpdateAssignmentStatus = async (assignmentId: string, status: string) => {
     try {
-      const response = await fetch('/api/scenario-assignments', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assignmentId,
-          status
-        })
+      const response = await authenticatedPatch('/api/scenario-assignments', {
+        assignmentId,
+        status
       })
 
       if (response.ok) {

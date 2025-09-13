@@ -17,10 +17,12 @@ import { clearAllCache, clearAuthState, forceAppRefresh, clearUserData, emergenc
 import { CacheManager } from '@/lib/cache-manager'
 import { checkForUpdates, APP_VERSION } from '@/lib/version-check'
 import { toast } from '@/components/ui/use-toast'
+import { useLoadingManager } from '@/lib/loading-manager'
 
 export function SettingsPage() {
   const { user, refreshUser } = useSupabaseAuth()
   const { theme, setTheme } = useTheme()
+  const loadingManager = useLoadingManager()
   const [name, setName] = useState(user?.name || '')
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
@@ -47,18 +49,20 @@ export function SettingsPage() {
     if (!user?.id) return
     
     try {
-      const response = await fetch(`/api/user-profile?authUserId=${user.id}`)
-      const data = await response.json()
-      
-      if (data.success && data.userProfile) {
-        setName(data.userProfile.name || '')
-        // Add timestamp to avatar URL to prevent caching
-        if (data.userProfile.avatar_url) {
-          setAvatarUrl(`${data.userProfile.avatar_url}?t=${Date.now()}`)
-        } else {
-          setAvatarUrl(null)
+      await loadingManager.withLoading(`user-profile-${user.id}`, async () => {
+        const response = await fetch(`/api/user-profile?authUserId=${user.id}`)
+        const data = await response.json()
+        
+        if (data.success && data.userProfile) {
+          setName(data.userProfile.name || '')
+          // Add timestamp to avatar URL to prevent caching
+          if (data.userProfile.avatar_url) {
+            setAvatarUrl(`${data.userProfile.avatar_url}?t=${Date.now()}`)
+          } else {
+            setAvatarUrl(null)
+          }
         }
-      }
+      })
     } catch (error) {
       console.error('Failed to load user profile:', error)
     }

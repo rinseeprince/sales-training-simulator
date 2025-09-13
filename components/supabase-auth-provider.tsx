@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabaseClient, getCurrentUser, signUpWithEmail, signInWithEmail, signOut, resendVerificationEmail, resetPassword, AuthUser, AuthResponse } from '@/lib/supabase-auth';
+import { clearAuthTokenCache } from '@/lib/api-client';
 
 interface SupabaseAuthContext {
   user: AuthUser | null;
@@ -67,11 +68,14 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
             console.log('Auth state changed:', event, session?.user?.email);
             
             if (event === 'SIGNED_IN' && session?.user) {
+              clearAuthTokenCache(); // Clear cache for fresh token
               const user = await getCurrentUser();
               setUser(user);
             } else if (event === 'SIGNED_OUT') {
+              clearAuthTokenCache(); // Clear cache on logout
               setUser(null);
             } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+              clearAuthTokenCache(); // Clear cache to force fresh token usage
               const user = await getCurrentUser();
               setUser(user);
             } else if (event === 'USER_UPDATED' && session?.user) {
@@ -140,6 +144,9 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
     try {
       // Clear user state immediately to prevent UI flickering
       setUser(null);
+      
+      // Clear cached auth token
+      clearAuthTokenCache();
       
       // Attempt Supabase signout with timeout
       const timeoutPromise = new Promise<never>((_, reject) => 

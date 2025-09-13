@@ -15,70 +15,81 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { Notification, NotificationType } from '@/lib/types'
 import { formatDistanceToNow } from 'date-fns'
+import { authenticatedGet, authenticatedPatch } from '@/lib/api-client'
+import { useLoadingManager } from '@/lib/loading-manager'
 
 export function NotificationBell() {
   const { user } = useSupabaseAuth()
+  const loadingManager = useLoadingManager()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
-  // Fetch notifications
-  const fetchNotifications = async () => {
+  const loadNotifications = async () => {
     if (!user) return
     
-    setLoading(true)
     try {
-      const response = await fetch('/api/notifications?limit=20')
-      if (response.ok) {
-        const data = await response.json()
-        setNotifications(data.notifications || [])
-        setUnreadCount(data.unreadCount || 0)
-      }
+      await loadingManager.withLoading('load-notifications', async () => {
+        setLoading(true)
+        
+        const response = await authenticatedGet('/api/notifications?limit=20')
+        if (response.ok) {
+          const data = await response.json()
+          const notifications = data.notifications || []
+          setNotifications(notifications)
+          
+          // Calculate unread count
+          const unread = notifications.filter((n: Notification) => !n.read_at).length
+          setUnreadCount(unread)
+        }
+      })
     } catch (error) {
-      console.error('Error fetching notifications:', error)
+      console.error('Failed to load notifications:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  // Mark notification as read
   const markAsRead = async (notificationId: string) => {
     try {
-      const response = await fetch('/api/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId })
+      const response = await authenticatedPatch('/api/notifications', {
+        notificationId,
+        action: 'mark_read'
       })
       
       if (response.ok) {
-        setNotifications(prev => 
-          prev.map(n => n.id === notificationId ? { ...n, read_at: new Date().toISOString() } : n)
-        )
-        setUnreadCount(prev => Math.max(0, prev - 1))
+        setNotifications(prev => {
+          const updated = prev.map(n => 
+            n.id === notificationId 
+              ? { ...n, read_at: new Date().toISOString() }
+              : n
+          )
+          // Update unread count
+          setUnreadCount(updated.filter(n => !n.read_at).length)
+          return updated
+        })
       }
     } catch (error) {
-      console.error('Error marking notification as read:', error)
+      console.error('Failed to mark notification as read:', error)
     }
   }
 
-  // Mark all as read
   const markAllAsRead = async () => {
     try {
-      const response = await fetch('/api/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markAllRead: true })
+      const response = await authenticatedPatch('/api/notifications', {
+        action: 'mark_all_read'
       })
       
       if (response.ok) {
-        setNotifications(prev => 
-          prev.map(n => ({ ...n, read_at: new Date().toISOString() }))
-        )
-        setUnreadCount(0)
+        setNotifications(prev => {
+          const updated = prev.map(n => ({ ...n, read_at: new Date().toISOString() }))
+          setUnreadCount(0) // All marked as read
+          return updated
+        })
       }
     } catch (error) {
-      console.error('Error marking all notifications as read:', error)
+      console.error('Failed to mark all notifications as read:', error)
     }
   }
 
@@ -110,7 +121,7 @@ export function NotificationBell() {
 
     // Navigate based on entity type
     if (notification.entity_type === 'scenario_assignment' && notification.entity_id) {
-      window.location.href = `/scenario-builder?assignmentId=${notification.entity_id}`
+      window.location.href = `/saved-scenarios?tab=assigned`
     } else if (notification.entity_type === 'simulation' && notification.entity_id) {
       window.location.href = `/review?callId=${notification.entity_id}`
     }
@@ -121,27 +132,27 @@ export function NotificationBell() {
   // Fetch notifications on mount and when dropdown opens
   useEffect(() => {
     if (user) {
-      fetchNotifications()
+      loadNotifications()
       // Poll for new notifications every 30 seconds
-      const interval = setInterval(fetchNotifications, 30000)
+      const interval = setInterval(loadNotifications, 30000)
       return () => clearInterval(interval)
     }
   }, [user])
 
   useEffect(() => {
     if (open && user) {
-      fetchNotifications()
+      loadNotifications()
     }
   }, [open])
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative text-white hover:text-white hover:bg-white/10">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <Badge 
-              className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center bg-red-500 text-white"
+              className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center bg-red-500 text-white text-xs font-bold border-2 border-white"
               variant="destructive"
             >
               {unreadCount > 9 ? '9+' : unreadCount}

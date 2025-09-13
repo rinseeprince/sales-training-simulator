@@ -34,35 +34,46 @@ export async function authenticateWithRBAC(request: NextRequest): Promise<RBACAu
     const authRequest = await authenticateUser(request);
     if (!authRequest) {
       return null;
-    }
+      console.log('❌ RBAC: Authentication failed, returning null');    }
 
     const supabase = createSupabaseAdmin();
     
-    // Get user's role and team information
+    // Get user's role and team information from simple_users table
+    // Note: authRequest.user.id is already the simple_users table ID
     const { data: userProfile, error } = await supabase
       .from('simple_users')
       .select('role, team_id, manager_id')
       .eq('id', authRequest.user.id)
       .single();
 
-    if (error || !userProfile) {
-      console.error('Failed to fetch user role:', error);
-      return null;
+    if (error) {
+      console.log('❌ RBAC: Failed to fetch user role:', error);      console.error('Failed to fetch user role:', error);
+      // If the role lookup fails, let's try to continue with default role
+      // This handles cases where the user exists but doesn't have RBAC fields set yet
+      console.log('Continuing with default role for user:', authRequest.user.id);
     }
+
+    // Extract role information (with fallbacks for backward compatibility)
+    const userRole: UserRole = userProfile?.role || 'user';
+    const teamId = userProfile?.team_id;
+    const managerId = userProfile?.manager_id;
+    const isManager = userRole === 'manager';
+    const isAdmin = userRole === 'admin';
 
     // Create RBAC authenticated request
     const rbacRequest = authRequest as RBACAuthenticatedRequest;
-    rbacRequest.userRole = (userProfile.role as UserRole) || 'user';
-    rbacRequest.teamId = userProfile.team_id;
-    rbacRequest.managerId = userProfile.manager_id;
-    rbacRequest.isManager = rbacRequest.userRole === 'manager' || rbacRequest.userRole === 'admin';
-    rbacRequest.isAdmin = rbacRequest.userRole === 'admin';
+    rbacRequest.userRole = userRole;
+    rbacRequest.teamId = teamId;
+    rbacRequest.managerId = managerId;
+    rbacRequest.isManager = isManager;
+    rbacRequest.isAdmin = isAdmin;
 
     return rbacRequest;
+
   } catch (error) {
     console.error('RBAC authentication error:', error);
     return null;
-  }
+      console.log('❌ RBAC: Authentication failed, returning null');  }
 }
 
 /**

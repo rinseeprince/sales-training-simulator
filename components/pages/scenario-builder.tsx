@@ -20,6 +20,8 @@ import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
 import { REGIONAL_VOICES, getVoicesByRegion } from '@/lib/voice-constants'
+import { authenticatedGet, authenticatedPost } from '@/lib/api-client'
+import { useLoadingManager } from '@/lib/loading-manager'
 
 interface SearchUser {
   id: string
@@ -32,6 +34,7 @@ export function ScenarioBuilder() {
   const router = useRouter()
   const { user } = useSupabaseAuth()
   const { toast } = useToast()
+  const loadingManager = useLoadingManager()
   const [isSaving, setIsSaving] = useState(false)
   const [scenarioData, setScenarioData] = useState({
     title: '',
@@ -57,8 +60,18 @@ export function ScenarioBuilder() {
 
   // Load saved scenarios and check for edit mode
   useEffect(() => {
-    loadSavedScenarios()
-    fetchUserRole()
+    if (!user?.id) return
+    
+    const initializeData = async () => {
+      await loadingManager.withLoading('scenario-builder-init', async () => {
+        await Promise.all([
+          loadSavedScenarios(),
+          fetchUserRole()
+        ])
+      })
+    }
+    
+    initializeData()
     
     // Check if we're editing a scenario
     const editScenario = localStorage.getItem('editScenario')
@@ -77,8 +90,8 @@ export function ScenarioBuilder() {
     if (!user) return
 
     try {
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
-      const profileData = await profileResponse.json()
+      const response = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`)
+      const profileData = await response.json()
       
       if (profileData.success && profileData.userProfile) {
         const role = profileData.userProfile.role || 'user'
@@ -102,15 +115,29 @@ export function ScenarioBuilder() {
       return
     }
 
-    setIsSearching(true)
+    // Use loading manager to prevent duplicate requests
+    const searchKey = `user-search-${query}-${userDomain}`
+    
     try {
-      const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}&domain=${userDomain}`)
-      if (response.ok) {
-        const data = await response.json()
-        setSearchResults(data.users || [])
-      }
+      await loadingManager.withLoading(searchKey, async () => {
+        setIsSearching(true)
+        
+        const url = `/api/users/search?q=${encodeURIComponent(query)}&domain=${userDomain}`
+        
+        const response = await authenticatedGet(url)
+        
+        if (response.ok) {
+          const data = await response.json()
+          setSearchResults(data.users || [])
+        } else {
+          const errorData = await response.json()
+          console.error('User search failed:', { status: response.status, error: errorData })
+          setSearchResults([])
+        }
+      })
     } catch (error) {
-      console.error('Error searching users:', error)
+      console.error('User search error:', error)
+      setSearchResults([])
     } finally {
       setIsSearching(false)
     }
@@ -134,7 +161,7 @@ export function ScenarioBuilder() {
     
     try {
       // Get the correct user ID from simple_users table
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`);
       const profileData = await profileResponse.json();
       
       if (!profileData.success) {
@@ -144,7 +171,7 @@ export function ScenarioBuilder() {
 
       const actualUserId = profileData.userProfile.id;
       
-      const response = await fetch(`/api/scenarios?userId=${actualUserId}`)
+      const response = await authenticatedGet(`/api/scenarios?userId=${actualUserId}`)
       if (response.ok) {
         const data = await response.json()
         setSavedScenarios(data.scenarios || [])
@@ -172,8 +199,12 @@ export function ScenarioBuilder() {
   }
 
   const handleStartSimulation = async () => {
+    console.log('🔍 Start Live Simulation button clicked!')
+    console.log('🔍 Scenario data:', scenarioData)
+    
     // Validate required fields
     if (!scenarioData.title || !scenarioData.prompt) {
+      console.log('❌ Missing required fields')
       toast({
         title: "Missing Information",
         description: "Please fill in the scenario title and description before starting.",
@@ -182,13 +213,18 @@ export function ScenarioBuilder() {
       return
     }
 
+    console.log('🔍 Checking simulation limit...')
+    
     // Check simulation limit for free users (just for display, actual increment happens when recording starts)
     if (user) {
       try {
-        const response = await fetch(`/api/check-simulation-limit?userId=${user.id}`)
+        console.log('🔍 Making simulation limit request for user:', user.id)
+        const response = await authenticatedGet(`/api/check-simulation-limit?userId=${user.id}`)
         const data = await response.json()
+        console.log('🔍 Simulation limit response:', data)
         
         if (!data.canSimulate) {
+          console.log('❌ Simulation limit reached')
           toast({
             title: "Simulation Limit Reached",
             description: data.message || "You've reached your free simulation limit. Please upgrade to continue.",
@@ -208,25 +244,38 @@ export function ScenarioBuilder() {
         
         // Show remaining simulations for free users (informational only)
         if (data.remaining && data.remaining > 0 && data.remaining <= 10) {
+          console.log('🔍 Showing remaining simulations toast:', data.remaining)
           toast({
             title: "Simulations Remaining",
             description: `You have ${data.remaining} free simulation${data.remaining === 1 ? '' : 's'} left. Count will be used when you start recording.`,
           })
         }
+        console.log('✅ Simulation limit check passed')
       } catch (error) {
-        console.error('Failed to check simulation limit:', error)
+        console.error('❌ Failed to check simulation limit:', error)
         // Continue anyway if check fails - will be enforced when recording starts
       }
+    } else {
+      console.log('🔍 No user found, skipping simulation limit check')
     }
 
     // Auto-save scenario if saveReuse is enabled or if it's a company scenario
     if (scenarioData.saveReuse || isCompanyScenario || showAssignment) {
+      console.log('🔍 Auto-saving scenario before simulation...')
       const saved = await saveScenarioToDatabase()
       if (!saved) {
-        return // Don't proceed if save failed
+        console.log('❌ Auto-save failed, but continuing with simulation...')
+        // Don't block simulation if save fails - user can still simulate
+        toast({
+          title: "Save Warning",
+          description: "Scenario couldn't be saved, but simulation will continue.",
+          variant: "destructive",
+        })
       }
     }
 
+    console.log('🔍 Preparing simulation data...')
+    
     // Save scenario data to localStorage for simulation page
     const simulationData = {
       title: scenarioData.title,
@@ -239,6 +288,7 @@ export function ScenarioBuilder() {
     console.log('🔍 scenarioData.prospectName:', scenarioData.prospectName);
     localStorage.setItem('currentScenario', JSON.stringify(simulationData))
     
+    console.log('🔍 Navigating to simulation page...')
     // Navigate to simulation
     router.push('/simulation')
   }
@@ -266,7 +316,7 @@ export function ScenarioBuilder() {
     
     try {
       // Get the correct user ID from simple_users table
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`);
       const profileData = await profileResponse.json();
       
       if (!profileData.success) {
@@ -276,19 +326,13 @@ export function ScenarioBuilder() {
       const actualUserId = profileData.userProfile.id;
       const userName = profileData.userProfile.name || profileData.userProfile.email?.split('@')[0] || 'Manager';
       
-      const response = await fetch('/api/scenarios', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: scenarioData.title,
-          prompt: scenarioData.prompt,
-          prospectName: scenarioData.prospectName,
-          voice: scenarioData.voice,
-          userId: actualUserId,
-          is_company_generated: isCompanyScenario
-        }),
+      const response = await authenticatedPost('/api/scenarios', {
+        title: scenarioData.title,
+        prompt: scenarioData.prompt,
+        prospectName: scenarioData.prospectName,
+        voice: scenarioData.voice,
+        userId: actualUserId,
+        is_company_generated: isCompanyScenario
       })
 
       if (response.ok) {
@@ -296,23 +340,44 @@ export function ScenarioBuilder() {
         
         // Create assignments if needed
         if (showAssignment && result.scenarioId && selectedUsers.length > 0) {
-          const assignmentResponse = await fetch('/api/scenario-assignments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              scenarioId: result.scenarioId,
-              assignToUsers: selectedUsers.map(u => u.id),
-              deadline: assignmentDeadline?.toISOString(),
-              assignerName: userName // Pass the assigner's name
-            })
+          console.log('🔍 Creating assignments...', { 
+            showAssignment, 
+            scenarioId: result.scenarioId, 
+            selectedUsers: selectedUsers.length,
+            assignmentDeadline: assignmentDeadline?.toISOString()
+          });
+          
+          const assignmentResponse = await authenticatedPost('/api/scenario-assignments', {
+            scenarioId: result.scenarioId,
+            assignToUsers: selectedUsers.map(u => u.id),
+            deadline: assignmentDeadline?.toISOString(),
+            assignerName: userName // Pass the assigner's name
           })
 
+          console.log('🔍 Assignment response status:', assignmentResponse.status);
+          
           if (assignmentResponse.ok) {
+            const assignmentData = await assignmentResponse.json()
+            console.log('✅ Assignment created successfully:', assignmentData);
             toast({
               title: "Assignments Created",
-              description: `Scenario assigned to ${selectedUsers.length} user${selectedUsers.length > 1 ? 's' : ''}`,
+              description: assignmentData.message || 'Assignments created successfully!',
+            })
+          } else {
+            const errorData = await assignmentResponse.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('❌ Assignment creation failed:', errorData);
+            toast({
+              title: "Assignment Failed",
+              description: errorData.error || 'Failed to create assignment',
+              variant: "destructive",
             })
           }
+        } else {
+          console.log('🔍 Skipping assignment creation:', { 
+            showAssignment, 
+            scenarioId: result.scenarioId, 
+            selectedUsersCount: selectedUsers.length 
+          });
         }
         
         toast({
