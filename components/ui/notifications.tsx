@@ -78,7 +78,7 @@ export function NotificationBell() {
   const markAllAsRead = async () => {
     try {
       const response = await authenticatedPatch('/api/notifications', {
-        action: 'mark_all_read'
+        markAllRead: true
       })
       
       if (response.ok) {
@@ -119,9 +119,16 @@ export function NotificationBell() {
       await markAsRead(notification.id)
     }
 
-    // Navigate based on entity type
+    // Navigate based on entity type and notification type
     if (notification.entity_type === 'scenario_assignment' && notification.entity_id) {
-      window.location.href = `/saved-scenarios?tab=assigned`
+      // Check if this is an assignment completion notification
+      if (notification.type === 'assignment_completed' && notification.payload?.call_id) {
+        // For assignment completion, open the specific call review
+        window.location.href = `/review?callId=${notification.payload.call_id}`
+      } else {
+        // For other assignment notifications, go to assignments tab
+        window.location.href = `/saved-scenarios?tab=assigned`
+      }
     } else if (notification.entity_type === 'simulation' && notification.entity_id) {
       window.location.href = `/review?callId=${notification.entity_id}`
     }

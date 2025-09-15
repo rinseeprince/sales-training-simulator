@@ -118,13 +118,25 @@ export function LiveSimulation() {
     
     try {
       // First, check URL parameters (from Play button)
+      console.log('🔄 === LIVE SIMULATION URL CHECK ===')
       const urlParams = new URLSearchParams(window.location.search);
       const urlPrompt = urlParams.get('prompt');
       const urlProspectName = urlParams.get('prospectName');
       const urlVoice = urlParams.get('voice');
+      const urlAssignmentId = urlParams.get('assignmentId');
+      
+      console.log('🔄 URL parameters detected:', {
+        hasPrompt: !!urlPrompt,
+        hasAssignmentId: !!urlAssignmentId,
+        assignmentId: urlAssignmentId,
+        assignmentIdType: typeof urlAssignmentId,
+        fullUrl: window.location.href
+      })
       
       if (urlPrompt) {
-        console.log('🔄 Found scenario data in URL parameters');
+        console.log('🔄 === CREATING SCENARIO DATA ===')
+        console.log('🔄 Found scenario data in URL parameters', urlAssignmentId ? 'WITH ASSIGNMENT ID' : 'WITHOUT ASSIGNMENT ID');
+        
         const urlScenarioData = {
           title: 'Saved Scenario',
           prompt: urlPrompt,
@@ -132,9 +144,17 @@ export function LiveSimulation() {
           duration: '10',
           voice: urlVoice || 'rachel',
           enableStreaming: true,
+          assignmentId: urlAssignmentId, // Store assignment ID if present
           timestamp: Date.now()
         };
-        console.log('🔄 Loading scenario from URL:', urlScenarioData);
+        
+        console.log('🔄 Scenario data created:', {
+          title: urlScenarioData.title,
+          hasAssignmentId: !!urlScenarioData.assignmentId,
+          assignmentId: urlScenarioData.assignmentId,
+          assignmentIdType: typeof urlScenarioData.assignmentId
+        });
+        
         setScenarioData(urlScenarioData);
         setLoadedFromURL(true);
         
@@ -978,6 +998,13 @@ export function LiveSimulation() {
             setAnalysisProgress('Analysis complete with errors');
           }
           
+          console.log('💾 === CREATING TEMP CALL DATA ===')
+          console.log('💾 Scenario data for temp call:', {
+            hasScenarioData: !!scenarioData,
+            scenarioAssignmentId: scenarioData?.assignmentId,
+            scenarioAssignmentIdType: typeof scenarioData?.assignmentId
+          })
+          
           const tempCallData = {
             callId: callId,
             transcript: conversationHistory,
@@ -986,6 +1013,7 @@ export function LiveSimulation() {
             scenarioPrompt: scenarioData?.prompt || '', // Include scenario prompt in temp data
             scenarioProspectName: scenarioData?.prospectName || '', // Include prospect name for restart
             scenarioVoice: scenarioData?.voice || 'professional-male-us', // Include voice for restart
+            scenario_assignment_id: scenarioData?.assignmentId || null, // Include assignment ID if from assignment
             duration: currentTime,
             audioUrl: audioUrl,
             conversationHistory: conversationHistory,
@@ -1003,8 +1031,17 @@ export function LiveSimulation() {
             enhancedScoring: scoringResult.enhancedScoring // Store both field names for compatibility
           };
           
+          console.log('💾 Temp call data created:', {
+            callId: tempCallData.callId,
+            hasAssignmentId: !!tempCallData.scenario_assignment_id,
+            assignmentId: tempCallData.scenario_assignment_id,
+            assignmentIdType: typeof tempCallData.scenario_assignment_id,
+            scenarioName: tempCallData.scenarioName
+          })
+          
           // Store in session storage for the review page
           sessionStorage.setItem(`temp_call_${callId}`, JSON.stringify(tempCallData));
+          console.log('💾 Temp call data stored in sessionStorage with key:', `temp_call_${callId}`)
           
           console.log('Call data analyzed and prepared for review (not saved yet):', {
             callId,

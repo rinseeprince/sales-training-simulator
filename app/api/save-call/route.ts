@@ -25,21 +25,10 @@ export async function POST(req: NextRequest) {
       audioUrl,
       conversationHistory = [],
       scoreOnly = false,
-      existingEnhancedScoring = null
+      existingEnhancedScoring = null,
+      scenario_assignment_id
     } = body;
 
-    console.log('Received save call request:', { 
-      callId,
-      repId, 
-      repIdType: typeof repId,
-      scenarioName, 
-      duration, 
-      transcriptLength: transcript?.length,
-      conversationHistoryLength: conversationHistory?.length,
-      audioUrl: audioUrl,
-      hasScenarioPrompt: !!scenarioPrompt,
-      hasExistingEnhancedScoring: !!existingEnhancedScoring
-    });
 
     // Validate required fields
     if (!transcript || !repId || !scenarioName) {
@@ -58,7 +47,6 @@ export async function POST(req: NextRequest) {
 
     // Check if we have existing enhanced scoring data to prevent regeneration
     if (existingEnhancedScoring) {
-      console.log('Using existing enhanced scoring data to prevent regeneration');
       enhancedScoring = existingEnhancedScoring;
       score = enhancedScoring.overallScore || 50;
       talkRatio = enhancedScoring.talkRatio || 50;
@@ -72,31 +60,8 @@ export async function POST(req: NextRequest) {
         ...(enhancedScoring.areasForImprovement || [])
       ];
       
-      console.log('Using existing enhanced scoring:', {
-        score,
-        talkRatio,
-        objectionsHandled,
-        ctaUsed,
-        sentiment,
-        strengthsCount: enhancedScoring.strengths?.length || 0,
-        improvementsCount: enhancedScoring.areasForImprovement?.length || 0
-      });
     } else {
       try {
-        console.log('Starting scenario-aware AI scoring...');
-      console.log('Transcript structure:', {
-        length: transcript.length,
-        firstEntry: transcript[0],
-        sample: transcript.slice(0, 2).map((entry: any, i: number) => ({
-          index: i,
-          keys: Object.keys(entry || {}),
-          speaker: entry?.speaker,
-          role: entry?.role,
-          message: entry?.message,
-          text: entry?.text,
-          content: entry?.content
-        }))
-      });
       
       // Format transcript for AI analysis
       const transcriptText = transcript
@@ -114,7 +79,6 @@ export async function POST(req: NextRequest) {
         })
         .join('\n');
       
-      console.log('Formatted transcript for AI analysis');
       
       // Get scenario context from localStorage or use fallback
       const scenarioContext = scenarioPrompt || `Scenario: ${scenarioName}`;
@@ -256,17 +220,6 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         readyForRealCustomers: evaluation.readyForRealCustomers || false
       };
       
-      console.log('Intelligent AI scoring completed:', {
-        score,
-        scenarioFit: evaluation.scenarioFit,
-        talkRatio,
-        objectionsHandled,
-        ctaUsed,
-        sentiment,
-        strengthsCount: evaluation.strengths?.length || 0,
-        improvementsCount: evaluation.areasForImprovement?.length || 0,
-        keyMomentsCount: evaluation.keyMoments?.length || 0
-      });
       
     } catch (scoringError) {
       console.error('Scenario-aware call scoring failed:', scoringError);
@@ -293,13 +246,6 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
           readyForRealCustomers: false
         };
         
-        console.log('Using fallback scoring values:', {
-          score,
-          talkRatio,
-          objectionsHandled,
-          ctaUsed,
-          sentiment
-        });
       } catch (fallbackError) {
         console.error('Fallback scoring also failed:', fallbackError);
       }
@@ -316,6 +262,7 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         scenario_prompt: scenario_prompt || scenarioPrompt, // Support both field names
         scenario_prospect_name: scenario_prospect_name,
         scenario_voice: scenario_voice,
+        scenario_assignment_id: scenario_assignment_id, // Link to assignment if provided
         transcript: transcript,
         score: score,
         talk_ratio: talkRatio,
@@ -330,16 +277,6 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         updated_at: new Date().toISOString()
       };
 
-      console.log('Inserting call data:', {
-        id: callData.id,
-        rep_id: callData.rep_id,
-        scenario_name: callData.scenario_name?.substring(0, 50) + '...',
-        audio_url: callData.audio_url ? 'PRESENT' : 'MISSING',
-        duration: callData.duration,
-        score: callData.score,
-        enhanced_scoring: callData.enhanced_scoring ? 'PRESENT' : 'MISSING',
-        enhanced_scoring_data: callData.enhanced_scoring
-      });
 
       const { data: dbData, error } = await supabase
         .from('calls')
@@ -347,23 +284,115 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         .select()
         .single();
 
-      console.log('Database response:', { 
-        data: dbData ? {
-          id: dbData.id,
-          score: dbData.score,
-          enhanced_scoring: dbData.enhanced_scoring ? 'PRESENT' : 'MISSING',
-          enhanced_scoring_data: dbData.enhanced_scoring
-        } : null, 
-        error 
-      });
 
         if (error) {
           console.error('Database insert error:', error);
           return errorResponse(`Failed to save call data: ${error.message}`);
         }
         data = dbData;
-      } else {
-        console.log('Score-only mode: skipping database save');
+
+        // Handle assignment completion if this call is from an assigned scenario
+        if (scenario_assignment_id) {
+          try {
+            // Get assignment details for notification
+            
+            const { data: assignment, error: assignmentError } = await supabase
+              .from('scenario_assignments')
+              .select(`
+                *,
+                scenario:scenarios!scenario_id(id, title),
+                assigned_by_user:simple_users!assigned_by(id, name, email),
+                assigned_to_user_data:simple_users!assigned_to_user(id, name, email)
+              `)
+              .eq('id', scenario_assignment_id)
+              .single();
+
+
+            if (assignmentError) {
+              console.error('Error fetching assignment:', assignmentError);
+            } else if (assignment) {
+              // Handle both new completions and score updates for retries
+              const isFirstCompletion = assignment.status !== 'completed';
+              const isScoreImprovement = assignment.status === 'completed' && (!assignment.score || score > assignment.score);
+              
+              if (isFirstCompletion) {
+                // Create completion record for first attempt
+                const completionData = {
+                  assignment_id: scenario_assignment_id,
+                  call_id: callId,
+                  completed_by: repId,
+                  completed_at: new Date().toISOString()
+                }
+                const { error: completionError } = await supabase
+                  .from('assignment_completions')
+                  .insert(completionData);
+
+                if (completionError) {
+                  console.error('Error creating completion record:', completionError);
+                  // Continue with assignment update even if completion record fails
+                }
+              }
+
+              if (isFirstCompletion || isScoreImprovement) {
+                // Update assignment status and score
+                const updateData = {
+                  status: 'completed',
+                  completed_at: isFirstCompletion ? new Date().toISOString() : assignment.completed_at,
+                  result: score >= 70 ? 'pass' : 'fail',
+                  score: score
+                }
+                
+                const { error: updateError, data: updateResult } = await supabase
+                  .from('scenario_assignments')
+                  .update(updateData)
+                  .eq('id', scenario_assignment_id)
+                  .select();
+
+                if (updateError) {
+                  console.error('Error updating assignment status:', updateError);
+                }
+
+                // Send notification to manager (for first completion or significant score improvement)
+                if (assignment.assigned_by_user && (isFirstCompletion || (isScoreImprovement && score >= 70 && assignment.score < 70))) {
+                  const notificationTitle = isFirstCompletion 
+                    ? `Assignment Completed: ${assignment.scenario?.title || scenarioName}`
+                    : `Assignment Score Improved: ${assignment.scenario?.title || scenarioName}`;
+                  const notificationMessage = isFirstCompletion
+                    ? `${assignment.assigned_to_user_data?.name || 'A team member'} has completed the assigned scenario "${assignment.scenario?.title || scenarioName}" with a score of ${score}%.`
+                    : `${assignment.assigned_to_user_data?.name || 'A team member'} has improved their score on "${assignment.scenario?.title || scenarioName}" to ${score}%.`;
+                  
+                  const { error: notificationError } = await supabase
+                    .from('notifications')
+                    .insert({
+                      recipient_id: assignment.assigned_by,
+                      type: 'assignment_completed',
+                      title: notificationTitle,
+                      message: notificationMessage,
+                      entity_type: 'scenario_assignment',
+                      entity_id: scenario_assignment_id,
+                      payload: {
+                        scenario_assignment_id: scenario_assignment_id,
+                        call_id: callId,
+                        scenario_title: assignment.scenario?.title || scenarioName,
+                        completed_by_name: assignment.assigned_to_user_data?.name,
+                        score: score,
+                        result: score >= 70 ? 'pass' : 'fail',
+                        is_retry: !isFirstCompletion
+                      },
+                      triggered_at: new Date().toISOString()
+                    });
+
+                  if (notificationError) {
+                    console.error('Error creating notification:', notificationError);
+                  }
+                }
+              }
+            }
+          } catch (assignmentProcessingError) {
+            console.error('❌ Error processing assignment completion:', assignmentProcessingError);
+            // Don't fail the entire save operation if assignment processing fails
+          }
+        }
       }
 
     return successResponse({

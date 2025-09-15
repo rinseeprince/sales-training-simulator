@@ -138,6 +138,21 @@ export function Dashboard() {
     }
   }
 
+  // Separate function to load assignments (for refresh capability)
+  const loadAssignments = async () => {
+    try {
+      const assignmentsResponse = await authenticatedGet('/api/scenario-assignments?scope=my')
+      if (assignmentsResponse.ok) {
+        const assignmentsData = await assignmentsResponse.json()
+        setAssignments(assignmentsData.assignments || [])
+      } else {
+        console.error('Failed to refresh assignments:', assignmentsResponse.status)
+      }
+    } catch (error) {
+      console.error('Error refreshing assignments:', error)
+    }
+  }
+
   // Fetch calls and scenarios data
   useEffect(() => {
     if (!user?.id || hasFetchedRef.current) return
@@ -205,15 +220,8 @@ export function Dashboard() {
           console.error('Failed to load scenarios:', scenariosResponse.status)
         }
         
-        // Fetch assignments
-        const assignmentsResponse = await authenticatedGet('/api/scenario-assignments?scope=my')
-        if (assignmentsResponse.ok) {
-          const assignmentsData = await assignmentsResponse.json()
-          console.log('Dashboard assignments loaded:', assignmentsData.assignments?.length || 0)
-          setAssignments(assignmentsData.assignments || [])
-        } else {
-          console.error('Failed to load assignments:', assignmentsResponse.status)
-        }
+        // Fetch assignments using the reusable function
+        await loadAssignments()
         } catch (error) {
           console.error('Error fetching dashboard data:', error)
         } finally {
@@ -229,6 +237,50 @@ export function Dashboard() {
       hasFetchedRef.current = false
     }
   }, [user])
+
+  // Smart refresh: Reload assignments when page gains focus (user returns from completing assignment)
+  useEffect(() => {
+    if (!user?.id) return
+
+    const handlePageFocus = () => {
+      console.log('📱 Dashboard page gained focus - checking for assignment completion...')
+      
+      // Check if an assignment was just completed
+      const completionFlag = localStorage.getItem('assignmentJustCompleted')
+      if (completionFlag) {
+        const completionTime = parseInt(completionFlag)
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000)
+        
+        if (completionTime > fiveMinutesAgo) {
+          localStorage.removeItem('assignmentJustCompleted')
+          loadAssignments()
+          return
+        } else {
+          localStorage.removeItem('assignmentJustCompleted') // Clean up old flag
+        }
+      }
+      
+      // Regular refresh on focus
+      loadAssignments()
+    }
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('👁️ Dashboard page became visible - refreshing assignments...')
+        loadAssignments()
+      }
+    }
+
+    // Listen for page focus events
+    window.addEventListener('focus', handlePageFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Cleanup listeners
+    return () => {
+      window.removeEventListener('focus', handlePageFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [user?.id])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -650,11 +702,21 @@ export function Dashboard() {
                             {assignment.status === 'completed' ? 'Completed' : 
                              assignment.status === 'in_progress' ? 'In Progress' : 'Not Started'}
                           </span>
+                          {assignment.status === 'completed' && assignment.score && (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700">
+                              {assignment.score}%
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
                     <div className="text-xs text-slate-400 flex-shrink-0 group-hover:text-slate-500">
-                      {assignment.deadline ? new Date(assignment.deadline).toLocaleDateString() : 'No deadline'}
+                      {assignment.status === 'completed' && assignment.completed_at 
+                        ? `Completed ${new Date(assignment.completed_at).toLocaleDateString()}`
+                        : assignment.deadline 
+                          ? new Date(assignment.deadline).toLocaleDateString() 
+                          : 'No deadline'
+                      }
                     </div>
                   </div>
                 );

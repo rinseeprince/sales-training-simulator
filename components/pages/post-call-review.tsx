@@ -298,6 +298,7 @@ interface TempCallData {
   enhanced_scoring?: any;
   enhancedScoring?: any;
   created_at?: string;
+  scenario_assignment_id?: string;
 }
 
 interface PostCallReviewProps {
@@ -386,6 +387,7 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
     if (callId) {
       // Check for temporary call data in session storage
       const tempData = sessionStorage.getItem(`temp_call_${callId}`)
+      
       if (tempData) {
         try {
           const parsedTempData = JSON.parse(tempData)
@@ -479,31 +481,41 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
 
       const actualUserId = profileData.userProfile.id;
       
+      const saveCallPayload = {
+        callId: tempCallData.callId,
+        transcript: tempCallData.transcript,
+        repId: actualUserId, // Use the correct user ID from simple_users table
+        scenarioName: tempCallData.scenarioName || simulationName.trim(),
+        duration: tempCallData.duration,
+        audioUrl: tempCallData.audioUrl,
+        conversationHistory: tempCallData.conversationHistory,
+        // Include all scenario data needed for "Start Over" (use database field names)
+        scenario_prompt: tempCallData.scenarioPrompt,
+        scenario_prospect_name: tempCallData.scenarioProspectName,
+        scenario_voice: tempCallData.scenarioVoice,
+        // Pass assignment ID for completion tracking
+        scenario_assignment_id: tempCallData.scenario_assignment_id,
+        // Pass existing enhanced scoring to prevent regeneration
+        existingEnhancedScoring: tempCallData.enhanced_scoring || tempCallData.enhancedScoring
+      }
+      
+      
       const saveResponse = await fetch('/api/save-call', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          callId: tempCallData.callId,
-          transcript: tempCallData.transcript,
-          repId: actualUserId, // Use the correct user ID from simple_users table
-          scenarioName: tempCallData.scenarioName || simulationName.trim(),
-          duration: tempCallData.duration,
-          audioUrl: tempCallData.audioUrl,
-          conversationHistory: tempCallData.conversationHistory,
-          // Include all scenario data needed for "Start Over" (use database field names)
-          scenario_prompt: tempCallData.scenarioPrompt,
-          scenario_prospect_name: tempCallData.scenarioProspectName,
-          scenario_voice: tempCallData.scenarioVoice,
-          // Pass existing enhanced scoring to prevent regeneration
-          existingEnhancedScoring: tempCallData.enhanced_scoring || tempCallData.enhancedScoring
-        }),
+        body: JSON.stringify(saveCallPayload),
       })
       
       if (saveResponse.ok) {
         const saveResult = await saveResponse.json()
         console.log('Call saved successfully:', saveResult)
+        
+        // If this was an assignment completion, signal for UI refresh
+        if (tempCallData.scenario_assignment_id) {
+          localStorage.setItem('assignmentJustCompleted', Date.now().toString())
+        }
         
         // Update temp call data with enhanced scoring from save response
         if (saveResult.enhancedScoring) {
@@ -514,14 +526,18 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
           }
           sessionStorage.setItem(`temp_call_${callId}`, JSON.stringify(updatedTempData))
           setTempCallData(updatedTempData)
-          console.log('🔄 Updated temp data with enhanced scoring:', saveResult.enhancedScoring)
         }
         
         setCallSaved(true)
         // Remove temp data since call is now saved in database
         sessionStorage.removeItem(`temp_call_${callId}`)
-        // Navigate to saved simulations page
-        router.push('/simulations')
+        
+        // Navigate to appropriate page based on whether this was an assignment
+        if (tempCallData.scenario_assignment_id) {
+          router.push('/dashboard')
+        } else {
+          router.push('/simulations')
+        }
       } else {
         const errorText = await saveResponse.text()
         console.error('Failed to save call:', saveResponse.status, errorText)
@@ -548,12 +564,6 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
           // Get the correct user ID from simple_users table (use actualUserId if available)
           const userId = actualUserId || user.id;
           
-          console.log('🔍 Start Over - User IDs:', {
-            'user.id (Supabase auth)': user.id,
-            'actualUserId (simple_users.id)': actualUserId,
-            'userId (selected for API)': userId
-          });
-          
           const response = await authenticatedGet(`/api/check-simulation-limit?userId=${userId}`)
           
           if (!response.ok) {
@@ -561,7 +571,6 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
           }
           
           const data = await response.json()
-          console.log('🔍 Start Over - API response:', data);
         
         if (!data.canSimulate) {
           toast({
@@ -591,23 +600,6 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
       }
     }
 
-    console.log('🔄 Start Over clicked - Available data:', {
-      tempCallData: tempCallData ? {
-        scenarioName: tempCallData.scenarioName,
-        scenarioPrompt: tempCallData.scenarioPrompt,
-        scenarioProspectName: tempCallData.scenarioProspectName,
-        scenarioVoice: tempCallData.scenarioVoice
-      } : null,
-      call: call ? {
-        scenario_name: call.scenario_name,
-        scenario_prompt: call.scenario_prompt,
-        scenario_prospect_name: call.scenario_prospect_name,
-        scenario_voice: call.scenario_voice
-      } : null,
-      mostRecentCall: mostRecentCall ? {
-        scenario_name: mostRecentCall.scenario_name
-      } : null
-    });
 
     // Check if we have scenario data from the current call
     if (tempCallData?.scenarioName) {
@@ -617,17 +609,12 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
         prompt: tempCallData.scenarioPrompt || 'Restart this sales simulation scenario',
         prospectName: tempCallData.scenarioProspectName || 'Prospect',
         voice: tempCallData.scenarioVoice || 'alloy',
+        assignmentId: tempCallData.scenario_assignment_id, // Preserve assignment ID
         timestamp: Date.now()
       }
-      console.log('🔄 Using temp call data, setting scenario:', scenarioData);
       localStorage.setItem('currentScenario', JSON.stringify(scenarioData))
-      console.log('🔄 Scenario saved to localStorage, navigating to /simulation');
-      // Verify the scenario was saved
-      const savedScenario = localStorage.getItem('currentScenario');
-      console.log('🔄 Verified saved scenario:', savedScenario ? JSON.parse(savedScenario) : null);
       
       // Use window.location.href for modal navigation to ensure it works
-      console.log('🔄 Using window.location.href for navigation from modal');
       window.location.href = '/simulation'
     } else if (call?.scenario_name) {
       // Create scenario data from saved call data
@@ -636,9 +623,9 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
         prompt: call.scenario_prompt || 'Restart this sales simulation scenario',
         prospectName: call.scenario_prospect_name || 'Prospect',
         voice: call.scenario_voice || 'alloy',
+        assignmentId: call.scenario_assignment_id, // Preserve assignment ID
         timestamp: Date.now()
       }
-      console.log('🔄 Using saved call data, setting scenario:', scenarioData);
       localStorage.setItem('currentScenario', JSON.stringify(scenarioData))
       window.location.href = '/simulation'
     } else if (mostRecentCall?.scenario_name) {
@@ -648,15 +635,13 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
         prompt: mostRecentCall.scenario_prompt || 'Restart this sales simulation scenario',
         prospectName: mostRecentCall.scenario_prospect_name || 'Prospect',
         voice: mostRecentCall.scenario_voice || 'alloy',
+        assignmentId: mostRecentCall.scenario_assignment_id, // Preserve assignment ID
         timestamp: Date.now()
       }
-      console.log('🔄 Using most recent call data, setting scenario:', scenarioData);
       localStorage.setItem('currentScenario', JSON.stringify(scenarioData))
       window.location.href = '/simulation'
     } else {
       // Fallback: redirect to scenario builder
-      console.log('🔄 No scenario data available, redirecting to scenario builder');
-      console.log('🔄 This redirect was triggered from post-call-review.tsx');
       router.push('/scenario-builder')
     }
     }); // Close the loading manager wrapper

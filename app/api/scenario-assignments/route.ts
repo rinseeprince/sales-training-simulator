@@ -13,15 +13,10 @@ function createSupabaseAdmin() {
 // GET: Fetch scenario assignments
 export async function GET(req: NextRequest) {
   try {
-    console.log('🔍 Scenario assignments GET API called');
-    
     const user = await authenticateWithRBAC(req);
     if (!user) {
-      console.log('❌ Authentication failed');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    console.log('✅ User authenticated:', { userId: user.user.id, role: user.userRole, teamId: user.teamId });
 
     const { searchParams } = new URL(req.url);
     const scope = searchParams.get('scope') || 'my'; // 'my', 'team', 'all'
@@ -30,7 +25,6 @@ export async function GET(req: NextRequest) {
     const teamId = searchParams.get('teamId');
     const includeCompleted = searchParams.get('includeCompleted') !== 'false';
 
-    console.log('🔍 Query parameters:', { scope, status, repId, teamId, includeCompleted });
 
     const supabase = createSupabaseAdmin();
 
@@ -47,7 +41,6 @@ export async function GET(req: NextRequest) {
     // Apply scope filters
     if (scope === 'my') {
       // User's own assignments
-      console.log('🔍 Applying "my" scope filter for user:', user.user.id, 'team:', user.teamId);
       if (user.teamId) {
         query = query.or(`assigned_to_user.eq.${user.user.id},assigned_to_team.eq.${user.teamId}`);
       } else {
@@ -56,54 +49,43 @@ export async function GET(req: NextRequest) {
     } else if (scope === 'team' && user.teamId) {
       // Team assignments (for managers)
       if (!user.isManager) {
-        console.log('❌ User not authorized for team scope');
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
-      console.log('🔍 Applying team scope filter for team:', user.teamId);
       query = query.eq('assigned_to_team', user.teamId);
     } else if (scope === 'all') {
       // All assignments (for managers/admins)
       if (!user.isManager) {
-        console.log('❌ User not authorized for all scope');
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
-      console.log('🔍 Applying "all" scope (no filter)');
       // No additional filter needed
     }
 
     // Apply additional filters
     if (status) {
-      console.log('🔍 Applying status filter:', status);
       query = query.eq('status', status);
     }
     
     if (repId && user.isManager) {
-      console.log('🔍 Applying repId filter:', repId);
       query = query.eq('assigned_to_user', repId);
     }
     
     if (teamId && user.isManager) {
-      console.log('🔍 Applying teamId filter:', teamId);
       query = query.eq('assigned_to_team', teamId);
     }
 
     if (!includeCompleted) {
-      console.log('🔍 Excluding completed assignments');
       query = query.neq('status', 'completed');
     }
 
-    console.log('🔍 Executing query...');
     const { data: assignments, error } = await query;
 
     if (error) {
-      console.error('❌ Supabase query error:', error);
+      console.error('Supabase query error:', error);
       return NextResponse.json({ 
         error: 'Failed to fetch assignments',
         details: error.message 
       }, { status: 500 });
     }
-
-    console.log('✅ Assignments fetched successfully:', assignments?.length || 0);
     
     // Log activity
     await logActivity(
@@ -136,20 +118,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('🔍 Assignment creation request from user:', {
-      userId: user.user.id,
-      userRole: user.userRole,
-      isManager: user.isManager,
-      isAdmin: user.isAdmin
-    });
-
     // Only managers and admins can create assignments
     if (!user.isManager && !user.isAdmin) {
-      console.log('❌ User not authorized to create assignments:', user.userRole);
       return NextResponse.json({ error: 'Forbidden - Only managers and admins can create assignments' }, { status: 403 });
     }
-
-    console.log('✅ User authorized to create assignments');
 
     const body = await req.json();
     const { 
@@ -160,13 +132,6 @@ export async function POST(req: NextRequest) {
       assignerName // Add assigner name
     } = body;
 
-    console.log('🔍 Assignment data:', {
-      scenarioId,
-      assignToUsers: assignToUsers?.length,
-      assignToTeam,
-      deadline,
-      assignerName
-    });
 
     if (!scenarioId || (!assignToUsers && !assignToTeam)) {
       return NextResponse.json(

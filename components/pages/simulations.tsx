@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { 
   Play, 
   Clock, 
@@ -77,6 +78,9 @@ export function Simulations() {
   const [viewScope, setViewScope] = useState<'my' | 'all'>('my')
   const [selectedRep, setSelectedRep] = useState<string>('')
   const [reps, setReps] = useState<Array<{id: string, name: string, email: string}>>([])
+  const [selectedSimulations, setSelectedSimulations] = useState<string[]>([])
+  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false)
 
   // Fetch user role and simulations
   useEffect(() => {
@@ -241,6 +245,55 @@ export function Simulations() {
     }
   }
 
+  const handleSelectSimulation = (simulationId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedSimulations(prev => [...prev, simulationId])
+    } else {
+      setSelectedSimulations(prev => prev.filter(id => id !== simulationId))
+    }
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedSimulations(filteredSimulations.map(sim => sim.id))
+    } else {
+      setSelectedSimulations([])
+    }
+  }
+
+  const handleBatchDelete = () => {
+    if (selectedSimulations.length === 0) return
+    setBatchDeleteDialogOpen(true)
+  }
+
+  const handleBatchDeleteConfirm = async () => {
+    setIsBatchDeleting(true)
+    try {
+      // Delete all selected simulations in parallel
+      const deletePromises = selectedSimulations.map(id =>
+        fetch(`/api/calls/${id}`, { method: 'DELETE' })
+      )
+      
+      const results = await Promise.all(deletePromises)
+      const successfulDeletes = results.filter(response => response.ok)
+      
+      if (successfulDeletes.length === selectedSimulations.length) {
+        // Remove all successfully deleted simulations from local state
+        setSimulations(prev => prev.filter(sim => !selectedSimulations.includes(sim.id)))
+        setSelectedSimulations([])
+        setBatchDeleteDialogOpen(false)
+      } else {
+        console.error('Some deletions failed')
+        // Optionally refresh the list to get current state
+        refetchSimulations()
+      }
+    } catch (error) {
+      console.error('Error batch deleting simulations:', error)
+    } finally {
+      setIsBatchDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-8">
@@ -280,14 +333,15 @@ export function Simulations() {
         className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
       >
         <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
-            />
-          </div>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+                placeholder="Search simulations..."
+              />
+            </div>
           
           <div className="flex items-center space-x-3">
             <Select value={filterScore} onValueChange={setFilterScore}>
@@ -332,6 +386,50 @@ export function Simulations() {
         </div>
       </motion.div>
 
+      {/* Select All Control */}
+      {filteredSimulations.length > 0 && selectedSimulations.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="bg-white rounded-xl border border-slate-200 shadow-sm p-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="select-all"
+                checked={selectedSimulations.length === filteredSimulations.length && filteredSimulations.length > 0}
+                onCheckedChange={handleSelectAll}
+              />
+              <label htmlFor="select-all" className="text-sm font-medium text-slate-700 cursor-pointer">
+                Select all {filteredSimulations.length} simulation{filteredSimulations.length !== 1 ? 's' : ''}
+              </label>
+            </div>
+            {selectedSimulations.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedSimulations([])}
+                  className="text-slate-600 border-slate-300 hover:bg-slate-50"
+                >
+                  Clear ({selectedSimulations.length})
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBatchDelete}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  <Trash2 className="mr-1 h-4 w-4" />
+                  Delete Selected
+                </Button>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
+
       {/* Simulations Grid */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -371,11 +469,23 @@ export function Simulations() {
               transition={{ duration: 0.5, delay: 0.1 * index }}
             >
               <div 
-                className="cursor-pointer bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5 p-6"
-                onClick={() => handleSimulationClick(simulation.id)}
+                className="relative bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5 p-6"
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                {/* Checkbox */}
+                <div className="absolute top-4 left-4 z-10">
+                  <Checkbox
+                    checked={selectedSimulations.includes(simulation.id)}
+                    onCheckedChange={(checked) => handleSelectSimulation(simulation.id, checked as boolean)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                
+                <div 
+                  className="cursor-pointer pl-8"
+                  onClick={() => handleSimulationClick(simulation.id)}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
                     <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Phone className="h-6 w-6 text-primary" />
                     </div>
@@ -502,6 +612,7 @@ export function Simulations() {
                     </div>
                   )}
                 </div>
+                </div>
               </div>
             </motion.div>
           ))
@@ -537,6 +648,29 @@ export function Simulations() {
               className="bg-red-600 hover:bg-red-700"
             >
               {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation Dialog */}
+      <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Multiple Simulations</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedSimulations.length} simulation{selectedSimulations.length !== 1 ? 's' : ''}? 
+              This action cannot be undone and will permanently remove the selected simulations and their data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBatchDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleBatchDeleteConfirm}
+              disabled={isBatchDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isBatchDeleting ? 'Deleting...' : `Delete ${selectedSimulations.length} Simulation${selectedSimulations.length !== 1 ? 's' : ''}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

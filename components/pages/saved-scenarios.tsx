@@ -24,6 +24,16 @@ import {
   Timer,
   XCircle
 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
@@ -51,6 +61,7 @@ interface ScenarioAssignment {
   status: 'not_started' | 'in_progress' | 'completed'
   completed_at?: string
   result?: 'pass' | 'fail'
+  score?: number
   scenario?: Scenario
   assigner?: {
     name: string
@@ -69,6 +80,9 @@ export function SavedScenarios() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [activeTab, setActiveTab] = useState('my-scenarios')
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [scenarioToDelete, setScenarioToDelete] = useState<Scenario | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -85,9 +99,69 @@ export function SavedScenarios() {
     }
   }, [searchParams])
 
+  // Smart refresh: Reload assignments when page gains focus or becomes visible
+  useEffect(() => {
+    if (!user) return
+
+    const handlePageFocus = () => {
+      console.log('📱 Saved Scenarios page gained focus - checking for assignment completion...')
+      
+      // Check if an assignment was just completed
+      const completionFlag = localStorage.getItem('assignmentJustCompleted')
+      if (completionFlag) {
+        const completionTime = parseInt(completionFlag)
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000)
+        
+        if (completionTime > fiveMinutesAgo) {
+          localStorage.removeItem('assignmentJustCompleted')
+          loadAssignments()
+          return
+        } else {
+          localStorage.removeItem('assignmentJustCompleted') // Clean up old flag
+        }
+      }
+      
+      // Regular refresh on focus
+      loadAssignments()
+    }
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('👁️ Saved Scenarios page became visible - refreshing assignments...')
+        loadAssignments()
+      }
+    }
+
+    // Listen for page focus events
+    window.addEventListener('focus', handlePageFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Cleanup listeners
+    return () => {
+      window.removeEventListener('focus', handlePageFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [user])
+
+  // URL parameter detection: Check if returning from assignment completion
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const fromSimulation = urlParams.get('fromSimulation')
+    const completedAssignment = urlParams.get('completedAssignment')
+    
+    if (fromSimulation === 'true' || completedAssignment) {
+      loadAssignments()
+      
+      // Clean up URL parameters
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete('fromSimulation')
+      newUrl.searchParams.delete('completedAssignment')
+      window.history.replaceState({}, '', newUrl.toString())
+    }
+  }, [searchParams])
+
   const loadScenarios = async () => {
     try {
-      console.log('🔍 Loading scenarios...')
       const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user?.id}`)
       const profileData = await profileResponse.json()
       
@@ -96,11 +170,9 @@ export function SavedScenarios() {
         return
       }
 
-      console.log('🔍 Fetching scenarios for user:', profileData.userProfile.id)
       const response = await authenticatedGet(`/api/scenarios?userId=${profileData.userProfile.id}`)
       if (response.ok) {
         const data = await response.json()
-        console.log('✅ Scenarios loaded:', data.scenarios?.length || 0)
         setScenarios(data.scenarios || [])
       } else {
         const errorData = await response.json()
@@ -125,15 +197,11 @@ export function SavedScenarios() {
 
   const loadAssignments = async () => {
     try {
-      console.log('🔍 Loading assignments...')
-      console.log('🔍 Making request to: /api/scenario-assignments?scope=my')
       
       const response = await authenticatedGet('/api/scenario-assignments?scope=my')
-      console.log('🔍 Assignment response status:', response.status)
       
       if (response.ok) {
         const data = await response.json()
-        console.log('✅ Assignments loaded:', data.assignments?.length || 0)
         console.log('📋 Assignment data:', data)
         setAssignments(data.assignments || [])
       } else {
@@ -163,6 +231,68 @@ export function SavedScenarios() {
     router.push(`/simulation?${params.toString()}`)
   }
 
+  const handlePlayAssignment = (assignment: ScenarioAssignment) => {
+    if (!assignment.scenario) return
+    
+    console.log('🎮 === ASSIGNMENT PLAY CLICKED ===')
+    console.log('🎮 Assignment details:', {
+      assignmentId: assignment.id,
+      assignmentIdType: typeof assignment.id,
+      scenarioTitle: assignment.scenario.title,
+      assignmentStatus: assignment.status
+    })
+    
+    const params = new URLSearchParams({
+      prompt: assignment.scenario.prompt,
+      prospectName: assignment.scenario.prospect_name || 'Prospect',
+      voice: assignment.scenario.voice || 'rachel',
+      assignmentId: assignment.id // Pass assignment ID for tracking
+    })
+    
+    console.log('🎮 URL parameters being passed:', {
+      assignmentId: assignment.id,
+      paramsString: params.toString(),
+      hasAssignmentId: params.has('assignmentId'),
+      assignmentIdFromParams: params.get('assignmentId')
+    })
+    console.log('🎮 Full navigation URL:', `/simulation?${params.toString()}`)
+    
+    router.push(`/simulation?${params.toString()}`)
+  }
+
+  const handleViewAssignmentResults = async (assignment: ScenarioAssignment) => {
+    try {
+      console.log('📊 View assignment results clicked:', assignment.id)
+      
+      // Find the call associated with this completed assignment
+      const response = await authenticatedGet(`/api/calls?assignmentId=${assignment.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.calls && data.calls.length > 0) {
+          const call = data.calls[0] // Most recent call for this assignment
+          console.log('📊 Found call for assignment:', call.id)
+          router.push(`/review?callId=${call.id}`)
+        } else {
+          console.log('📊 No calls found for assignment, showing generic message')
+          toast({
+            title: "No Results Found",
+            description: "Could not find the completed call for this assignment.",
+            variant: "destructive"
+          })
+        }
+      } else {
+        throw new Error('Failed to fetch assignment calls')
+      }
+    } catch (error) {
+      console.error('❌ Error viewing assignment results:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load assignment results",
+        variant: "destructive"
+      })
+    }
+  }
+
   const handleEditScenario = (scenario: Scenario) => {
     console.log('✏️ Edit scenario clicked:', scenario.title)
     
@@ -178,11 +308,17 @@ export function SavedScenarios() {
     router.push('/scenario-builder')
   }
 
-  const handleDeleteScenario = async (scenarioId: string) => {
-    if (!confirm('Are you sure you want to delete this scenario?')) return
+  const handleDeleteScenario = (scenario: Scenario) => {
+    setScenarioToDelete(scenario)
+    setDeleteDialogOpen(true)
+  }
 
+  const handleDeleteConfirm = async () => {
+    if (!scenarioToDelete) return
+    
+    setIsDeleting(true)
     try {
-      const response = await fetch(`/api/scenarios/${scenarioId}`, {
+      const response = await fetch(`/api/scenarios/${scenarioToDelete.id}`, {
         method: 'DELETE'
       })
 
@@ -191,7 +327,9 @@ export function SavedScenarios() {
           title: "Success",
           description: "Scenario deleted successfully"
         })
-        loadScenarios()
+        setScenarios(prev => prev.filter(scenario => scenario.id !== scenarioToDelete.id))
+        setDeleteDialogOpen(false)
+        setScenarioToDelete(null)
       } else {
         throw new Error('Failed to delete scenario')
       }
@@ -201,6 +339,8 @@ export function SavedScenarios() {
         description: "Failed to delete scenario",
         variant: "destructive"
       })
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -266,7 +406,8 @@ export function SavedScenarios() {
     }
   }
 
-  const getStatusBadge = (status: string, deadline?: string) => {
+  const getStatusBadge = (assignment: ScenarioAssignment) => {
+    const { status, deadline, score } = assignment
     const isOverdue = deadline && new Date(deadline) < new Date() && status !== 'completed'
     
     if (isOverdue) {
@@ -278,10 +419,19 @@ export function SavedScenarios() {
 
     switch (status) {
       case 'completed':
-        return <Badge variant="default" className="flex items-center gap-1 bg-green-600">
-          <CheckCircle className="h-3 w-3" />
-          Completed
-        </Badge>
+        return (
+          <div className="flex items-center gap-2">
+            <Badge variant="default" className="flex items-center gap-1 bg-green-600">
+              <CheckCircle className="h-3 w-3" />
+              Completed
+            </Badge>
+            {score && (
+              <Badge variant="outline" className="text-xs">
+                {score}%
+              </Badge>
+            )}
+          </div>
+        )
       case 'in_progress':
         return <Badge variant="secondary" className="flex items-center gap-1">
           <Timer className="h-3 w-3" />
@@ -327,7 +477,10 @@ export function SavedScenarios() {
             <h1 className="text-xl font-semibold text-slate-900">Saved Scenarios</h1>
             <p className="text-sm text-slate-500">Manage your scenarios and assignments</p>
           </div>
-          <Button onClick={() => router.push('/scenario-builder')}>
+          <Button 
+            onClick={() => router.push('/scenario-builder')} 
+            className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium"
+          >
             <FileText className="mr-2 h-4 w-4" />
             Create New Scenario
           </Button>
@@ -393,8 +546,7 @@ export function SavedScenarios() {
                 <p className="text-slate-500">No scenarios found</p>
                 <Button 
                   onClick={() => router.push('/scenario-builder')} 
-                  className="mt-4"
-                  variant="outline"
+                  className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium mt-4"
                 >
                   Create Your First Scenario
                 </Button>
@@ -445,7 +597,7 @@ export function SavedScenarios() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleDeleteScenario(scenario.id)}
+                              onClick={() => handleDeleteScenario(scenario)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -491,20 +643,39 @@ export function SavedScenarios() {
                         <div className="flex-1">
                           <CardTitle className="text-lg flex items-center gap-2">
                             {assignment.scenario?.title || 'Untitled Scenario'}
-                            {getStatusBadge(assignment.status, assignment.deadline)}
+                            {getStatusBadge(assignment)}
                           </CardTitle>
                           <CardDescription className="mt-2 line-clamp-2">
                             {assignment.scenario?.prompt}
                           </CardDescription>
+                          {assignment.status === 'completed' && assignment.completed_at && (
+                            <div className="mt-2 text-sm text-slate-500">
+                              Completed on {format(new Date(assignment.completed_at), 'MMM dd, yyyy')}
+                              {assignment.result && (
+                                <span className={`ml-2 font-medium ${assignment.result === 'pass' ? 'text-green-600' : 'text-red-600'}`}>
+                                  ({assignment.result === 'pass' ? 'Passed' : 'Failed'})
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="flex gap-2">
                           {assignment.status !== 'completed' && (
                             <Button
                               size="sm"
-                              onClick={() => handlePlayScenario(assignment.scenario)}
+                              onClick={() => handlePlayAssignment(assignment)}
                             >
                               <Play className="mr-1 h-4 w-4" />
                               Start
+                            </Button>
+                          )}
+                          {assignment.status === 'completed' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewAssignmentResults(assignment)}
+                            >
+                              View Results
                             </Button>
                           )}
                           {assignment.status === 'not_started' && (
@@ -547,6 +718,29 @@ export function SavedScenarios() {
           </TabsContent>
         </Tabs>
       </motion.div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Scenario</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{scenarioToDelete?.title}"? 
+              This action cannot be undone and will permanently remove the scenario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

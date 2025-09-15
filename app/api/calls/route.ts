@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const teamId = searchParams.get('teamId') // For managers to filter by team
     const status = searchParams.get('status') // Filter by review status
     const certified = searchParams.get('certified') // Filter by certification status
+    const assignmentId = searchParams.get('assignmentId') // Filter by assignment ID
 
     console.log('Calls API request:', { 
       callId, 
@@ -90,6 +91,11 @@ export async function GET(request: NextRequest) {
         query = query.eq('certified', true)
       } else if (certified === 'false') {
         query = query.eq('certified', false)
+      }
+
+      // Filter by assignment ID if provided
+      if (assignmentId) {
+        query = query.eq('scenario_assignment_id', assignmentId)
       }
 
       const { data: calls, error } = await query
