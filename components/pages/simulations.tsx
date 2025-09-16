@@ -338,7 +338,7 @@ export function Simulations() {
               <Input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+                className="pl-10 pr-4 py-3 rounded-lg border-slate-200 focus:ring-primary"
                 placeholder="Search simulations..."
               />
             </div>
@@ -452,7 +452,7 @@ export function Simulations() {
                   }
                 </p>
                 <Link href="/scenario-builder">
-                  <Button className="bg-primary hover:bg-primary/90 text-white">
+                  <Button className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
                     <Play className="mr-2 h-4 w-4" />
                     Start New Simulation
                   </Button>

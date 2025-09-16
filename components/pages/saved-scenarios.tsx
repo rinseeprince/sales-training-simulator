@@ -22,7 +22,8 @@ import {
   CheckCircle,
   AlertCircle,
   Timer,
-  XCircle
+  XCircle,
+  Users
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -39,6 +40,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 import { authenticatedGet, authenticatedPatch } from '@/lib/api-client'
+import { AssignmentModal } from '@/components/assignment/assignment-modal'
+import { EditScenarioModal } from '@/components/scenario/edit-scenario-modal'
 
 interface Scenario {
   id: string
@@ -83,6 +86,9 @@ export function SavedScenarios() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [scenarioToDelete, setScenarioToDelete] = useState<Scenario | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -295,17 +301,14 @@ export function SavedScenarios() {
 
   const handleEditScenario = (scenario: Scenario) => {
     console.log('✏️ Edit scenario clicked:', scenario.title)
-    
-    localStorage.setItem('editScenario', JSON.stringify({
-      title: scenario.title,
-      prompt: scenario.prompt,
-      prospectName: scenario.prospect_name,
-      voice: scenario.voice,
-      saveReuse: true
-    }))
-    
-    console.log('✏️ Navigating to scenario builder')
-    router.push('/scenario-builder')
+    setSelectedScenario(scenario)
+    setEditModalOpen(true)
+  }
+
+  const handleAssignToUsers = (scenario: Scenario) => {
+    console.log('👥 Assign to users clicked:', scenario.title)
+    setSelectedScenario(scenario)
+    setAssignmentModalOpen(true)
   }
 
   const handleDeleteScenario = (scenario: Scenario) => {
@@ -579,6 +582,16 @@ export function SavedScenarios() {
                           >
                             <Play className="h-4 w-4" />
                           </Button>
+                          {(user?.role === 'manager' || user?.role === 'admin') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAssignToUsers(scenario)}
+                              title="Assign to Users"
+                            >
+                              <Users className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -741,6 +754,29 @@ export function SavedScenarios() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Assignment Modal */}
+      <AssignmentModal
+        isOpen={assignmentModalOpen}
+        onClose={() => setAssignmentModalOpen(false)}
+        scenario={selectedScenario}
+        onAssignmentCreated={() => {
+          loadAssignments()
+          setAssignmentModalOpen(false)
+        }}
+      />
+
+      {/* Edit Scenario Modal */}
+      <EditScenarioModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        scenario={selectedScenario}
+        onScenarioUpdated={() => {
+          loadScenarios()
+          setEditModalOpen(false)
+        }}
+      />
+
     </div>
   )
 }

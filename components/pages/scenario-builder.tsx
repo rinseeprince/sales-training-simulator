@@ -631,7 +631,7 @@ export function ScenarioBuilder() {
                                   placeholder="Search by name or email..."
                                   value={searchQuery}
                                   onChange={(e) => setSearchQuery(e.target.value)}
-                                  className="pl-10 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+                                  className="pl-10 pr-4 py-3 rounded-lg border-slate-200 focus:ring-primary"
                                 />
                               </div>
                             </PopoverTrigger>
