@@ -38,6 +38,14 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
       console.log('AUTH PROVIDER: Starting loadUser...');
       const user = await getCurrentUser();
       console.log('AUTH PROVIDER: getCurrentUser returned:', user ? 'USER FOUND' : 'NO USER');
+      if (user) {
+        console.log('AUTH PROVIDER: User details:', {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          subscription_status: user.subscription_status
+        });
+      }
       setUser(user);
     } catch (error) {
       console.error('AUTH PROVIDER: Failed to load user:', error);

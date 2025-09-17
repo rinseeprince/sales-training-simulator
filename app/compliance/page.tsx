@@ -20,7 +20,7 @@ export default function CompliancePage() {
     return null
   }
 
-  if (user.subscription_status !== 'admin') {
+  if (user.role !== 'admin') {
     redirect('/')
   }
 

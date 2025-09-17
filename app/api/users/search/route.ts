@@ -26,6 +26,14 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get('q'); // Old format
     const domain = searchParams.get('domain'); // Old format
     
+    console.log('🔍 User search API called with params:', {
+      currentUserEmail,
+      currentUserRole,
+      query,
+      domain,
+      url: request.url
+    });
+    
     // New format: for rep filtering
     if (currentUserEmail && currentUserRole) {
       // Only allow admin and manager roles to access this endpoint
@@ -40,11 +48,11 @@ export async function GET(request: NextRequest) {
       const currentUserDomain = extractDomain(currentUserEmail);
 
       // Get all users from the same domain
+      // Don't require email_verified for admin/manager searches
       const { data: users, error } = await supabaseAdmin
         .from('simple_users')
-        .select('id, name, email, role')
+        .select('id, name, email, role, email_verified')
         .like('email', `%@${currentUserDomain}`)
-        .eq('email_verified', true)
         .order('name', { ascending: true });
 
       if (error) {
@@ -56,8 +64,15 @@ export async function GET(request: NextRequest) {
         }, { status: 500 });
       }
 
+      console.log(`🔍 Found ${users?.length || 0} users in domain "${currentUserDomain}"`);
+
       // Filter out the current user from the results
-      const filteredUsers = users?.filter(user => user.email !== currentUserEmail) || [];
+      // Also process names to handle null/empty names
+      const filteredUsers = (users?.filter(user => user.email !== currentUserEmail) || [])
+        .map(user => ({
+          ...user,
+          name: user.name || user.email?.split('@')[0] || 'Unknown User'
+        }));
 
       return NextResponse.json({ 
         success: true,
@@ -73,15 +88,22 @@ export async function GET(request: NextRequest) {
 
       const supabaseAdmin = createSupabaseAdmin();
 
-      // Search users by query and domain
+      console.log('🔍 User search request:', { query, domain });
+
+      // Build the search query - search by email OR name containing the query
+      // Don't require email_verified for admin searches
       let searchQuery = supabaseAdmin
         .from('simple_users')
         .select('id, name, email, role, email_verified')
-        .eq('email_verified', true)
-        .like('email', `%@${domain}`)
-        .or(`email.ilike.%${query}%,name.ilike.%${query}%`)
-        .order('email')
-        .limit(20);
+        .like('email', `%@${domain}`);
+
+      // Apply search filter - search in email OR name
+      // Using two separate queries combined with OR for better compatibility
+      if (query) {
+        searchQuery = searchQuery.or(`email.ilike.%${query}%,name.ilike.%${query}%`);
+      }
+
+      searchQuery = searchQuery.order('email').limit(20);
 
       const { data: users, error } = await searchQuery;
 
@@ -92,6 +114,8 @@ export async function GET(request: NextRequest) {
           details: error.message
         }, { status: 500 });
       }
+
+      console.log(`🔍 Found ${users?.length || 0} users matching query "${query}" in domain "${domain}"`);
 
       // Process results to handle empty names
       const processedUsers = (users || []).map(user => ({

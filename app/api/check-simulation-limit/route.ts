@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('✅ User authenticated:', authUser.user.id);
+    console.log('🔍 User role:', authUser.userRole);
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
@@ -38,6 +39,20 @@ export async function GET(request: NextRequest) {
         error: 'Forbidden - can only check your own limits',
         success: false 
       }, { status: 403 });
+    }
+
+    // Admin users get unlimited simulations
+    if (authUser.userRole === 'admin' || authUser.userRole === 'manager') {
+      console.log('🎉 Admin/Manager user - unlimited simulations');
+      return NextResponse.json({ 
+        success: true,
+        canSimulate: true,
+        count: 0,
+        limit: -1, // -1 indicates unlimited
+        remaining: -1, // -1 indicates unlimited
+        is_paid: true, // Treat admin/manager as paid for UI purposes
+        message: 'Unlimited simulations (Admin/Manager)'
+      });
     }
 
     console.log('🔍 Checking simulation limit for user:', targetUserId);

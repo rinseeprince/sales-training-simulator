@@ -229,18 +229,21 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       return null;
     }
 
-    // Get additional user data from our custom table using auth_user_id
+    // Get additional user data from our custom table using unified ID
     let profile = null;
     const { data, error: profileError } = await supabaseClient
       .from('simple_users')
       .select('name, subscription_status, avatar_url, role')
-      .eq('auth_user_id', user.id)
+      .eq('id', user.id)  // Changed from 'auth_user_id' to 'id' for unified system
       .single();
     
     if (profileError) {
       console.warn('Profile not found for user:', user.email, profileError.message);
     }
     profile = data;
+    
+    console.log('getCurrentUser - Profile data:', profile);
+    console.log('getCurrentUser - Role:', profile?.role || 'user (default)');
 
     return {
       id: user.id,

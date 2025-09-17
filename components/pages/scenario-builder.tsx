@@ -91,8 +91,9 @@ export function ScenarioBuilder() {
 
     try {
       // MIGRATION UPDATE: user.id is now the same as simple_users.id
-      // TODO: Get role from auth context or separate endpoint
-      setUserRole('user') // Default role, enhance later
+      // Get role from auth context - user object already has the role
+      const role = user.role || 'user'
+      setUserRole(role as 'user' | 'manager' | 'admin') // Use actual role from auth context
       
       // Extract domain from user's email
       const email = user.email

@@ -16,19 +16,19 @@ const navigationSections = [
   {
     title: 'Core',
     items: [
-      { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['rep', 'manager', 'admin'] },
-      { name: 'Scenario Builder', href: '/scenario-builder', icon: FileText, roles: ['rep', 'manager', 'admin'] },
-      { name: 'Saved Scenarios', href: '/saved-scenarios', icon: BookOpen, roles: ['rep', 'manager', 'admin'] },
-      { name: 'Saved Simulations', href: '/simulations', icon: History, roles: ['rep', 'manager', 'admin'] },
+      { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['user', 'manager', 'admin'] },
+      { name: 'Scenario Builder', href: '/scenario-builder', icon: FileText, roles: ['user', 'manager', 'admin'] },
+      { name: 'Saved Scenarios', href: '/saved-scenarios', icon: BookOpen, roles: ['user', 'manager', 'admin'] },
+      { name: 'Saved Simulations', href: '/simulations', icon: History, roles: ['user', 'manager', 'admin'] },
     ]
   },
   {
     title: 'Organization',
     items: [
-      { name: 'Pricing', href: '/pricing', icon: DollarSign, roles: ['rep', 'manager', 'admin'], badge: 'Free' },
+      { name: 'Pricing', href: '/pricing', icon: DollarSign, roles: ['user', 'manager', 'admin'], badge: 'Free' },
       { name: 'Admin Panel', href: '/admin', icon: Users, roles: ['manager', 'admin'] },
       { name: 'Compliance', href: '/compliance', icon: Shield, roles: ['admin'] },
-      { name: 'Settings', href: '/settings', icon: Settings, roles: ['rep', 'manager', 'admin'] },
+      { name: 'Settings', href: '/settings', icon: Settings, roles: ['user', 'manager', 'admin'] },
     ]
   }
 ]
@@ -95,8 +95,28 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Filter navigation items based on user role
+  const getFilteredNavigationSections = () => {
+    console.log('🎯 MainLayout: Filtering navigation for user role:', user?.role)
+    if (!user?.role) return navigationSections
+    
+    const filtered = navigationSections.map(section => ({
+      ...section,
+      items: section.items.filter(item => {
+        const hasAccess = item.roles.includes(user.role as 'user' | 'manager' | 'admin')
+        console.log(`🔍 ${item.name}: roles=${item.roles.join(', ')} | user=${user.role} | access=${hasAccess}`)
+        return hasAccess
+      })
+    })).filter(section => section.items.length > 0) // Remove empty sections
+    
+    console.log('✅ Filtered navigation sections:', filtered.map(s => ({ title: s.title, items: s.items.map(i => i.name) })))
+    return filtered
+  }
+
+  const filteredNavigationSections = getFilteredNavigationSections()
+  
   // Flatten navigation sections for easy access
-  const allNavigationItems = navigationSections.flatMap(section => section.items)
+  const allNavigationItems = filteredNavigationSections.flatMap(section => section.items)
 
   return (
     <div className="min-h-screen bg-background">
@@ -201,7 +221,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto py-2">
-            {navigationSections.map((section, sectionIndex) => (
+            {filteredNavigationSections.map((section, sectionIndex) => (
               <div key={section.title} className={sectionIndex > 0 ? 'mt-6' : ''}>
                 {/* Section label */}
                 <div className="px-3 mb-2">
@@ -285,7 +305,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
           {/* Scrollable navigation area */}
           <nav className="flex-1 overflow-y-auto py-2">
-            {navigationSections.map((section, sectionIndex) => (
+            {filteredNavigationSections.map((section, sectionIndex) => (
               <div key={section.title} className={sectionIndex > 0 ? 'mt-6' : ''}>
                 {/* Section label */}
                 {sidebarOpen && (
