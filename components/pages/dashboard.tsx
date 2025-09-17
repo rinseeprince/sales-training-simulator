@@ -163,16 +163,8 @@ export function Dashboard() {
         setLoading(true)
         
         try {
-        // Get the correct user ID from simple_users table
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-        const profileData = await profileResponse.json();
-        
-        if (!profileData.success) {
-          console.error('Failed to get user profile:', profileData.error);
-          return;
-        }
-
-        const actualUserId = profileData.userProfile.id;
+        // MIGRATION UPDATE: user.id is now the same as simple_users.id
+        const actualUserId = user.id;
         
         // Check simulation limit
         try {

@@ -28,8 +28,11 @@ export async function GET(request: NextRequest) {
       callId, 
       userId,
       scope,
+      repId,
       authUser: authUser?.user?.id,
       isManager: authUser?.isManager,
+      isAdmin: authUser?.isAdmin,
+      userRole: authUser?.userRole,
       url: request.url, 
       method: request.method
     })
@@ -53,8 +56,8 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
 
       // Apply scope-based filtering
-      if (scope === 'all' && authUser?.isManager) {
-        // Managers can see all calls
+      if (scope === 'all' && (authUser?.isManager || authUser?.isAdmin)) {
+        // Managers and admins can see all calls
         
         // Apply optional filters
         if (repId) {

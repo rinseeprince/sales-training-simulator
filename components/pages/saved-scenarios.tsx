@@ -89,13 +89,24 @@ export function SavedScenarios() {
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null)
+  
+  // Rep filtering state for admins/managers
+  const [selectedRep, setSelectedRep] = useState<string>('')
+  const [domainUsers, setDomainUsers] = useState<Array<{id: string, name: string, email: string}>>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+
+  // Check if user is admin or manager
+  const isAdminOrManager = user?.role === 'admin' || user?.role === 'manager'
 
   useEffect(() => {
     if (user) {
       loadScenarios()
       loadAssignments()
+      if (isAdminOrManager) {
+        loadDomainUsers()
+      }
     }
-  }, [user])
+  }, [user, isAdminOrManager])
 
   // Handle URL tab parameter
   useEffect(() => {
@@ -166,17 +177,17 @@ export function SavedScenarios() {
     }
   }, [searchParams])
 
+  // Reload assignments when selected rep changes
+  useEffect(() => {
+    if (user && isAdminOrManager) {
+      loadAssignments()
+    }
+  }, [selectedRep])
+
   const loadScenarios = async () => {
     try {
-      const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user?.id}`)
-      const profileData = await profileResponse.json()
-      
-      if (!profileData.success) {
-        console.error('❌ Failed to get user profile:', profileData.error)
-        return
-      }
-
-      const response = await authenticatedGet(`/api/scenarios?userId=${profileData.userProfile.id}`)
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
+      const response = await authenticatedGet(`/api/scenarios?userId=${user?.id}`)
       if (response.ok) {
         const data = await response.json()
         setScenarios(data.scenarios || [])
@@ -203,8 +214,17 @@ export function SavedScenarios() {
 
   const loadAssignments = async () => {
     try {
+      // Build the query parameters
+      let url = '/api/scenario-assignments?scope='
+      if (selectedRep && isAdminOrManager) {
+        url += `all&repId=${selectedRep}`
+      } else {
+        url += 'my'
+      }
       
-      const response = await authenticatedGet('/api/scenario-assignments?scope=my')
+      console.log('🔍 Assignments API call:', { url, selectedRep, userRole: user?.role });
+      
+      const response = await authenticatedGet(url)
       
       if (response.ok) {
         const data = await response.json()
@@ -219,6 +239,27 @@ export function SavedScenarios() {
     } catch (error) {
       console.error('❌ Error loading assignments:', error)
       console.error('❌ Error details:', error instanceof Error ? error.message : 'Unknown error')
+    }
+  }
+
+  const loadDomainUsers = async () => {
+    if (!user?.email || !isAdminOrManager) return
+    
+    try {
+      setLoadingUsers(true)
+      const response = await authenticatedGet(`/api/users/search?currentUserEmail=${user.email}&currentUserRole=${user.role}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        setDomainUsers(data.users || [])
+      } else {
+        const errorData = await response.json()
+        console.error('❌ Failed to load domain users:', errorData)
+      }
+    } catch (error) {
+      console.error('❌ Error loading domain users:', error)
+    } finally {
+      setLoadingUsers(false)
     }
   }
 
@@ -349,13 +390,7 @@ export function SavedScenarios() {
 
   const handleDuplicateScenario = async (scenario: Scenario) => {
     try {
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user?.id}`)
-      const profileData = await profileResponse.json()
-      
-      if (!profileData.success) {
-        throw new Error('Failed to get user profile')
-      }
-
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
       const response = await fetch('/api/scenarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -364,7 +399,7 @@ export function SavedScenarios() {
           prompt: scenario.prompt,
           prospectName: scenario.prospect_name,
           voice: scenario.voice,
-          userId: profileData.userProfile.id
+          userId: user?.id
         })
       })
 
@@ -507,6 +542,21 @@ export function SavedScenarios() {
                 className="pl-10"
               />
             </div>
+            {activeTab === 'assigned-scenarios' && isAdminOrManager && (
+              <Select value={selectedRep || "all"} onValueChange={(value) => setSelectedRep(value === "all" ? "" : value)}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by rep" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Reps</SelectItem>
+                  {domainUsers.map((rep) => (
+                    <SelectItem key={rep.id} value={rep.id}>
+                      {rep.name || rep.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {activeTab === 'assigned-scenarios' && (
               <Select value={filterStatus} onValueChange={setFilterStatus}>
                 <SelectTrigger className="w-[180px]">
@@ -528,7 +578,7 @@ export function SavedScenarios() {
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="my-scenarios">My Scenarios</TabsTrigger>
             <TabsTrigger value="assigned-scenarios">
-              Assigned Scenarios
+              {selectedRep && isAdminOrManager ? 'Team Assignments' : 'Assigned Scenarios'}
               {assignments.length > 0 && (
                 <Badge variant="secondary" className="ml-2">
                   {assignments.length}
@@ -642,9 +692,14 @@ export function SavedScenarios() {
             {filteredAssignments.length === 0 ? (
               <div className="text-center py-8">
                 <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">No assigned scenarios</p>
+                <p className="text-slate-500">
+                  {selectedRep && isAdminOrManager ? 'No assignments for selected rep' : 'No assigned scenarios'}
+                </p>
                 <p className="text-sm text-slate-400 mt-2">
-                  Scenarios assigned to you will appear here
+                  {selectedRep && isAdminOrManager 
+                    ? 'This rep has no scenario assignments' 
+                    : 'Scenarios assigned to you will appear here'
+                  }
                 </p>
               </div>
             ) : (
@@ -673,7 +728,8 @@ export function SavedScenarios() {
                           )}
                         </div>
                         <div className="flex gap-2">
-                          {assignment.status !== 'completed' && (
+                          {/* Only show play/action buttons when viewing your own assignments */}
+                          {!selectedRep && assignment.status !== 'completed' && (
                             <Button
                               size="sm"
                               onClick={() => handlePlayAssignment(assignment)}
@@ -691,7 +747,7 @@ export function SavedScenarios() {
                               View Results
                             </Button>
                           )}
-                          {assignment.status === 'not_started' && (
+                          {!selectedRep && assignment.status === 'not_started' && (
                             <Button
                               size="sm"
                               variant="outline"

@@ -318,22 +318,9 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
   
   // Get the correct user ID from simple_users table
   useEffect(() => {
-    const getUserProfile = async () => {
-      if (!user?.id) return;
-      
-      try {
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-        const profileData = await profileResponse.json();
-        
-        if (profileData.success) {
-          setActualUserId(profileData.userProfile.id);
-        }
-      } catch (error) {
-        console.error('Error getting user profile:', error);
-      }
-    };
-    
-    getUserProfile();
+    // MIGRATION UPDATE: user.id is now the same as simple_users.id
+    if (!user?.id) return;
+    setActualUserId(user.id);
   }, [user?.id]);
 
   const { call, loading, error } = useCallData({ 
@@ -471,15 +458,8 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
     
     setIsSavingCall(true)
     try {
-      // Get the correct user ID from simple_users table
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user?.id}`);
-      const profileData = await profileResponse.json();
-      
-      if (!profileData.success) {
-        throw new Error('Failed to get user profile: ' + profileData.error);
-      }
-
-      const actualUserId = profileData.userProfile.id;
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
+      const actualUserId = user?.id;
       
       const saveCallPayload = {
         callId: tempCallData.callId,

@@ -27,27 +27,29 @@ function createSupabaseAdmin() {
 
 /**
  * Authenticate user with RBAC
+ * UPDATED: Now uses unified ID system - no translation needed
  */
 export async function authenticateWithRBAC(request: NextRequest): Promise<RBACAuthenticatedRequest | null> {
   try {
     // First, perform basic authentication
     const authRequest = await authenticateUser(request);
     if (!authRequest) {
+      console.log('❌ RBAC: Authentication failed, returning null');
       return null;
-      console.log('❌ RBAC: Authentication failed, returning null');    }
+    }
 
     const supabase = createSupabaseAdmin();
     
-    // Get user's role and team information from simple_users table
-    // Note: authRequest.user.id is already the simple_users table ID
+    // MIGRATION UPDATE: authRequest.user.id is now the simple_users.id directly
+    // No need for translation or complex lookups
     const { data: userProfile, error } = await supabase
       .from('simple_users')
       .select('role, team_id, manager_id')
-      .eq('id', authRequest.user.id)
+      .eq('id', authRequest.user.id)  // Direct lookup with unified ID
       .single();
 
     if (error) {
-      console.log('❌ RBAC: Failed to fetch user role:', error);      console.error('Failed to fetch user role:', error);
+      console.error('Failed to fetch user role:', error);
       // If the role lookup fails, let's try to continue with default role
       // This handles cases where the user exists but doesn't have RBAC fields set yet
       console.log('Continuing with default role for user:', authRequest.user.id);
@@ -68,12 +70,14 @@ export async function authenticateWithRBAC(request: NextRequest): Promise<RBACAu
     rbacRequest.isManager = isManager;
     rbacRequest.isAdmin = isAdmin;
 
+    console.log('✅ RBAC: Authentication successful with unified ID:', authRequest.user.id);
     return rbacRequest;
 
   } catch (error) {
     console.error('RBAC authentication error:', error);
+    console.log('❌ RBAC: Authentication failed, returning null');
     return null;
-      console.log('❌ RBAC: Authentication failed, returning null');  }
+  }
 }
 
 /**
@@ -85,6 +89,7 @@ export function hasRole(user: RBACAuthenticatedRequest, requiredRoles: UserRole[
 
 /**
  * Check if user can access a specific resource
+ * UPDATED: All queries now use the unified ID directly
  */
 export async function canAccessResource(
   user: RBACAuthenticatedRequest,

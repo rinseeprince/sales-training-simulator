@@ -25,6 +25,18 @@ export async function GET(req: NextRequest) {
     const teamId = searchParams.get('teamId');
     const includeCompleted = searchParams.get('includeCompleted') !== 'false';
 
+    console.log('🔍 Scenario Assignments API request:', {
+      scope,
+      repId,
+      status,
+      userId: user.user.id,
+      userRole: user.userRole,
+      isManager: user.isManager,
+      isAdmin: user.isAdmin,
+      canAccessAll: (user.isManager || user.isAdmin),
+      url: req.url
+    });
+
 
     const supabase = createSupabaseAdmin();
 
@@ -48,13 +60,21 @@ export async function GET(req: NextRequest) {
       }
     } else if (scope === 'team' && user.teamId) {
       // Team assignments (for managers)
-      if (!user.isManager) {
+      if (!user.isManager && !user.isAdmin) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
       query = query.eq('assigned_to_team', user.teamId);
     } else if (scope === 'all') {
       // All assignments (for managers/admins)
-      if (!user.isManager) {
+      console.log('🔍 Checking authorization for scope=all:', {
+        isManager: user.isManager,
+        isAdmin: user.isAdmin,
+        userRole: user.userRole,
+        hasAccess: (user.isManager || user.isAdmin)
+      });
+      
+      if (!user.isManager && !user.isAdmin) {
+        console.log('❌ Access denied - user is not manager or admin');
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
       // No additional filter needed
@@ -65,11 +85,11 @@ export async function GET(req: NextRequest) {
       query = query.eq('status', status);
     }
     
-    if (repId && user.isManager) {
+    if (repId && (user.isManager || user.isAdmin)) {
       query = query.eq('assigned_to_user', repId);
     }
     
-    if (teamId && user.isManager) {
+    if (teamId && (user.isManager || user.isAdmin)) {
       query = query.eq('assigned_to_team', teamId);
     }
 

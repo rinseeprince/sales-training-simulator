@@ -91,28 +91,26 @@ export function Simulations() {
         setLoading(true)
         
         try {
-        // Get the user profile with role
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-        const profileData = await profileResponse.json();
+        // MIGRATION UPDATE: user.id is now the same as simple_users.id
+        // Still need to fetch role from simple_users table
+        const roleResponse = await fetch(`/api/users/${user.id}/role`);
+        const roleData = await roleResponse.json();
         
-        if (!profileData.success) {
-          console.error('Failed to get user profile:', profileData.error);
-          return;
-        }
-
-        const actualUserId = profileData.userProfile.id;
-        const role = profileData.userProfile.role || 'user';
+        const actualUserId = user.id;
+        const role = roleData.role || 'user';
         setUserRole(role);
         
         // Set default view scope based on role
         if (role === 'manager' || role === 'admin') {
           setViewScope('all');
           
-          // Fetch list of reps for filtering
-          const repsResponse = await fetch('/api/users?role=user');
-          if (repsResponse.ok) {
-            const repsData = await repsResponse.json();
-            setReps(repsData.users || []);
+          // Fetch list of reps from same domain for filtering
+          if (user?.email) {
+            const repsResponse = await fetch(`/api/users/search?currentUserEmail=${user.email}&currentUserRole=${role}`);
+            if (repsResponse.ok) {
+              const repsData = await repsResponse.json();
+              setReps(repsData.users || []);
+            }
           }
         } else {
           setViewScope('my');
@@ -144,14 +142,15 @@ export function Simulations() {
       await loadingManager.withLoading('refetch-simulations', async () => {
         setLoading(true);
         
-        const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`);
-        const profileData = await profileResponse.json();
-        const actualUserId = profileData.userProfile.id;
+        // MIGRATION UPDATE: user.id is now the same as simple_users.id
+        const actualUserId = user.id;
         
         let url = `/api/calls?scope=${viewScope}&userId=${actualUserId}`;
         if (selectedRep && viewScope === 'all') {
           url += `&repId=${selectedRep}`;
         }
+        
+        console.log('🔍 Simulations API call:', { url, selectedRep, userRole });
         
         const response = await authenticatedGet(url);
         if (response.ok) {
@@ -330,23 +329,22 @@ export function Simulations() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
+        className="bg-white rounded-xl border border-slate-200 shadow-sm"
       >
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="p-6 border-b border-slate-200">
+          <div className="flex gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-3 rounded-lg border-slate-200 focus:ring-primary"
+                className="pl-10"
                 placeholder="Search simulations..."
               />
             </div>
           
-          <div className="flex items-center space-x-3">
             <Select value={filterScore} onValueChange={setFilterScore}>
-              <SelectTrigger className="w-full sm:w-48 rounded-full border-slate-200 px-4 py-2 focus:ring-primary bg-slate-50 hover:bg-slate-100">
-                <Filter className="mr-2 h-4 w-4" />
+              <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by score" />
               </SelectTrigger>
               <SelectContent>
@@ -373,7 +371,7 @@ export function Simulations() {
             </Select>
             
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-full sm:w-48 rounded-full border-slate-200 px-4 py-2 focus:ring-primary bg-slate-50 hover:bg-slate-100">
+              <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
@@ -382,6 +380,22 @@ export function Simulations() {
                 <SelectItem value="duration">Duration (Longest)</SelectItem>
               </SelectContent>
             </Select>
+
+            {(userRole === 'manager' || userRole === 'admin') && (
+              <Select value={selectedRep || "all"} onValueChange={(value) => setSelectedRep(value === "all" ? "" : value)}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by rep" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Reps</SelectItem>
+                  {reps.map((rep) => (
+                    <SelectItem key={rep.id} value={rep.id}>
+                      {rep.name || rep.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
       </motion.div>

@@ -90,19 +90,15 @@ export function ScenarioBuilder() {
     if (!user) return
 
     try {
-      const response = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`)
-      const profileData = await response.json()
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
+      // TODO: Get role from auth context or separate endpoint
+      setUserRole('user') // Default role, enhance later
       
-      if (profileData.success && profileData.userProfile) {
-        const role = profileData.userProfile.role || 'user'
-        setUserRole(role)
-        
-        // Extract domain from user's email
-        const email = profileData.userProfile.email || user.email
-        if (email) {
-          const domain = email.split('@')[1]
-          setUserDomain(domain)
-        }
+      // Extract domain from user's email
+      const email = user.email
+      if (email) {
+        const domain = email.split('@')[1]
+        setUserDomain(domain)
       }
     } catch (error) {
       console.error('Error fetching user role:', error)
@@ -161,15 +157,8 @@ export function ScenarioBuilder() {
     
     try {
       // Get the correct user ID from simple_users table
-      const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`);
-      const profileData = await profileResponse.json();
-      
-      if (!profileData.success) {
-        console.error('Failed to get user profile:', profileData.error);
-        return;
-      }
-
-      const actualUserId = profileData.userProfile.id;
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
+      const actualUserId = user.id;
       
       const response = await authenticatedGet(`/api/scenarios?userId=${actualUserId}`)
       if (response.ok) {
@@ -316,15 +305,9 @@ export function ScenarioBuilder() {
     
     try {
       // Get the correct user ID from simple_users table
-      const profileResponse = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`);
-      const profileData = await profileResponse.json();
-      
-      if (!profileData.success) {
-        throw new Error('Failed to get user profile: ' + profileData.error);
-      }
-
-      const actualUserId = profileData.userProfile.id;
-      const userName = profileData.userProfile.name || profileData.userProfile.email?.split('@')[0] || 'Manager';
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
+      const actualUserId = user.id;
+      const userName = user.name || user.email?.split('@')[0] || 'Manager';
       
       const response = await authenticatedPost('/api/scenarios', {
         title: scenarioData.title,

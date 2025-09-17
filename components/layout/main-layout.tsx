@@ -70,13 +70,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     if (!user?.id) return
     
     try {
-      const response = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
+      // TODO: Create a dedicated profile endpoint or add to auth context
+      const response = await fetch(`/api/users/${user.id}`)
       const data = await response.json()
       
-      if (data.success && data.userProfile) {
+      if (data.success) {
         // Add timestamp to prevent caching
-        if (data.userProfile.avatar_url) {
-          setAvatarUrl(`${data.userProfile.avatar_url}?t=${Date.now()}`)
+        if (data.avatar_url) {
+          setAvatarUrl(`${data.avatar_url}?t=${Date.now()}`)
         } else {
           setAvatarUrl(null)
         }

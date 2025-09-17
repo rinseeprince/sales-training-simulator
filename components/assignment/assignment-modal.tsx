@@ -62,19 +62,15 @@ export function AssignmentModal({ isOpen, onClose, scenario, onAssignmentCreated
     if (!user) return
 
     try {
-      const response = await authenticatedGet(`/api/user-profile?authUserId=${user.id}`)
-      const profileData = await response.json()
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
+      const name = user.name || user.email?.split('@')[0] || 'Manager'
+      setUserName(name)
       
-      if (profileData.success && profileData.userProfile) {
-        const name = profileData.userProfile.name || profileData.userProfile.email?.split('@')[0] || 'Manager'
-        setUserName(name)
-        
-        // Extract domain from user's email
-        const email = profileData.userProfile.email || user.email
-        if (email) {
-          const domain = email.split('@')[1]
-          setUserDomain(domain)
-        }
+      // Extract domain from user's email
+      const email = user.email
+      if (email) {
+        const domain = email.split('@')[1]
+        setUserDomain(domain)
       }
     } catch (error) {
       console.error('Error fetching user profile:', error)

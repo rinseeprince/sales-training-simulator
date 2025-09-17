@@ -1,23 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export interface AuthenticatedRequest extends NextRequest {
-  user: {
-    id: string;
-    email: string;
-    name?: string;
-    email_verified: boolean;
-    subscription_status?: string;
-  };
-  authUser: {
-    id: string;
-    email: string;
-  };
-}
-
-/**
- * Create Supabase client for server-side operations
- */
+// Create Supabase client for server-side operations
 function createSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -29,23 +13,38 @@ function createSupabaseClient() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
+export interface AuthenticatedRequest extends NextRequest {
+  user: {
+    id: string;
+    email: string;
+    name?: string;
+    email_verified?: boolean;
+    subscription_status?: string;
+  };
+  authUser: {
+    id: string;
+    email: string;
+  };
+}
+
 /**
  * Extract access token from request
  */
 function extractAccessToken(request: NextRequest): string | null {
-  console.log('🔍 Token extraction: Starting...');
-  
-  // Check Authorization header first (our custom auth)
+  // Try Authorization header first
   const authHeader = request.headers.get('authorization');
-  console.log('🔍 Token extraction: Authorization header:', authHeader ? 'Present' : 'Missing');
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    console.log('🔍 Token extraction: Found Bearer token:', token.substring(0, 20) + '...');
-    return token;
+  if (authHeader?.startsWith('Bearer ')) {
+    console.log('🔍 Token extraction: Found in Authorization header');
+    return authHeader.substring(7);
   }
 
-  // Check all cookies to understand what Supabase is actually setting
+  // Try x-supabase-auth header
+  const supabaseAuthHeader = request.headers.get('x-supabase-auth');
+  if (supabaseAuthHeader) {
+    console.log('🔍 Token extraction: Found in x-supabase-auth header');
+    return supabaseAuthHeader;
+  }
+
   console.log('🔍 Token extraction: Checking cookies...');
   const allCookies = request.cookies.getAll();
   console.log('🔍 Token extraction: All cookies:', allCookies.map(c => c.name));
@@ -86,6 +85,7 @@ function extractAccessToken(request: NextRequest): string | null {
 
 /**
  * Authenticate user for API routes
+ * UPDATED: Now uses unified ID system - simple_users.id = auth.users.id
  */
 export async function authenticateUser(request: NextRequest): Promise<AuthenticatedRequest | null> {
   try {
@@ -106,23 +106,24 @@ export async function authenticateUser(request: NextRequest): Promise<Authentica
     
     if (error || !user) {
       console.log('❌ Auth: Failed to get user, returning null');
-      console.log('❌ Auth: Error details:', error);      console.log('❌ Auth: Failed to get user:', error);
+      console.log('❌ Auth: Error details:', error);
       return null;
     }
 
     console.log('🔍 Auth: Got Supabase user:', user.id, user.email);
 
-    // Get user profile from simple_users table
-    console.log('🔍 Auth: Looking up user profile...');
+    // MIGRATION UPDATE: Since simple_users.id now equals auth.users.id,
+    // we can get the profile directly without translation
+    console.log('🔍 Auth: Looking up user profile with unified ID...');
     const { data: profile, error: profileError } = await supabase
       .from('simple_users')
       .select('id, email, name, email_verified, subscription_status')
-      .eq('auth_user_id', user.id)
+      .eq('id', user.id)  // Direct lookup - no auth_user_id needed!
       .single();
 
     if (profileError || !profile) {
       console.log('❌ Auth: Profile lookup failed');
-      console.log('❌ Auth: Profile error:', profileError);      console.error('❌ Auth: Profile fetch error:', profileError);
+      console.log('❌ Auth: Profile error:', profileError);
       return null;
     }
 
@@ -130,13 +131,22 @@ export async function authenticateUser(request: NextRequest): Promise<Authentica
 
     // Create authenticated request object
     const authenticatedRequest = request as AuthenticatedRequest;
-    authenticatedRequest.user = profile;
+    
+    // MIGRATION UPDATE: user and authUser now have the same ID
+    authenticatedRequest.user = {
+      id: user.id,  // This is now the same as simple_users.id
+      email: profile.email,
+      name: profile.name,
+      email_verified: profile.email_verified,
+      subscription_status: profile.subscription_status
+    };
+    
     authenticatedRequest.authUser = {
       id: user.id,
       email: user.email || '',
     };
 
-    console.log('✅ Auth: Authentication successful');
+    console.log('✅ Auth: Authentication successful with unified ID');
     return authenticatedRequest;
 
   } catch (error) {

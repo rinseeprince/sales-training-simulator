@@ -50,14 +50,16 @@ export function SettingsPage() {
     
     try {
       await loadingManager.withLoading(`user-profile-${user.id}`, async () => {
-        const response = await fetch(`/api/user-profile?authUserId=${user.id}`)
+        // MIGRATION UPDATE: user.id is now the same as simple_users.id
+        // TODO: Create a dedicated profile endpoint or add to auth context
+        const response = await fetch(`/api/users/${user.id}`)
         const data = await response.json()
         
-        if (data.success && data.userProfile) {
-          setName(data.userProfile.name || '')
+        if (data.success) {
+          setName(data.name || '')
           // Add timestamp to avatar URL to prevent caching
-          if (data.userProfile.avatar_url) {
-            setAvatarUrl(`${data.userProfile.avatar_url}?t=${Date.now()}`)
+          if (data.avatar_url) {
+            setAvatarUrl(`${data.avatar_url}?t=${Date.now()}`)
           } else {
             setAvatarUrl(null)
           }
@@ -73,13 +75,13 @@ export function SettingsPage() {
     
     setIsSavingProfile(true)
     try {
-      const response = await fetch('/api/user-profile', {
+      // MIGRATION UPDATE: user.id is now the same as simple_users.id
+      const response = await fetch(`/api/users/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          authUserId: user.id,
           name: name.trim()
         }),
       })

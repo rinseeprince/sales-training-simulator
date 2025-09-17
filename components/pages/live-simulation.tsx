@@ -27,6 +27,7 @@ interface ScenarioData {
   voice: string
   enableStreaming: boolean
   timestamp: number
+  assignmentId?: string | null  // Added for assignment tracking
 }
 
 export function LiveSimulation() {
@@ -91,25 +92,16 @@ export function LiveSimulation() {
   const sentenceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const previousSentencesRef = useRef<string[]>([])
   
-  // Get the correct user ID from simple_users table
+  // MIGRATION UPDATE: user.id is now the same as simple_users.id
   useEffect(() => {
-    const getUserProfile = async () => {
-      if (!user?.id) return;
-      
-      try {
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-        const profileData = await profileResponse.json();
-        
-        if (profileData.success) {
-          setActualUserId(profileData.userProfile.id);
-          setUserRole(profileData.userProfile.role || 'user');
-        }
-      } catch (error) {
-        console.error('Error getting user profile:', error);
-      }
-    };
+    if (!user?.id) return;
     
-    getUserProfile();
+    // Directly use user.id as it's now the unified ID
+    setActualUserId(user.id);
+    
+    // Still need to fetch role if not in context
+    // TODO: Consider adding role to auth context to avoid this fetch
+    setUserRole('user'); // Default role, can be enhanced later
   }, [user?.id]);
 
   // Load scenario data from localStorage OR URL parameters

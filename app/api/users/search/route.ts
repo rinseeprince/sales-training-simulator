@@ -1,129 +1,122 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateWithRBAC } from '@/lib/rbac-middleware';
 import { createClient } from '@supabase/supabase-js';
 
-// Create Supabase admin client
 function createSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+  
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
-// GET: Search users
-export async function GET(req: NextRequest) {
-  console.log('🔍 User search API called');
-  
+function extractDomain(email: string): string {
+  return email.split('@')[1];
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const user = await authenticateWithRBAC(req);
-    console.log('🔍 Authenticated user:', { userId: user?.user?.id, role: user?.userRole });
+    const { searchParams } = new URL(request.url);
     
-    if (!user) {
-      console.log('❌ No authenticated user');
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Only managers and admins can search users
-    if (user.userRole !== 'manager' && user.userRole !== 'admin') {
-      console.log('❌ User not authorized for search:', user.userRole);
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(req.url);
-    const query = searchParams.get('q') || '';
-    const domain = searchParams.get('domain') || '';
-
-    console.log('🔍 Search parameters:', { query, domain, queryLength: query.length });
-
-    if (!query || query.length < 2) {
-      console.log('❌ Query too short or empty');
-      return NextResponse.json({ users: [] });
-    }
-
-    const supabase = createSupabaseAdmin();
-    console.log('🔍 Supabase client created');
-
-    // Let's first try a simple query to see if we can get any users at all
-    console.log('🔍 Testing basic query...');
-    const { data: allUsers, error: allUsersError } = await supabase
-      .from('simple_users')
-      .select('id, name, email, role, email_verified')
-      .limit(5);
+    // Support both new format (for rep filtering) and old format (for user assignments)
+    const currentUserEmail = searchParams.get('currentUserEmail');
+    const currentUserRole = searchParams.get('currentUserRole');
+    const query = searchParams.get('q'); // Old format
+    const domain = searchParams.get('domain'); // Old format
     
-    console.log('🔍 All users test:', { allUsers, allUsersError });
-
-    // Now let's try the actual search query
-    console.log('🔍 Building search query...');
-    
-    let searchQuery = supabase
-      .from('simple_users')
-      .select('id, name, email, role, email_verified')
-      .eq('email_verified', true);
-
-    console.log('🔍 Base query created');
-
-    // Search in email primarily, and name if it's not null/empty
-    searchQuery = searchQuery.or(`email.ilike.%${query}%,name.ilike.%${query}%`);
-    console.log('🔍 Added search conditions');
-
-    // Filter by domain if provided
-    if (domain) {
-      searchQuery = searchQuery.ilike('email', `%@${domain}`);
-      console.log('🔍 Added domain filter:', domain);
-    }
-
-    // For admins, include all users (including other admins for testing)
-    // For managers, only include users with 'user' role or null/empty roles
-    if (user.userRole === 'admin') {
-      // Admins can see all users, including other admins and managers
-      console.log('🔍 Admin user - including all roles');
-    } else {
-      // Managers only see regular users
-      searchQuery = searchQuery.or('role.eq.user,role.is.null');
-      console.log('🔍 Manager user - filtering to user roles only');
-    }
-
-    // Order by email since name might be empty
-    searchQuery = searchQuery.order('email');
-    console.log('🔍 Added ordering');
-
-    const { data: users, error } = await searchQuery.limit(20);
-
-    console.log('🔍 Search results:', { 
-      users, 
-      error, 
-      userCount: users?.length,
-      searchQuery: `email.ilike.%${query}%,name.ilike.%${query}%`
-    });
-
-    if (error) {
-      console.error('❌ Database error:', error);
-      return NextResponse.json({ error: 'Failed to search users', details: error }, { status: 500 });
-    }
-
-    // Process results to handle empty names
-    const processedUsers = (users || []).map(user => ({
-      ...user,
-      name: user.name || user.email?.split('@')[0] || 'Unknown User'
-    }));
-
-    console.log('🔍 Processed users:', processedUsers);
-
-    return NextResponse.json({
-      users: processedUsers,
-      total: processedUsers.length,
-      debug: {
-        query,
-        domain,
-        rawResults: users?.length || 0,
-        processedResults: processedUsers.length
+    // New format: for rep filtering
+    if (currentUserEmail && currentUserRole) {
+      // Only allow admin and manager roles to access this endpoint
+      if (!['admin', 'manager'].includes(currentUserRole)) {
+        return NextResponse.json({ 
+          error: 'Unauthorized - only admins and managers can access this endpoint',
+          success: false 
+        }, { status: 403 });
       }
-    });
+
+      const supabaseAdmin = createSupabaseAdmin();
+      const currentUserDomain = extractDomain(currentUserEmail);
+
+      // Get all users from the same domain
+      const { data: users, error } = await supabaseAdmin
+        .from('simple_users')
+        .select('id, name, email, role')
+        .like('email', `%@${currentUserDomain}`)
+        .eq('email_verified', true)
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching domain users:', error);
+        return NextResponse.json({ 
+          error: 'Failed to fetch users',
+          details: error.message,
+          success: false 
+        }, { status: 500 });
+      }
+
+      // Filter out the current user from the results
+      const filteredUsers = users?.filter(user => user.email !== currentUserEmail) || [];
+
+      return NextResponse.json({ 
+        success: true,
+        users: filteredUsers
+      });
+    }
+    
+    // Old format: for user assignments (backward compatibility)
+    if (query && domain) {
+      if (query.length < 2) {
+        return NextResponse.json({ users: [] });
+      }
+
+      const supabaseAdmin = createSupabaseAdmin();
+
+      // Search users by query and domain
+      let searchQuery = supabaseAdmin
+        .from('simple_users')
+        .select('id, name, email, role, email_verified')
+        .eq('email_verified', true)
+        .like('email', `%@${domain}`)
+        .or(`email.ilike.%${query}%,name.ilike.%${query}%`)
+        .order('email')
+        .limit(20);
+
+      const { data: users, error } = await searchQuery;
+
+      if (error) {
+        console.error('Error searching users:', error);
+        return NextResponse.json({ 
+          error: 'Failed to search users',
+          details: error.message
+        }, { status: 500 });
+      }
+
+      // Process results to handle empty names
+      const processedUsers = (users || []).map(user => ({
+        ...user,
+        name: user.name || user.email?.split('@')[0] || 'Unknown User'
+      }));
+
+      return NextResponse.json({
+        users: processedUsers,
+        total: processedUsers.length
+      });
+    }
+
+    // Neither format provided
+    return NextResponse.json({ 
+      error: 'Either (currentUserEmail and currentUserRole) or (q and domain) parameters are required',
+      success: false 
+    }, { status: 400 });
 
   } catch (error) {
-    console.error('❌ User search API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    console.error('User search error:', error);
+    return NextResponse.json({ 
+      error: 'Failed to search users',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      success: false 
+    }, { status: 500 });
   }
 } 
