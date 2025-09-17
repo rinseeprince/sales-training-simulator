@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, Check, CheckCheck, Clock, AlertCircle, Trophy, RefreshCw } from 'lucide-react'
+import { Bell, X, Check, Users, Calendar, Trophy, AlertCircle, Clock, RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,18 +11,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { Notification, NotificationType } from '@/lib/types'
 import { formatDistanceToNow } from 'date-fns'
 import { authenticatedGet, authenticatedPatch } from '@/lib/api-client'
-import { useLoadingManager } from '@/lib/loading-manager'
+import { cn } from '@/lib/utils'
 
 export function NotificationBell() {
   const { user } = useSupabaseAuth()
-  const loadingManager = useLoadingManager()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -30,20 +31,18 @@ export function NotificationBell() {
     if (!user) return
     
     try {
-      await loadingManager.withLoading('load-notifications', async () => {
-        setLoading(true)
+      setLoading(true)
+      
+      const response = await authenticatedGet('/api/notifications?limit=20')
+      if (response.ok) {
+        const data = await response.json()
+        const notifications = data.notifications || []
+        setNotifications(notifications)
         
-        const response = await authenticatedGet('/api/notifications?limit=20')
-        if (response.ok) {
-          const data = await response.json()
-          const notifications = data.notifications || []
-          setNotifications(notifications)
-          
-          // Calculate unread count
-          const unread = notifications.filter((n: Notification) => !n.read_at).length
-          setUnreadCount(unread)
-        }
-      })
+        // Calculate unread count
+        const unread = notifications.filter((n: Notification) => !n.read_at).length
+        setUnreadCount(unread)
+      }
     } catch (error) {
       console.error('Failed to load notifications:', error)
     } finally {

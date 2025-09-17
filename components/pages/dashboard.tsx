@@ -1,5 +1,6 @@
 'use client'
 
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,11 +9,12 @@ import { Progress } from '@/components/ui/progress'
 import { Play, FileText, Clock, CheckCircle, AlertCircle, Trophy, Target, TrendingUp, Phone } from 'lucide-react'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import Link from 'next/link'
-import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ReviewModal } from '@/components/ui/review-modal'
 import { authenticatedGet } from '@/lib/api-client'
-import { useLoadingManager } from '@/lib/loading-manager'
+import { useScenarioAssignments, useRefreshAssignments, type ScenarioAssignment } from '@/hooks/use-scenario-assignments'
+import { useScenarios } from '@/hooks/use-scenarios'
+import { useFocusRefresh } from '@/hooks/use-focus-refresh'
 
 
 // Type definitions
@@ -97,11 +99,11 @@ const savedScenarios = [
 export function Dashboard() {
   const { user } = useSupabaseAuth()
   const router = useRouter()
-  const loadingManager = useLoadingManager()
+  
+  // Add debug logging to track component lifecycle
+  console.log('🔄 Dashboard: Component rendering, user ID:', user?.id)
+  
   const [calls, setCalls] = useState<Call[]>([])
-  const [scenarios, setScenarios] = useState<Scenario[]>([])
-  const [assignments, setAssignments] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
   const [stats, setStats] = useState<Stats>({
@@ -117,11 +119,82 @@ export function Dashboard() {
     isPaid: boolean;
   } | null>(null)
   
+  // Use React Query hooks instead of manual fetching
+  const { data: assignments = [], isLoading: assignmentsLoading } = useScenarioAssignments('my')
+  const { data: scenarios = [], isLoading: scenariosLoading } = useScenarios()
+  const refreshAssignments = useRefreshAssignments()
+
+  // Load other data (calls, simulation limits) - keep this for now
+  const loadOtherData = useCallback(async () => {
+    if (!user?.id) return
+    
+    console.log('🔄 Dashboard: Loading calls and simulation data...')
+    
+    try {
+      const actualUserId = user.id;
+      
+      // Check simulation limit
+      try {
+        const limitResponse = await authenticatedGet(`/api/check-simulation-limit?userId=${user.id}`)
+        const limitData = await limitResponse.json()
+        if (limitData.success) {
+          setSimulationLimit({
+            count: limitData.count || 0,
+            limit: limitData.limit || 50,
+            remaining: limitData.remaining === -1 ? -1 : (limitData.remaining || 50),
+            isPaid: limitData.is_paid || false
+          })
+        }
+      } catch (error) {
+        console.error('Failed to check simulation limit:', error)
+      }
+      
+      // Fetch calls
+      const callsResponse = await authenticatedGet(`/api/calls?userId=${actualUserId}`)
+      if (callsResponse.ok) {
+        const callsData = await callsResponse.json()
+        setCalls(callsData.calls || [])
+        
+        // Calculate stats
+        const totalCalls = callsData.calls?.length || 0
+        const scores = callsData.calls?.map((call: Call) => call.score).filter((score: number | null) => score !== null) || []
+        const averageScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0
+        const certifications = callsData.calls?.filter((call: Call) => call.score !== null && call.score >= 90).length || 0
+        
+        setStats({
+          totalCalls,
+          averageScore,
+          certifications,
+          improvement: 0 // TODO: Calculate improvement over time
+        })
+        
+        console.log('✅ Dashboard: Loaded', totalCalls, 'calls')
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+    }
+  }, [user?.id])
+
+  // Load other data on mount and when user changes
+  useEffect(() => {
+    loadOtherData()
+  }, [loadOtherData])
+
+  // Use focus refresh hook to reload data on tab focus
+  useFocusRefresh('dashboard-data', async () => {
+    if (!user?.id) return
+    console.log('🎯 Dashboard: Refreshing all data on focus...')
+    await Promise.all([
+      refreshAssignments('my'),
+      loadOtherData()
+    ])
+  }, true)
+
   // Prevent multiple calls during development
   const hasFetchedRef = useRef(false)
 
   // Handle scenario play (works with both scenarios and assignments)
-  const handlePlayScenario = (item: Scenario | any) => {
+  const handlePlayScenario = (item: any) => {
     // Check if this is an assignment (has scenario property) or direct scenario
     if (item.scenario) {
       // This is an assignment - navigate to assigned scenarios page
@@ -138,168 +211,29 @@ export function Dashboard() {
     }
   }
 
-  // Separate function to load assignments (for refresh capability)
-  const loadAssignments = async () => {
-    try {
-      const assignmentsResponse = await authenticatedGet('/api/scenario-assignments?scope=my')
-      if (assignmentsResponse.ok) {
-        const assignmentsData = await assignmentsResponse.json()
-        setAssignments(assignmentsData.assignments || [])
-      } else {
-        console.error('Failed to refresh assignments:', assignmentsResponse.status)
-      }
-    } catch (error) {
-      console.error('Error refreshing assignments:', error)
-    }
-  }
-
-  // Fetch calls and scenarios data
-  useEffect(() => {
-    if (!user?.id || hasFetchedRef.current) return
-    
-    const fetchData = async () => {
-      hasFetchedRef.current = true
-      return loadingManager.withLoading('dashboard-data', async () => {
-        setLoading(true)
-        
-        try {
-        // MIGRATION UPDATE: user.id is now the same as simple_users.id
-        const actualUserId = user.id;
-        
-        // Check simulation limit
-        try {
-          const limitResponse = await authenticatedGet(`/api/check-simulation-limit?userId=${user.id}`)
-          const limitData = await limitResponse.json()
-          if (limitData.success) {
-            setSimulationLimit({
-              count: limitData.count || 0,
-              limit: limitData.limit || 50,
-              remaining: limitData.remaining === -1 ? -1 : (limitData.remaining || 50),
-              isPaid: limitData.is_paid || false
-            })
-          }
-        } catch (error) {
-          console.error('Failed to check simulation limit:', error)
-        }
-        
-        // Fetch calls
-        const callsResponse = await authenticatedGet(`/api/calls?userId=${actualUserId}`)
-        if (callsResponse.ok) {
-          const callsData = await callsResponse.json()
-          setCalls(callsData.calls || [])
-          
-          // Calculate stats
-          const totalCalls = callsData.calls?.length || 0
-          const scores = callsData.calls?.map((call: Call) => call.score).filter((score: number | null) => score !== null) || []
-          const averageScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0
-          const certifications = callsData.calls?.filter((call: Call) => call.score !== null && call.score >= 90).length || 0
-          
-          setStats({
-            totalCalls,
-            averageScore,
-            certifications,
-            improvement: 0 // TODO: Calculate improvement over time
-          })
-        }
-        
-        // Fetch scenarios - use auth user ID since scenarios are stored with user_id = auth user ID
-        const scenariosResponse = await authenticatedGet(`/api/scenarios?userId=${user.id}`)
-        if (scenariosResponse.ok) {
-          const scenariosData = await scenariosResponse.json()
-          console.log('Dashboard scenarios loaded:', scenariosData.scenarios?.length || 0)
-          setScenarios(scenariosData.scenarios || [])
-        } else {
-          console.error('Failed to load scenarios:', scenariosResponse.status)
-        }
-        
-        // Fetch assignments using the reusable function
-        await loadAssignments()
-        } catch (error) {
-          console.error('Error fetching dashboard data:', error)
-        } finally {
-          setLoading(false)
-        }
-      }); // Close loading manager wrapper
-    }
-    
-    fetchData()
-    
-    // Reset fetch flag when user changes
-    return () => {
-      hasFetchedRef.current = false
-    }
-  }, [user])
-
-  // Smart refresh: Reload assignments when page gains focus (user returns from completing assignment)
-  useEffect(() => {
-    if (!user?.id) return
-
-    const handlePageFocus = () => {
-      console.log('📱 Dashboard page gained focus - checking for assignment completion...')
-      
-      // Check if an assignment was just completed
-      const completionFlag = localStorage.getItem('assignmentJustCompleted')
-      if (completionFlag) {
-        const completionTime = parseInt(completionFlag)
-        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000)
-        
-        if (completionTime > fiveMinutesAgo) {
-          localStorage.removeItem('assignmentJustCompleted')
-          loadAssignments()
-          return
-        } else {
-          localStorage.removeItem('assignmentJustCompleted') // Clean up old flag
-        }
-      }
-      
-      // Regular refresh on focus
-      loadAssignments()
-    }
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        console.log('👁️ Dashboard page became visible - refreshing assignments...')
-        loadAssignments()
-      }
-    }
-
-    // Listen for page focus events
-    window.addEventListener('focus', handlePageFocus)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    // Cleanup listeners
-    return () => {
-      window.removeEventListener('focus', handlePageFocus)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [user?.id])
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'awaiting_review':
-        return <Clock className="h-4 w-4 text-yellow-500" />
-      case 'certified':
-        return <Trophy className="h-4 w-4 text-primary" />
+        return <CheckCircle className="h-4 w-4 text-green-600" />
+      case 'in_progress':
+        return <Clock className="h-4 w-4 text-yellow-600" />
       default:
-        return <AlertCircle className="h-4 w-4 text-gray-500" />
+        return <Play className="h-4 w-4 text-blue-600" />
     }
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
-        return <Badge variant="secondary">Completed</Badge>
-      case 'awaiting_review':
-        return <Badge variant="outline">Awaiting Review</Badge>
-      case 'certified':
-        return <Badge className="bg-primary">Certified</Badge>
+        return 'bg-green-100 text-green-800'
+      case 'in_progress':
+        return 'bg-yellow-100 text-yellow-800'
       default:
-        return <Badge variant="outline">Unknown</Badge>
+        return 'bg-blue-100 text-blue-800'
     }
   }
 
+  const loading = assignmentsLoading || scenariosLoading
 
 
   return (
@@ -638,7 +572,7 @@ export function Dashboard() {
                 <p className="text-xs text-slate-400">Your manager will assign training scenarios</p>
               </div>
             ) : (
-              assignments.slice(0, 3).map((assignment, index) => {
+              assignments.slice(0, 3).map((assignment: ScenarioAssignment, index: number) => {
                 const scenario = assignment.scenario;
                 const emojis = ['📞', '🛒', '🏦', '💼', '🎯', '🚀'];
                 const emoji = emojis[index % emojis.length];

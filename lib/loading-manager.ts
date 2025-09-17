@@ -2,65 +2,78 @@
  * Loading state manager to prevent race conditions and duplicate requests
  */
 class LoadingManager {
-  private loadingStates: Map<string, boolean> = new Map();
-  private pendingPromises: Map<string, Promise<any>> = new Map();
+  private loadingStates = new Map<string, boolean>()
+  private listeners = new Map<string, Set<(loading: boolean) => void>>()
+  private lastRequestTimes = new Map<string, number>()
+  private CACHE_DURATION = 1000 // Reduced to 1 second to prevent stale data
 
-  /**
-   * Check if a request is currently loading
-   */
   isLoading(key: string): boolean {
-    return this.loadingStates.get(key) || false;
+    return this.loadingStates.get(key) || false
   }
 
-  /**
-   * Execute a function with loading state management
-   * If the same key is already loading, return the existing promise
-   */
+  isRecentlyCompleted(key: string): boolean {
+    const lastTime = this.lastRequestTimes.get(key)
+    if (!lastTime) return false
+    
+    const timeSinceLastRequest = Date.now() - lastTime
+    return timeSinceLastRequest < this.CACHE_DURATION
+  }
+
+  setLoading(key: string, loading: boolean) {
+    // console.log(`LoadingManager: ${key} = ${loading}`)
+    this.loadingStates.set(key, loading)
+    
+    if (!loading) {
+      // Mark completion time
+      this.lastRequestTimes.set(key, Date.now())
+    }
+    
+    const listeners = this.listeners.get(key)
+    if (listeners) {
+      listeners.forEach(listener => listener(loading))
+    }
+  }
+
+  subscribe(key: string, listener: (loading: boolean) => void) {
+    if (!this.listeners.has(key)) {
+      this.listeners.set(key, new Set())
+    }
+    this.listeners.get(key)!.add(listener)
+    
+    // Immediately call with current state
+    listener(this.isLoading(key))
+  }
+
+  unsubscribe(key: string, listener: (loading: boolean) => void) {
+    this.listeners.get(key)?.delete(listener)
+  }
+
   async withLoading<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    // If already loading, return the existing promise
+    // Check if we recently completed this request (within 1 second)
+    if (this.isRecentlyCompleted(key)) {
+      console.log(`LoadingManager: Skipping ${key} (recently completed)`)
+      return Promise.resolve({} as T)
+    }
+    
+    // Check if already loading
     if (this.isLoading(key)) {
-      const existingPromise = this.pendingPromises.get(key);
-      if (existingPromise) {
-        console.log(`⏳ Request "${key}" already in progress, waiting for existing request...`);
-        return existingPromise;
-      }
+      console.log(`LoadingManager: Already loading ${key}`)
+      return Promise.resolve({} as T)
     }
-
-    // Set loading state
-    this.loadingStates.set(key, true);
     
-    // Create and store the promise
-    const promise = fn().finally(() => {
-      this.loadingStates.set(key, false);
-      this.pendingPromises.delete(key);
-    });
-    
-    this.pendingPromises.set(key, promise);
-    
+    this.setLoading(key, true)
     try {
-      const result = await promise;
-      console.log(`✅ Request "${key}" completed successfully`);
-      return result;
-    } catch (error) {
-      console.error(`❌ Request "${key}" failed:`, error);
-      throw error;
+      const result = await fn()
+      return result
+    } finally {
+      this.setLoading(key, false)
     }
   }
 
-  /**
-   * Clear loading state for a specific key
-   */
-  clearLoading(key: string): void {
-    this.loadingStates.delete(key);
-    this.pendingPromises.delete(key);
-  }
-
-  /**
-   * Clear all loading states
-   */
-  clearAll(): void {
-    this.loadingStates.clear();
-    this.pendingPromises.clear();
+  reset() {
+    this.loadingStates.clear()
+    this.listeners.clear()
+    this.lastRequestTimes.clear()
   }
 }
 

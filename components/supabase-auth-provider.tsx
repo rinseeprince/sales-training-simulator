@@ -127,10 +127,18 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
    * Sign in function
    */
   const signIn = useCallback(async (email: string, password: string): Promise<AuthResponse> => {
+    console.log('🔐 AUTH PROVIDER: Starting sign in process...');
     const response = await signInWithEmail(email, password);
     
     if (response.success && response.user) {
+      console.log('🔐 AUTH PROVIDER: Sign in successful, updating user state');
       setUser(response.user);
+      
+      // Small delay to ensure state is fully updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      console.log('🔐 AUTH PROVIDER: User state updated successfully');
+    } else {
+      console.log('🔐 AUTH PROVIDER: Sign in failed:', response.message);
     }
     
     return response;

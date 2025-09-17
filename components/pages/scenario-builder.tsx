@@ -1,27 +1,29 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command'
-import { cn } from '@/lib/utils'
-import { format } from 'date-fns'
-import { Play, Save, Settings, TrendingUp, Mic, FileText, User, MessageSquare, Lightbulb, BookOpen, Folder, Building, Users, CalendarIcon, Check, Search } from 'lucide-react'
+import { Separator } from '@/components/ui/separator'
+import { ChevronRight, Lightbulb, Users, Calendar, Search, Check, X, Save, Settings2, Mic, Play, Folder, Building, CalendarIcon, User, MessageSquare, TrendingUp } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
-import { REGIONAL_VOICES, getVoicesByRegion } from '@/lib/voice-constants'
 import { authenticatedGet, authenticatedPost } from '@/lib/api-client'
-import { useLoadingManager } from '@/lib/loading-manager'
+import { VoiceSelector } from '@/components/scenario/voice-selector'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandGroup, CommandItem } from '@/components/ui/command'
+import { cn } from '@/lib/utils'
+import { format } from 'date-fns'
+import { AssignmentDeadline } from '@/components/assignment/assignment-deadline'
+import { REGIONAL_VOICES, getVoicesByRegion } from '@/lib/voice-constants'
 
 interface SearchUser {
   id: string
@@ -34,7 +36,6 @@ export function ScenarioBuilder() {
   const router = useRouter()
   const { user } = useSupabaseAuth()
   const { toast } = useToast()
-  const loadingManager = useLoadingManager()
   const [isSaving, setIsSaving] = useState(false)
   const [scenarioData, setScenarioData] = useState({
     title: '',
@@ -58,33 +59,66 @@ export function ScenarioBuilder() {
   const [isSearching, setIsSearching] = useState(false)
   const [userDomain, setUserDomain] = useState<string>('')
 
-  // Load saved scenarios and check for edit mode
+  // Track initialization to prevent duplicate calls
+  const hasInitializedRef = useRef(false)
+  const isMountedRef = useRef(true)
+
+  // Load saved scenarios and check for edit mode - only once
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || hasInitializedRef.current) return
     
     const initializeData = async () => {
-      await loadingManager.withLoading('scenario-builder-init', async () => {
-        await Promise.all([
-          loadSavedScenarios(),
-          fetchUserRole()
-        ])
-      })
+      hasInitializedRef.current = true
+      
+      await Promise.all([
+        loadSavedScenarios(),
+        fetchUserRole()
+      ])
+      
+      // Check if we're editing a scenario
+      const editScenario = localStorage.getItem('editScenario')
+      if (editScenario) {
+        try {
+          const parsed = JSON.parse(editScenario)
+          if (isMountedRef.current) {
+            setScenarioData(parsed)
+          }
+          localStorage.removeItem('editScenario')
+        } catch (error) {
+          console.error('Failed to load edit scenario:', error)
+        }
+      }
     }
     
     initializeData()
     
-    // Check if we're editing a scenario
-    const editScenario = localStorage.getItem('editScenario')
-    if (editScenario) {
-      try {
-        const parsed = JSON.parse(editScenario)
-        setScenarioData(parsed)
-        localStorage.removeItem('editScenario')
-      } catch (error) {
-        console.error('Failed to load edit scenario:', error)
-      }
+    // Cleanup
+    return () => {
+      hasInitializedRef.current = false
     }
-  }, [user])
+  }, [user?.id])
+
+  // Track component mount/unmount
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  // Check user role on mount and when user changes
+  useEffect(() => {
+    if (user?.role) {
+      setUserRole(user.role as 'user' | 'manager' | 'admin')
+    }
+    
+    // Extract domain from user's email
+    if (user?.email) {
+      const domain = user.email.split('@')[1]
+      setUserDomain(domain)
+      console.log('🔧 ScenarioBuilder: User domain set to:', domain)
+    }
+  }, [user?.role, user?.email])
 
   const fetchUserRole = async () => {
     if (!user) return
@@ -112,26 +146,21 @@ export function ScenarioBuilder() {
       return
     }
 
-    // Use loading manager to prevent duplicate requests
-    const searchKey = `user-search-${query}-${userDomain}`
-    
     try {
-      await loadingManager.withLoading(searchKey, async () => {
-        setIsSearching(true)
-        
-        const url = `/api/users/search?q=${encodeURIComponent(query)}&domain=${userDomain}`
-        
-        const response = await authenticatedGet(url)
-        
-        if (response.ok) {
-          const data = await response.json()
-          setSearchResults(data.users || [])
-        } else {
-          const errorData = await response.json()
-          console.error('User search failed:', { status: response.status, error: errorData })
-          setSearchResults([])
-        }
-      })
+      setIsSearching(true)
+      
+      const url = `/api/users/search?q=${encodeURIComponent(query)}&domain=${userDomain}`
+      
+      const response = await authenticatedGet(url)
+      
+      if (response.ok) {
+        const data = await response.json()
+        setSearchResults(data.users || [])
+      } else {
+        const errorData = await response.json()
+        console.error('User search failed:', { status: response.status, error: errorData })
+        setSearchResults([])
+      }
     } catch (error) {
       console.error('User search error:', error)
       setSearchResults([])
@@ -739,7 +768,7 @@ export function ScenarioBuilder() {
             <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-slate-900 mb-1 flex items-center">
-                  <Settings className="mr-2 h-5 w-5 text-primary" />
+                  <Settings2 className="mr-2 h-5 w-5 text-primary" />
                   Quick Settings
                 </h3>
               </div>

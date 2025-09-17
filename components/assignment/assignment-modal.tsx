@@ -51,12 +51,24 @@ export function AssignmentModal({ isOpen, onClose, scenario, onAssignmentCreated
     }
   }, [isOpen])
 
-  // Fetch user profile data when modal opens
+  // Fetch user profile data when modal opens or user changes
   useEffect(() => {
-    if (isOpen && user?.id) {
+    if (user?.email) {
+      const domain = user.email.split('@')[1]
+      setUserDomain(domain)
+      console.log('🔧 AssignmentModal: User domain set to:', domain)
+      
+      const name = user.name || user.email?.split('@')[0] || 'Manager'
+      setUserName(name)
+    }
+  }, [user?.email, user?.name])
+
+  // Additional check when modal opens
+  useEffect(() => {
+    if (isOpen && user?.id && !userDomain) {
       fetchUserProfile()
     }
-  }, [isOpen, user])
+  }, [isOpen, user?.id, userDomain])
 
   const fetchUserProfile = async () => {
     if (!user) return

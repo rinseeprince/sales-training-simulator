@@ -8,7 +8,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandGroup, CommandItem } from '@/components/ui/command'
 import { Search, Check } from 'lucide-react'
 import { authenticatedGet } from '@/lib/api-client'
-import { useLoadingManager } from '@/lib/loading-manager'
 
 interface SearchUser {
   id: string
@@ -27,35 +26,44 @@ export function UserSearch({ selectedUsers, onUsersChange, userDomain }: UserSea
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchUser[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const loadingManager = useLoadingManager()
 
   const searchUsers = async (query: string) => {
+    console.log('🔍 UserSearch: searchUsers called with:', { query, userDomain })
+    
     if (!query || query.length < 2) {
+      console.log('🔍 UserSearch: Query too short, clearing results')
       setSearchResults([])
       return
     }
 
-    const searchKey = `user-search-${query}-${userDomain}`
-    
+    // Check if we have a domain
+    if (!userDomain) {
+      console.error('🔴 UserSearch: No user domain available, cannot search')
+      setSearchResults([])
+      return
+    }
+
     try {
-      await loadingManager.withLoading(searchKey, async () => {
-        setIsSearching(true)
-        
-        const url = `/api/users/search?q=${encodeURIComponent(query)}&domain=${userDomain}`
-        
-        const response = await authenticatedGet(url)
-        
-        if (response.ok) {
-          const data = await response.json()
-          setSearchResults(data.users || [])
-        } else {
-          const errorData = await response.json()
-          console.error('User search failed:', { status: response.status, error: errorData })
-          setSearchResults([])
-        }
-      })
+      setIsSearching(true)
+      
+      const url = `/api/users/search?q=${encodeURIComponent(query)}&domain=${userDomain}`
+      console.log('🔍 UserSearch: Making request to:', url)
+      
+      const response = await authenticatedGet(url)
+      console.log('🔍 UserSearch: Response status:', response.status)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('✅ UserSearch: Response data:', data)
+        console.log('✅ UserSearch: Found', data.users?.length || 0, 'users')
+        setSearchResults(data.users || [])
+      } else {
+        const errorData = await response.json()
+        console.error('❌ UserSearch failed:', { status: response.status, error: errorData })
+        setSearchResults([])
+      }
     } catch (error) {
-      console.error('User search error:', error)
+      console.error('❌ UserSearch error:', error)
       setSearchResults([])
     } finally {
       setIsSearching(false)

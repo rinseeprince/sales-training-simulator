@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Home, FileText, Phone, BarChart3, Settings, Users, Shield, Menu, X, LogOut, Moon, Sun, BookOpen, History, DollarSign, ChevronDown, ChevronUp, Plus, ArrowLeft, ArrowRight, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { useTheme } from 'next-themes'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { logger } from '@/lib/logger'
 
 const navigationSections = [
   {
@@ -95,28 +96,31 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Filter navigation items based on user role
-  const getFilteredNavigationSections = () => {
-    console.log('🎯 MainLayout: Filtering navigation for user role:', user?.role)
-    if (!user?.role) return navigationSections
+  // Filter navigation items based on user role - memoized to prevent excessive re-renders
+  const filteredNavigationSections = useMemo(() => {
+    if (!user?.role) {
+      logger.debug('🎯 MainLayout: No user role, returning default navigation')
+      return navigationSections
+    }
     
+    logger.debug('�� MainLayout: Filtering navigation for user role:', user.role)
     const filtered = navigationSections.map(section => ({
       ...section,
       items: section.items.filter(item => {
         const hasAccess = item.roles.includes(user.role as 'user' | 'manager' | 'admin')
-        console.log(`🔍 ${item.name}: roles=${item.roles.join(', ')} | user=${user.role} | access=${hasAccess}`)
         return hasAccess
       })
     })).filter(section => section.items.length > 0) // Remove empty sections
     
-    console.log('✅ Filtered navigation sections:', filtered.map(s => ({ title: s.title, items: s.items.map(i => i.name) })))
+    logger.debug('✅ Filtered navigation sections:', filtered.length, 'sections')
     return filtered
-  }
-
-  const filteredNavigationSections = getFilteredNavigationSections()
+  }, [user?.role]) // Only recalculate when user role changes
   
   // Flatten navigation sections for easy access
-  const allNavigationItems = filteredNavigationSections.flatMap(section => section.items)
+  const allNavigationItems = useMemo(() => 
+    filteredNavigationSections.flatMap(section => section.items),
+    [filteredNavigationSections]
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -174,7 +178,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               onClick={async () => {
                 if (isLoggingOut) return; // Prevent multiple clicks
                 
-                console.log('Logout button clicked');
+                logger.debug('Logout button clicked');
                 setIsLoggingOut(true);
                 
                 try {

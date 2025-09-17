@@ -33,7 +33,8 @@ export function SimpleSignInForm() {
       const result = await signIn(formData.email, formData.password);
       
       if (result.success) {
-        router.push('/dashboard');
+        // Use window.location.href for more reliable redirect after auth
+        window.location.href = '/dashboard';
       } else {
         setError(result.message);
       }
