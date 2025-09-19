@@ -25,6 +25,7 @@ interface ScenarioData {
   prospectName?: string
   duration: string
   voice: string
+  assignmentId?: string
   enableStreaming: boolean
   timestamp: number
 }
@@ -877,6 +878,7 @@ export function LiveSimulation() {
               duration: currentTime,
               audioUrl: audioUrl,
               conversationHistory: conversationHistory,
+              assignmentId: scenarioData?.assignmentId, // Pass assignment ID if present
               scoreOnly: true // Flag to only score, not save
             }),
           });
@@ -924,6 +926,7 @@ export function LiveSimulation() {
             duration: currentTime,
             audioUrl: audioUrl,
             conversationHistory: conversationHistory,
+            assignmentId: scenarioData?.assignmentId, // Include assignment ID if present
             created_at: new Date().toISOString(),
             isSaved: false,
             // Include scoring results

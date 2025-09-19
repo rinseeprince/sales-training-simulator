@@ -362,6 +362,34 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
           return errorResponse(`Failed to save call data: ${error.message}`);
         }
         data = dbData;
+        
+        // Check if this call was for an assignment and handle completion
+        const assignmentId = body.assignmentId;
+        if (assignmentId && dbData) {
+          try {
+            console.log('Processing assignment completion for:', assignmentId);
+            
+            // Create assignment completion record
+            const { error: completionError } = await supabase
+              .from('assignment_completions')
+              .insert({
+                assignment_id: assignmentId,
+                call_id: dbData.id,
+                completed_by: repId,
+                completed_at: new Date().toISOString()
+              });
+            
+            if (completionError) {
+              console.error('Error creating assignment completion:', completionError);
+              // Don't fail the entire request, just log the error
+            } else {
+              console.log('Assignment completion recorded successfully');
+            }
+          } catch (assignmentError) {
+            console.error('Error processing assignment completion:', assignmentError);
+            // Don't fail the entire request, just log the error
+          }
+        }
       } else {
         console.log('Score-only mode: skipping database save');
       }

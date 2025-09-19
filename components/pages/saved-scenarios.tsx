@@ -1,14 +1,25 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Play, Search, Filter, Calendar, Tag, Trash2, Edit, BookOpen, ArrowLeft, Mic } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,9 +30,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { 
+  Play, 
+  Search, 
+  MoreVertical, 
+  Trash2, 
+  Edit, 
+  Users,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Calendar,
+  User,
+  Filter
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
+import { supabaseClient as supabase } from '@/lib/supabase-auth'
 import { useToast } from '@/hooks/use-toast'
+import { formatDistanceToNow } from 'date-fns'
+import { cn } from '@/lib/utils'
+import { AssignmentModal } from '@/components/ui/assignment-modal'
 
 interface SavedScenario {
   id: string
@@ -32,46 +61,84 @@ interface SavedScenario {
   voice?: string
   created_at: string
   updated_at: string
+  created_by?: string
+  is_company_generated?: boolean
+}
+
+interface ScenarioAssignment {
+  id: string
+  scenario_id: string
+  scenario?: SavedScenario
+  assigned_by: string
+  assigned_to_user: string
+  deadline?: string
+  status: 'not_started' | 'in_progress' | 'completed' | 'overdue'
+  created_at: string
+  updated_at: string
+  call_id?: string
+  assigner?: {
+    name: string
+    email: string
+  }
 }
 
 export function SavedScenarios() {
   const router = useRouter()
   const { user } = useSupabaseAuth()
   const { toast } = useToast()
+  
   const [scenarios, setScenarios] = useState<SavedScenario[]>([])
-  const [loading, setLoading] = useState(true)
+  const [assignments, setAssignments] = useState<ScenarioAssignment[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [activeTab, setActiveTab] = useState('my-scenarios')
+  const [loadingScenarios, setLoadingScenarios] = useState(true)
+  const [loadingAssignments, setLoadingAssignments] = useState(true)
+  const [userRole, setUserRole] = useState<string>('user')
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false)
+  const [scenarioToAssign, setScenarioToAssign] = useState<SavedScenario | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [scenarioToDelete, setScenarioToDelete] = useState<SavedScenario | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-
-  // Load saved scenarios
-  useEffect(() => {
-    loadScenarios()
-  }, [user])
-
-  const loadScenarios = async () => {
+  
+  // Define load functions with useCallback to prevent recreation
+  const loadUserRole = useCallback(async () => {
     if (!user) return
-
+    
     try {
-      setLoading(true)
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const profileData = await profileResponse.json()
       
-      // Get the correct user ID from simple_users table
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-      const profileData = await profileResponse.json();
+      if (profileData.success) {
+        setUserRole(profileData.userProfile.role || 'user')
+      }
+    } catch (error) {
+      console.error('Error loading user role:', error)
+    }
+  }, [user])
+  
+  const loadScenarios = useCallback(async () => {
+    if (!user) {
+      return
+    }
+    
+    try {
+      setLoadingScenarios(true)
+      
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const profileData = await profileResponse.json()
       
       if (!profileData.success) {
-        throw new Error('Failed to get user profile: ' + profileData.error);
+        throw new Error('Failed to get user profile')
       }
-
-      const actualUserId = profileData.userProfile.id;
+      
+      const actualUserId = profileData.userProfile.id
       
       const response = await fetch(`/api/scenarios?userId=${actualUserId}`)
       
       if (!response.ok) {
         throw new Error('Failed to load scenarios')
       }
-
+      
       const data = await response.json()
       setScenarios(data.scenarios || [])
     } catch (error) {
@@ -82,119 +149,159 @@ export function SavedScenarios() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setLoadingScenarios(false)
     }
-  }
-
-  const handleRunScenario = async (scenario: SavedScenario) => {
-    // Check simulation limit before proceeding
-    if (user) {
-      try {
-        // Get the correct user ID from simple_users table
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-        const profileData = await profileResponse.json();
-        
-        if (!profileData.success) {
-          console.error('Failed to get user profile:', profileData.error);
-          // Continue anyway if profile check fails - will be enforced when recording starts
+  }, [user, toast])
+  
+  const loadAssignments = useCallback(async () => {
+    if (!user) {
+      return
+    }
+    
+    try {
+      setLoadingAssignments(true)
+      
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const profileData = await profileResponse.json()
+      
+      if (!profileData.success) {
+        throw new Error('Failed to get user profile')
+      }
+      
+      const actualUserId = profileData.userProfile.id
+      
+      const response = await fetch(`/api/assignments?userId=${actualUserId}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to load assignments')
+      }
+      
+      const data = await response.json()
+      setAssignments(data.assignments || [])
+    } catch (error) {
+      console.error('Error loading assignments:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load assignments",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingAssignments(false)
+    }
+  }, [user, toast])
+  
+  // Load user role
+  useEffect(() => {
+    loadUserRole()
+  }, [loadUserRole])
+  
+  // Load scenarios and assignments when component mounts or tab changes
+  useEffect(() => {
+    loadUserRole()
+    
+    if (activeTab === 'my-scenarios') {
+      loadScenarios()
+    } else {
+      loadAssignments()
+    }
+    
+    // Reload data when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user) {
+        if (activeTab === 'my-scenarios') {
+          loadScenarios()
         } else {
-          const actualUserId = profileData.userProfile.id;
-          
-          const response = await fetch(`/api/check-simulation-limit?userId=${actualUserId}`)
-          const data = await response.json()
-          
-          if (!data.canSimulate) {
-            toast({
-              title: "Simulation Limit Reached",
-              description: data.message || "You've reached your free simulation limit. Please upgrade to continue.",
-              variant: "destructive",
-              action: (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => router.push('/pricing')}
-                >
-                  Upgrade
-                </Button>
-              )
-            })
-            return
-          }
-          
-          // Show remaining simulations for free users (informational only)
-          if (data.remaining && data.remaining > 0 && data.remaining <= 10) {
-            toast({
-              title: "Simulations Remaining",
-              description: `You have ${data.remaining} free simulation${data.remaining === 1 ? '' : 's'} left. Count will be used when you start recording.`,
-            })
-          }
+          loadAssignments()
         }
-      } catch (error) {
-        console.error('Failed to check simulation limit:', error)
-        // Continue anyway if check fails - will be enforced when recording starts
       }
     }
-
-    // Convert scenario to simulation format
-    console.log('🔍 Running saved scenario:', scenario);
-    const simulationData = {
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [activeTab, user, loadUserRole, loadScenarios, loadAssignments])
+  
+  const handleRunScenario = (scenario: SavedScenario) => {
+    // Store scenario data in localStorage
+    localStorage.setItem('selectedScenario', JSON.stringify({
       title: scenario.title,
       prompt: scenario.prompt,
-      prospectName: scenario.prospect_name || '', // Include saved prospect name
-      duration: scenario.duration || '5 minutes',
-      voice: scenario.voice || 'professional-male',
-      saveReuse: false,
+      prospectName: scenario.prospect_name,
+      duration: scenario.duration,
+      voice: scenario.voice,
+      enableStreaming: true,
       timestamp: Date.now()
-    }
-    console.log('🔍 Simulation data for localStorage:', simulationData);
-
-    // Save to localStorage and navigate to simulation
-    localStorage.setItem('currentScenario', JSON.stringify(simulationData))
-    router.push('/simulation')
-  }
-
-  const handleEditScenario = (scenario: SavedScenario) => {
-    // Convert scenario to scenario builder format
-    const builderData = {
-      title: scenario.title,
-      prompt: scenario.prompt,
-      duration: scenario.duration || '',
-      voice: scenario.voice || '',
-      saveReuse: true,
-      scenarioId: scenario.id // Include ID for editing
-    }
-
-    // Save to localStorage and navigate to scenario builder
-    localStorage.setItem('editScenario', JSON.stringify(builderData))
+    }))
+    
+    // Navigate to scenario builder
     router.push('/scenario-builder')
   }
-
+  
+  const handleRunAssignment = (assignment: ScenarioAssignment) => {
+    if (!assignment.scenario) return
+    
+    // Store scenario data with assignment ID
+    localStorage.setItem('selectedScenario', JSON.stringify({
+      title: assignment.scenario.title,
+      prompt: assignment.scenario.prompt,
+      prospectName: assignment.scenario.prospect_name,
+      duration: assignment.scenario.duration,
+      voice: assignment.scenario.voice,
+      assignmentId: assignment.id,
+      enableStreaming: true,
+      timestamp: Date.now()
+    }))
+    
+    // Update assignment status to in_progress if not started
+    if (assignment.status === 'not_started') {
+      supabase
+        .from('scenario_assignments')
+        .update({ status: 'in_progress', updated_at: new Date().toISOString() })
+        .eq('id', assignment.id)
+        .then(() => {
+          // Reload assignments to reflect the change
+          loadAssignments()
+        })
+    }
+    
+    // Navigate to scenario builder
+    router.push('/scenario-builder')
+  }
+  
+  const handleEditScenario = (scenario: SavedScenario) => {
+    // Store scenario data for editing
+    localStorage.setItem('editScenario', JSON.stringify(scenario))
+    router.push('/scenario-builder')
+  }
+  
   const handleDeleteClick = (scenario: SavedScenario) => {
     setScenarioToDelete(scenario)
     setDeleteDialogOpen(true)
   }
-
+  
   const handleDeleteConfirm = async () => {
     if (!scenarioToDelete) return
-
-    setIsDeleting(true)
+    
     try {
+      setIsDeleting(true)
+      
       const response = await fetch(`/api/scenarios/${scenarioToDelete.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       })
-
+      
       if (!response.ok) {
         throw new Error('Failed to delete scenario')
       }
-
+      
       toast({
         title: "Success",
         description: "Scenario deleted successfully",
       })
-
+      
       setDeleteDialogOpen(false)
       setScenarioToDelete(null)
-      // Reload scenarios
       loadScenarios()
     } catch (error) {
       console.error('Error deleting scenario:', error)
@@ -207,18 +314,26 @@ export function SavedScenarios() {
       setIsDeleting(false)
     }
   }
-
-  // Removed difficulty functions - not used in prompt-only system
-
-  // Filter scenarios
+  
+  const handleAssignScenario = (scenario: SavedScenario) => {
+    setScenarioToAssign(scenario)
+    setAssignmentModalOpen(true)
+  }
+  
+  // Filter scenarios based on search
   const filteredScenarios = scenarios.filter(scenario => {
     const matchesSearch = scenario.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          scenario.prompt.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    // For now, show all scenarios since we don't have difficulty/industry in prompt-only system
     return matchesSearch
   })
-
+  
+  // Filter assignments based on search
+  const filteredAssignments = assignments.filter(assignment => {
+    const matchesSearch = assignment.scenario?.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         assignment.scenario?.prompt.toLowerCase().includes(searchTerm.toLowerCase())
+    return matchesSearch
+  })
+  
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -226,187 +341,263 @@ export function SavedScenarios() {
       day: 'numeric'
     })
   }
-
-  if (loading) {
+  
+  const getStatusBadge = (status: string) => {
+    const statusConfig = {
+      not_started: { label: 'Not Started', variant: 'secondary' as const, icon: Clock },
+      in_progress: { label: 'In Progress', variant: 'default' as const, icon: AlertCircle },
+      completed: { label: 'Completed', variant: 'outline' as const, icon: CheckCircle },
+      overdue: { label: 'Overdue', variant: 'destructive' as const, icon: AlertCircle }
+    }
+    
+    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.not_started
+    const Icon = config.icon
+    
     return (
-      <div className="space-y-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      </div>
+      <Badge variant={config.variant} className="flex items-center gap-1">
+        <Icon className="h-3 w-3" />
+        {config.label}
+      </Badge>
     )
   }
-
+  
+  const isManagerOrAdmin = userRole === 'manager' || userRole === 'admin'
+  
   return (
-    <div className="space-y-6">
-      {/* Header Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900 mb-1">Saved Scenarios</h1>
-            <p className="text-sm text-slate-500">Your reusable training templates for sales practice</p>
-          </div>
-          <Button 
-            onClick={() => router.push('/scenario-builder')} 
-            className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm rounded-xl px-6 py-2.5 font-medium"
-          >
-            <BookOpen className="mr-2 h-4 w-4" />
-            Create New Scenario
-          </Button>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Saved Scenarios</h1>
+          <p className="text-slate-600 mt-2">Manage your training scenarios and assignments</p>
         </div>
-      </motion.div>
-
-      {/* Search and Filters */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-        className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
-      >
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              id="search"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
-            />
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Scenarios Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-        className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
-      >
-        {filteredScenarios.length === 0 ? (
-          <div className="col-span-full">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-12">
-              <div className="flex flex-col items-center justify-center text-center">
-                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                  <BookOpen className="h-8 w-8 text-slate-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">No scenarios found</h3>
-                <p className="text-slate-500 text-center mb-6 max-w-md">
-                  {scenarios.length === 0 
-                    ? "You haven't saved any scenarios yet. Create your first scenario to get started!"
-                    : "No scenarios match your current filters. Try adjusting your search criteria."
-                  }
-                </p>
-                <Button onClick={() => router.push('/scenario-builder')} className="bg-primary hover:bg-primary/90 text-white">
-                  Create Your First Scenario
-                </Button>
-              </div>
+        <Button onClick={() => router.push('/scenario-builder')} className="rounded-xl">
+          Create New Scenario
+        </Button>
+      </div>
+      
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-5 w-5" />
+        <Input
+          type="text"
+          placeholder="Search scenarios..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10 rounded-xl border-slate-200"
+        />
+      </div>
+      
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="my-scenarios">My Scenarios</TabsTrigger>
+          <TabsTrigger value="assigned">
+            Assigned to Me
+            {assignments.filter(a => a.status !== 'completed').length > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center">
+                {assignments.filter(a => a.status !== 'completed').length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+        
+        {/* My Scenarios Tab */}
+        <TabsContent value="my-scenarios" className="space-y-4">
+          {loadingScenarios ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          </div>
-        ) : (
-          filteredScenarios.map((scenario, index) => (
-            <motion.div
-              key={scenario.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 * index }}
-            >
-              <div className="h-full bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5 p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-lg font-semibold text-slate-900 truncate mb-2">{scenario.title}</h3>
-                    <div className="flex items-center flex-wrap gap-2">
-                      {scenario.voice && (
-                        <Badge className="rounded-full px-3 py-1 bg-slate-100 text-slate-700 text-xs font-medium">
-                          <Mic className="mr-1 h-3 w-3" />
-                          {scenario.voice.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </Badge>
-                      )}
-                      <Badge className="rounded-full px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium">
-                        Template
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 ml-4">
-                    <BookOpen className="h-6 w-6 text-primary" />
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <p className="text-sm text-slate-600 leading-relaxed line-clamp-3">
-                    {scenario.prompt}
-                  </p>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                    <div className="flex items-center text-xs text-slate-500">
-                      <Calendar className="mr-1 h-3 w-3" />
-                      {formatDate(scenario.created_at)}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {scenario.prompt.length} chars
-                    </div>
-                  </div>
-
-                  <div className="flex space-x-2 pt-2">
-                    <Button 
-                      onClick={() => handleRunScenario(scenario)}
-                      className="flex-1 bg-white hover:bg-slate-50 text-primary border border-primary/20 rounded-xl shadow-sm px-4 py-2 font-medium"
-                    >
-                      <Play className="mr-2 h-4 w-4" />
-                      Run
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditScenario(scenario)}
-                      className="rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteClick(scenario)}
-                      className="rounded-2xl border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-red-600 shadow-sm"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ))
-        )}
-      </motion.div>
-
-      {filteredScenarios.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="text-center text-sm text-muted-foreground"
-        >
-          Showing {filteredScenarios.length} of {scenarios.length} scenarios
-        </motion.div>
-      )}
-
+          ) : filteredScenarios.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-slate-500">No scenarios found</p>
+            </div>
+          ) : (
+            <div className="border rounded-xl overflow-hidden">
+              <Table>
+                                 <TableHeader>
+                   <TableRow className="bg-slate-50">
+                     <TableHead className="font-semibold">Title</TableHead>
+                     <TableHead className="font-semibold">Prospect</TableHead>
+                     <TableHead className="font-semibold">Created</TableHead>
+                     <TableHead className="font-semibold">Actions</TableHead>
+                   </TableRow>
+                 </TableHeader>
+                <TableBody>
+                  {filteredScenarios.map((scenario) => (
+                    <TableRow key={scenario.id} className="hover:bg-slate-50/50">
+                      <TableCell className="font-medium">
+                        <div>
+                          <p className="font-semibold text-slate-900">{scenario.title}</p>
+                          <p className="text-sm text-slate-500 line-clamp-1">{scenario.prompt}</p>
+                        </div>
+                      </TableCell>
+                                             <TableCell>
+                         <div className="flex items-center gap-1">
+                           <User className="h-4 w-4 text-slate-400" />
+                           <span className="text-slate-600">
+                             {scenario.prospect_name || 'Default'}
+                           </span>
+                         </div>
+                       </TableCell>
+                       <TableCell className="text-slate-600">
+                         {formatDate(scenario.created_at)}
+                       </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleRunScenario(scenario)}
+                            className="rounded-lg"
+                          >
+                            <Play className="h-4 w-4 mr-1" />
+                            Run
+                          </Button>
+                          {isManagerOrAdmin && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAssignScenario(scenario)}
+                              className="rounded-lg"
+                            >
+                              <Users className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="sm" variant="ghost">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEditScenario(scenario)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleDeleteClick(scenario)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+        
+        {/* Assigned to Me Tab */}
+        <TabsContent value="assigned" className="space-y-4">
+          {loadingAssignments ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : filteredAssignments.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-slate-500">No assigned scenarios</p>
+            </div>
+          ) : (
+            <div className="border rounded-xl overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead className="font-semibold">Scenario</TableHead>
+                    <TableHead className="font-semibold">Assigned By</TableHead>
+                    <TableHead className="font-semibold">Deadline</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAssignments.map((assignment) => (
+                    <TableRow key={assignment.id} className="hover:bg-slate-50/50">
+                      <TableCell className="font-medium">
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {assignment.scenario?.title || 'Unknown Scenario'}
+                          </p>
+                          <p className="text-sm text-slate-500 line-clamp-1">
+                            {assignment.scenario?.prompt || ''}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-slate-600">
+                          <p className="font-medium">{assignment.assigner?.name || 'Manager'}</p>
+                          <p className="text-sm text-slate-500">{assignment.assigner?.email}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {assignment.deadline ? (
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-4 w-4 text-slate-400" />
+                            <span className={cn(
+                              "text-slate-600",
+                              new Date(assignment.deadline) < new Date() && assignment.status !== 'completed' && "text-red-600 font-medium"
+                            )}>
+                              {formatDate(assignment.deadline)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">No deadline</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(assignment.status)}
+                      </TableCell>
+                      <TableCell>
+                        {assignment.status === 'completed' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (assignment.call_id) {
+                                router.push(`/review?callId=${assignment.call_id}`)
+                              }
+                            }}
+                            className="rounded-lg"
+                          >
+                            View Results
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => handleRunAssignment(assignment)}
+                            className="rounded-lg"
+                          >
+                            <Play className="h-4 w-4 mr-1" />
+                            Start
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+      
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Scenario</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{scenarioToDelete?.title}"? This action cannot be undone and will permanently remove the scenario and its data.
+              Are you sure you want to delete "{scenarioToDelete?.title}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
               onClick={handleDeleteConfirm}
               disabled={isDeleting}
               className="bg-red-600 hover:bg-red-700"
@@ -415,7 +606,14 @@ export function SavedScenarios() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  )
-}
+              </AlertDialog>
+        
+        {/* Assignment Modal */}
+        <AssignmentModal
+          isOpen={assignmentModalOpen}
+          onClose={() => setAssignmentModalOpen(false)}
+          scenario={scenarioToAssign}
+        />
+      </div>
+    )
+  }

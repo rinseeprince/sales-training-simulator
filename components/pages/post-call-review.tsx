@@ -296,6 +296,7 @@ interface TempCallData {
   enhanced_scoring?: any;
   enhancedScoring?: any;
   created_at?: string;
+  assignmentId?: string;
 }
 
 interface PostCallReviewProps {
@@ -489,6 +490,7 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
           duration: tempCallData.duration,
           audioUrl: tempCallData.audioUrl,
           conversationHistory: tempCallData.conversationHistory,
+          assignmentId: tempCallData.assignmentId, // Pass assignment ID if present
           // Include all scenario data needed for "Start Over" (use database field names)
           scenario_prompt: tempCallData.scenarioPrompt,
           scenario_prospect_name: tempCallData.scenarioProspectName,

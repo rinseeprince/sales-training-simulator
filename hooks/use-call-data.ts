@@ -43,7 +43,15 @@ export function useCallData({ callId, userId }: UseCallDataProps) {
           params.append('userId', userId)
         }
 
-        const response = await fetch(`/api/calls?${params}`)
+        // Create an AbortController for timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
+        const response = await fetch(`/api/calls?${params}`, {
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
         
         if (!response.ok) {
           const errorData = await response.json()
@@ -59,8 +67,15 @@ export function useCallData({ callId, userId }: UseCallDataProps) {
         const callData = await response.json()
         setCall(callData)
       } catch (err) {
-        console.error('Error fetching call data:', err)
-        setError(err instanceof Error ? err.message : 'Failed to fetch call data')
+        if (err instanceof Error) {
+          if (err.name === 'AbortError') {
+            setError('Request timed out. Please refresh the page and try again.')
+          } else {
+            setError(err.message)
+          }
+        } else {
+          setError('Failed to fetch call data')
+        }
       } finally {
         setLoading(false)
       }

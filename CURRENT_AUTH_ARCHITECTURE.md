@@ -330,7 +330,11 @@ The current Supabase-based authentication system is **production-ready and worki
 
 ## 🔗 **Related Documentation**
 
-- `UPDATED_COMPLEX_AUTH_DEPLOYMENT_PACKAGE.md` - Role-based upgrade plan
-- `UPDATED_MIGRATION_TO_COMPLEX_AUTH.md` - Step-by-step migration guide  
-- `SIMPLE_AUTH_DEPLOYMENT_GUIDE.md` - Original simple auth setup
-- `AUTHENTICATION_IMPLEMENTATION_GUIDE.md` - Complex auth features (future)
+- `SIMPLE_AUTH_DEPLOYMENT_GUIDE.md` - Quick deployment guide
+- `SUPABASE_CONFIGURATION_FIX.md` - Supabase setup instructions
+- `scripts/supabase-auth-migration.sql` - Database migration script
+- `scripts/simple-auth-schema.sql` - Simple auth database schema
+
+## Support
+
+For issues or questions about the authentication system:

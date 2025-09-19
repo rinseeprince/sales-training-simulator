@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { supabase, errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors } from '@/lib/api-utils'
+import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,14 +15,11 @@ export async function GET(request: NextRequest) {
     const callId = searchParams.get('callId')
     const userId = searchParams.get('userId')
 
-    console.log('Calls API request:', { 
-      callId, 
-      userId, 
-      url: request.url, 
-      method: request.method,
-      callIdType: typeof callId,
-      isValidUUID: callId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(callId) : false
-    })
+    // Create a fresh Supabase client for this request
+    const freshSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
     // If no callId provided, fetch all calls for the user (for dashboard)
     if (!callId) {
@@ -30,7 +28,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Fetch all calls for the user
-      const { data: calls, error } = await supabase
+      const { data: calls, error } = await freshSupabase
         .from('calls')
         .select('*, enhanced_scoring')
         .eq('rep_id', userId)
@@ -48,7 +46,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch specific call by ID
-    let query = supabase
+    let query = freshSupabase
       .from('calls')
       .select('*, enhanced_scoring')
       .eq('id', callId)
@@ -67,14 +65,6 @@ export async function GET(request: NextRequest) {
       }
       return errorResponse(`Database error: ${error.message}`, 500)
     }
-
-    console.log('Fetched call data:', {
-      id: call.id,
-      audio_url: call.audio_url,
-      hasAudioUrl: !!call.audio_url,
-      enhanced_scoring: call.enhanced_scoring ? 'PRESENT' : 'MISSING',
-      enhanced_scoring_data: call.enhanced_scoring
-    });
 
     return successResponse(call, 200, corsHeaders)
 

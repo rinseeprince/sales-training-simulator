@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useTheme } from 'next-themes'
+import { NotificationBell } from '@/components/ui/notification-bell'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -119,24 +120,20 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* Notification Bell */}
+            <NotificationBell />
+            
             <Button
               variant="ghost"
               size="icon"
-              className="text-white/80 hover:text-white hover:bg-white/10 h-8 w-8"
-              onClick={() => window.open('mailto:sales@repscore.ai', '_blank')}
-              title="Help & Support"
-            >
-              <HelpCircle className="h-4 w-4" />
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-white/80 hover:text-white hover:bg-white/10 h-8 w-8"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="h-9 w-9 rounded-full text-white hover:bg-white/10"
             >
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+              {theme === 'dark' ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
             </Button>
 
             <Button 

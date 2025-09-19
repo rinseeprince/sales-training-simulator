@@ -98,6 +98,30 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
     };
 
     initAuth();
+    
+    // Handle tab visibility changes to refresh session
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Refresh the session when tab becomes visible
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session) {
+            loadUser().then(() => {
+              // User data refreshed
+            }).catch(err => {
+              console.error('Error refreshing user:', err)
+            })
+          }
+        }).catch(err => {
+          console.error('Error getting session:', err)
+        })
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [loadUser]);
 
   /**

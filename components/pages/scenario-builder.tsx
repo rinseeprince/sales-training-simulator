@@ -41,10 +41,38 @@ export function ScenarioBuilder() {
     if (editScenario) {
       try {
         const parsed = JSON.parse(editScenario)
-        setScenarioData(parsed)
+        setScenarioData({
+          title: parsed.title,
+          prompt: parsed.prompt,
+          prospectName: parsed.prospect_name || '',
+          voice: parsed.voice || '',
+          saveReuse: true
+        })
         localStorage.removeItem('editScenario')
       } catch (error) {
         console.error('Failed to load edit scenario:', error)
+      }
+    }
+    
+    // Check if we're running a selected scenario
+    const selectedScenario = localStorage.getItem('selectedScenario')
+    if (selectedScenario) {
+      try {
+        const parsed = JSON.parse(selectedScenario)
+        setScenarioData({
+          title: parsed.title,
+          prompt: parsed.prompt,
+          prospectName: parsed.prospectName || '',
+          voice: parsed.voice || '',
+          saveReuse: false
+        })
+        // Store assignment ID if present
+        if (parsed.assignmentId) {
+          localStorage.setItem('currentAssignmentId', parsed.assignmentId)
+        }
+        localStorage.removeItem('selectedScenario')
+      } catch (error) {
+        console.error('Failed to load selected scenario:', error)
       }
     }
   }, [user])
@@ -148,12 +176,19 @@ export function ScenarioBuilder() {
     }
 
     // Save scenario data to localStorage for simulation page
+    const assignmentId = localStorage.getItem('currentAssignmentId')
     const simulationData = {
       title: scenarioData.title,
       prompt: scenarioData.prompt,
       prospectName: scenarioData.prospectName,
       voice: scenarioData.voice,
+      assignmentId: assignmentId || undefined,
       timestamp: Date.now()
+    }
+    
+    // Clear assignment ID after using it
+    if (assignmentId) {
+      localStorage.removeItem('currentAssignmentId')
     }
     console.log('🔍 Saving to localStorage:', simulationData);
     console.log('🔍 scenarioData.prospectName:', scenarioData.prospectName);
