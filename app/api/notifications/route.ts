@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, errorResponse, successResponse, corsHeaders, handleCors } from '@/lib/api-utils'
+import { errorResponse, successResponse, corsHeaders, handleCors } from '@/lib/api-utils'
 import { createClient } from '@supabase/supabase-js'
 
 // GET: Fetch notifications for a user
@@ -151,6 +151,6 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new NextResponse(null, { status: 200, headers: corsHeaders })
 } 

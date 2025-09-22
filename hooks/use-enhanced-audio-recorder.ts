@@ -100,7 +100,11 @@ export function useEnhancedAudioRecorder(): EnhancedAudioRecorderState & Enhance
       console.log('Starting enhanced audio recording with mixed streams...')
       
       // Create audio context for mixing
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) {
+        throw new Error('AudioContext not supported');
+      }
+      const audioContext = new AudioContextClass()
       audioContextRef.current = audioContext
       
       console.log('AudioContext created, state:', audioContext.state)

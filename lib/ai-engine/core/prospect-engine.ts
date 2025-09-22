@@ -6,7 +6,6 @@ import {
   ProspectResponse, 
   ConversationState,
   ProspectMemory,
-  ScenarioContext,
   Sentiment
 } from '../types/prospect-types';
 import { ConversationTurn } from '../types/conversation-types';

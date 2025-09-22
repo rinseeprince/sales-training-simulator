@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Bell, Check, CheckCheck, Users, FileText, Star, AlertCircle, MessageSquare } from 'lucide-react'
+import { NotificationData } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -102,14 +103,14 @@ export function NotificationBell() {
         
         const apiData = await response.json()
         return { data: apiData.notifications, error: null }
-      }) as any
+      }) as { data: NotificationData[] | null; error: Error | null }
 
       if (error) {
         throw error
       }
 
       setNotifications(data || [])
-      setUnreadCount(data?.filter((n: any) => !n.is_read).length || 0)
+      setUnreadCount(data?.filter((n: NotificationData) => !n.is_read).length || 0)
     } catch (error) {
       console.error('Error loading notifications:', error)
     } finally {

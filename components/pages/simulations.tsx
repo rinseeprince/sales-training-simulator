@@ -3,23 +3,29 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { 
   Play, 
   Clock, 
-  CheckCircle, 
-  Trophy, 
+ 
   Search, 
-  Filter, 
-  Calendar,
+  Filter,
   Phone,
   Target,
   ArrowLeft,
   Trash2,
-  MoreVertical
+  MoreVertical,
+  X
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -42,6 +48,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { EnhancedScoring } from '@/lib/types'
 import { ReviewModal } from '@/components/ui/review-modal'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useToast } from '@/hooks/use-toast'
 
 interface Simulation {
   id: string
@@ -70,6 +78,10 @@ export function Simulations() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
+  const [selectedSimulations, setSelectedSimulations] = useState<Set<string>>(new Set())
+  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false)
+  const { toast } = useToast()
 
   // Fetch simulations
   useEffect(() => {
@@ -176,6 +188,73 @@ export function Simulations() {
     }
   }
 
+  const handleSelectSimulation = (simulationId: string, checked: boolean) => {
+    const newSelected = new Set(selectedSimulations)
+    if (checked) {
+      newSelected.add(simulationId)
+    } else {
+      newSelected.delete(simulationId)
+    }
+    setSelectedSimulations(newSelected)
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedSimulations(new Set(filteredSimulations.map(s => s.id)))
+    } else {
+      setSelectedSimulations(new Set())
+    }
+  }
+
+
+  const handleBatchDeleteClick = () => {
+    setBatchDeleteDialogOpen(true)
+  }
+
+  const handleBatchDeleteConfirm = async () => {
+    try {
+      setIsBatchDeleting(true)
+      
+      const response = await fetch('/api/calls/batch', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          callIds: Array.from(selectedSimulations)
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete simulations')
+      }
+      
+      // Remove from local state
+      setSimulations(prev => prev.filter(sim => !selectedSimulations.has(sim.id)))
+      
+      toast({
+        title: "Success",
+        description: `${selectedSimulations.size} simulation${selectedSimulations.size === 1 ? '' : 's'} deleted successfully`,
+      })
+      
+      setBatchDeleteDialogOpen(false)
+      setSelectedSimulations(new Set())
+    } catch (error) {
+      console.error('Error deleting simulations:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete simulations",
+        variant: "destructive",
+      })
+    } finally {
+      setIsBatchDeleting(false)
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedSimulations(new Set())
+  }
+
   if (loading) {
     return (
       <div className="space-y-8">
@@ -267,179 +346,183 @@ export function Simulations() {
         </div>
       </motion.div>
 
-      {/* Simulations Grid */}
+      {/* Bulk Actions Bar */}
+      {selectedSimulations.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-xl"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-blue-900">
+              {selectedSimulations.size} simulation{selectedSimulations.size === 1 ? '' : 's'} selected
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              className="text-blue-600 hover:text-blue-700 h-8"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Clear
+            </Button>
+          </div>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleBatchDeleteClick}
+            className="h-8"
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete Selected
+          </Button>
+        </motion.div>
+      )}
+
+      {/* Simulations Table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
-        className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
       >
         {filteredSimulations.length === 0 ? (
-          <div className="col-span-full">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-12">
-              <div className="flex flex-col items-center justify-center text-center">
-                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                  <Phone className="h-8 w-8 text-slate-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">No simulations found</h3>
-                <p className="text-slate-500 text-center mb-6 max-w-md">
-                  {searchTerm || filterScore !== 'all' 
-                    ? 'Try adjusting your search or filters'
-                    : 'Start your first simulation to see it here'
-                  }
-                </p>
-                <Link href="/scenario-builder">
-                  <Button className="bg-primary hover:bg-primary/90 text-white">
-                    <Play className="mr-2 h-4 w-4" />
-                    Start New Simulation
-                  </Button>
-                </Link>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-12">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                <Phone className="h-8 w-8 text-slate-400" />
               </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">No simulations found</h3>
+              <p className="text-slate-500 text-center mb-6 max-w-md">
+                {searchTerm || filterScore !== 'all' 
+                  ? 'Try adjusting your search or filters'
+                  : 'Start your first simulation to see it here'
+                }
+              </p>
+              <Link href="/scenario-builder">
+                <Button className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
+                  <Play className="mr-2 h-4 w-4" />
+                  Start New Simulation
+                </Button>
+              </Link>
             </div>
           </div>
         ) : (
-          filteredSimulations.map((simulation, index) => (
-            <motion.div
-              key={simulation.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 * index }}
-            >
-              <div 
-                className="cursor-pointer bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5 p-6"
-                onClick={() => handleSimulationClick(simulation.id)}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-3 flex-1 min-w-0">
-                    <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Phone className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-lg font-semibold text-slate-900 truncate mb-2">
-                        {simulation.scenario_name}
-                      </h3>
-                      <div className="flex items-center space-x-2 text-xs text-slate-500">
-                        <Calendar className="h-3 w-3" />
-                        <span>{new Date(simulation.created_at).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <Clock className="h-3 w-3" />
-                        <span>{formatDuration(simulation.duration)}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end space-y-2 flex-shrink-0 ml-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="text-red-600 focus:text-red-600"
-                          onClick={(e) => handleDeleteClick(e, simulation)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  {/* Score Display */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="text-center">
-                        <div className="text-3xl font-semibold text-slate-900 mb-1">
-                          {simulation.enhanced_scoring?.overallScore || simulation.score}
-                        </div>
-                        <div className="text-xs text-slate-500 uppercase tracking-wide font-medium">Score</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
-                        (simulation.enhanced_scoring?.overallScore || simulation.score) >= 90 
-                          ? 'bg-emerald-50 text-emerald-700' 
-                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 80 
-                          ? 'bg-primary/10 text-primary' 
-                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 70 
-                          ? 'bg-amber-50 text-amber-700' 
-                          : 'bg-red-50 text-red-700'
-                      }`}>
-                        {(simulation.enhanced_scoring?.overallScore || simulation.score) >= 90 
-                          ? 'Excellent' 
-                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 80 
-                          ? 'Good' 
-                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 70 
-                          ? 'Fair' 
-                          : 'Needs Work'}
-                      </span>
-                      {simulation.audio_url && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Play className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div 
-                      className="h-2 rounded-full transition-all duration-300"
-                      style={{ 
-                        width: `${simulation.enhanced_scoring?.overallScore || simulation.score}%`,
-                        backgroundColor: (simulation.enhanced_scoring?.overallScore || simulation.score) >= 90 
-                          ? '#10b981' 
-                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 80
-                          ? '#048998'
-                          : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 70 
-                          ? '#f59e0b'
-                          : '#ef4444'
-                      }}
+          <div className="border rounded-xl overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={filteredSimulations.length > 0 && selectedSimulations.size === filteredSimulations.length}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all simulations"
                     />
-                  </div>
-
-                  {/* Additional metrics if available */}
-                  {(simulation.talk_ratio || simulation.objections_handled !== undefined || simulation.cta_used !== undefined) && (
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                      <div className="flex items-center space-x-4 text-xs text-slate-500">
-                        {simulation.talk_ratio && (
-                          <div className="flex items-center space-x-1">
-                            <span>Talk Ratio:</span>
-                            <span className="font-medium">{Math.round(simulation.talk_ratio)}%</span>
-                          </div>
-                        )}
-                        {simulation.objections_handled !== undefined && (
-                          <div className="flex items-center space-x-1">
-                            <span>Objections:</span>
-                            <span className="font-medium">{simulation.objections_handled}</span>
-                          </div>
-                        )}
-                        {simulation.cta_used !== undefined && (
-                          <div className={`flex items-center space-x-1 ${simulation.cta_used ? 'text-emerald-600' : 'text-amber-600'}`}>
-                            <span>CTA:</span>
-                            <span className="font-medium">{simulation.cta_used ? 'Yes' : 'No'}</span>
-                          </div>
-                        )}
+                  </TableHead>
+                  <TableHead className="font-semibold">Scenario</TableHead>
+                  <TableHead className="font-semibold">Score</TableHead>
+                  <TableHead className="font-semibold">Duration</TableHead>
+                  <TableHead className="font-semibold">Date</TableHead>
+                  <TableHead className="font-semibold">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredSimulations.map((simulation) => (
+                  <TableRow key={simulation.id} className="hover:bg-slate-50/50">
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedSimulations.has(simulation.id)}
+                        onCheckedChange={(checked) => handleSelectSimulation(simulation.id, checked as boolean)}
+                        aria-label={`Select ${simulation.scenario_name}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <div>
+                        <p className="font-semibold text-slate-900">{simulation.scenario_name}</p>
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                          {simulation.talk_ratio && (
+                            <span>Talk: {Math.round(simulation.talk_ratio)}%</span>
+                          )}
+                          {simulation.objections_handled !== undefined && (
+                            <>
+                              <span>•</span>
+                              <span>Objections: {simulation.objections_handled}</span>
+                            </>
+                          )}
+                          {simulation.cta_used !== undefined && (
+                            <>
+                              <span>•</span>
+                              <span className={simulation.cta_used ? 'text-emerald-600' : 'text-amber-600'}>
+                                CTA: {simulation.cta_used ? 'Yes' : 'No'}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ))
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-semibold">
+                          {simulation.enhanced_scoring?.overallScore || simulation.score}
+                        </span>
+                        <Badge 
+                          variant={(simulation.enhanced_scoring?.overallScore || simulation.score) >= 90 ? "default" :
+                                  (simulation.enhanced_scoring?.overallScore || simulation.score) >= 80 ? "secondary" :
+                                  (simulation.enhanced_scoring?.overallScore || simulation.score) >= 70 ? "outline" : "destructive"}
+                        >
+                          {(simulation.enhanced_scoring?.overallScore || simulation.score) >= 90 
+                            ? 'Excellent' 
+                            : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 80 
+                            ? 'Good' 
+                            : (simulation.enhanced_scoring?.overallScore || simulation.score) >= 70 
+                            ? 'Fair' 
+                            : 'Needs Work'}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4 text-slate-400" />
+                        <span className="text-slate-600">
+                          {formatDuration(simulation.duration)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-slate-600">
+                      {new Date(simulation.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleSimulationClick(simulation.id)}
+                          className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
+                        >
+                          <Play className="h-4 w-4 mr-1" />
+                          Review
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="ghost">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem 
+                              onClick={(e) => handleDeleteClick(e, simulation)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </motion.div>
 
@@ -472,6 +555,29 @@ export function Simulations() {
               className="bg-red-600 hover:bg-red-700"
             >
               {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation Dialog */}
+      <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Simulations</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedSimulations.size} simulation{selectedSimulations.size === 1 ? '' : 's'}? 
+              This action cannot be undone and will permanently remove all selected simulations and their data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBatchDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBatchDeleteConfirm}
+              disabled={isBatchDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isBatchDeleting ? 'Deleting...' : 'Delete All'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

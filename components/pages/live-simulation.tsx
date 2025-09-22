@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -148,7 +147,7 @@ export function LiveSimulation() {
       
       scenarioConfig.current = {
         scenarioPrompt: scenarioData.prompt, // Use the prompt directly - no more complex generation
-        persona: null as any, // No longer using complex persona parameters
+        persona: null, // No longer using complex persona parameters
         voiceSettings: {
           voiceId: scenarioData.voice || 'professional-male-us', // Use the voice ID directly, fallback to US professional male
           stability: 0.5,

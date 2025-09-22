@@ -3,7 +3,7 @@
 import { CallTranscript } from '@/lib/types';
 import { CallScore, ScoringMetric } from '../types/scoring-types';
 import { CallType } from '../types/prospect-types';
-import { METRIC_WEIGHTS, IDEAL_TALK_RATIOS, SCORING_RUBRICS } from '../config/scoring-weights';
+import { METRIC_WEIGHTS, IDEAL_TALK_RATIOS } from '../config/scoring-weights';
 
 export class MetricsCalculator {
   static calculateWeightedScore(

@@ -1,10 +1,19 @@
 // Call Scoring and Analysis Types
 
+export interface ScoringMetricDetails {
+  accuracy?: number;
+  frequency?: number;
+  effectiveness?: number;
+  timing?: number;
+  quality?: number;
+  [key: string]: unknown;
+}
+
 export interface ScoringMetric {
   name: string;
   score: number; // 0-100
   weight: number; // 0-1
-  details: any;
+  details: ScoringMetricDetails;
   feedback: string[];
   examples?: Array<{
     timestamp: string;

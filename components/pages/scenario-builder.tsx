@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Play, Save, Settings, TrendingUp, Mic, FileText, User, MessageSquare, Lightbulb, BookOpen, Folder } from 'lucide-react'
+import { Play, Settings, TrendingUp, Mic, User, MessageSquare, Lightbulb, Folder } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
@@ -102,7 +102,15 @@ export function ScenarioBuilder() {
     }
   }
 
-  const handleLoadScenario = (scenario: any) => {
+  interface SavedScenario {
+    id: string;
+    title: string;
+    prompt: string;
+    prospect_name?: string;
+    voice?: string;
+  }
+
+  const handleLoadScenario = (scenario: SavedScenario) => {
     console.log('🔍 Loading saved scenario:', scenario);
     setScenarioData({
       title: scenario.title,
@@ -269,9 +277,9 @@ export function ScenarioBuilder() {
     }
   }
 
-  const handleSaveScenario = async () => {
-    await saveScenarioToDatabase()
-  }
+  // const handleSaveScenario = async () => {
+  //   await saveScenarioToDatabase()
+  // }
 
   return (
     <div className="space-y-6">
@@ -314,7 +322,7 @@ export function ScenarioBuilder() {
               <Label htmlFor="saved-scenario-select" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Choose a saved scenario</Label>
               <Select onValueChange={(value) => {
                 if (value && value !== 'none') {
-                  const scenario = savedScenarios.find((s: any) => s.id === value)
+                  const scenario = savedScenarios.find((s: SavedScenario) => s.id === value)
                   if (scenario) {
                     handleLoadScenario(scenario)
                   }
@@ -325,7 +333,7 @@ export function ScenarioBuilder() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Select a scenario...</SelectItem>
-                  {savedScenarios.map((scenario: any) => (
+                  {savedScenarios.map((scenario: SavedScenario) => (
                     <SelectItem key={scenario.id} value={scenario.id}>
                       <div className="flex items-center justify-between w-full">
                         <div className="flex-1">

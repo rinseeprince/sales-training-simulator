@@ -15,7 +15,7 @@ function createSupabaseAdmin() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const supabaseAdmin = createSupabaseAdmin();
 
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new NextResponse(null, { 
     status: 200, 
     headers: {

@@ -96,7 +96,7 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
             Account Created!
           </h2>
           <p className="text-sm text-muted-foreground">
-            We've sent a verification email to <strong>{formData.email}</strong>. 
+            We&apos;ve sent a verification email to <strong>{formData.email}</strong>. 
             Please check your email and click the verification link.
           </p>
         </div>

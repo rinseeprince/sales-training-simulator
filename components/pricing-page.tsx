@@ -75,7 +75,12 @@ const plans = [
 export function PricingPage() {
   const { user } = useSupabaseAuth();
 
-  const handleAction = (plan: any) => {
+  interface PricingPlan {
+    action: 'redirect' | 'waitlist' | 'contact';
+    href?: string;
+  }
+
+  const handleAction = (plan: PricingPlan) => {
     switch (plan.action) {
       case 'redirect':
         window.location.href = plan.href;

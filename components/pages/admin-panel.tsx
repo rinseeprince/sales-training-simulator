@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Users, Trophy, FileText, Clock, Search, Filter, Download, Settings, CheckCircle, AlertCircle } from 'lucide-react'
+import { FileText, Clock, Search, Filter, Download, Settings, CheckCircle } from 'lucide-react'
 
 const leaderboardData = [
   { id: 1, name: 'Sarah Johnson', calls: 47, avgScore: 89, certifications: 8, trend: '+5%' },

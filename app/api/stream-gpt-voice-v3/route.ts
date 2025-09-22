@@ -308,6 +308,6 @@ IMPORTANT: You are the PROSPECT/CUSTOMER in this sales conversation, not the sal
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new NextResponse(null, { status: 200, headers: corsHeaders });
 }

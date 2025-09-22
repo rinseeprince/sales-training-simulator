@@ -69,6 +69,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new Response(null, { status: 200, headers: corsHeaders });
 }

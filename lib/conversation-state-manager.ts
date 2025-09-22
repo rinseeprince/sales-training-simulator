@@ -4,14 +4,15 @@
 
 import { AIProspectEngine } from '@/lib/ai-engine/core/prospect-engine';
 import { AIProspectConfig } from '@/lib/ai-engine/types/prospect-types';
+import { TranscriptEntry } from '@/lib/types';
 
 export interface ConversationStateData {
   callId: string;
   userId: string;
   engineState: string; // Serialized AI engine state
   lastActivity: number;
-  conversationHistory: any[];
-  scenarioConfig: any;
+  conversationHistory: TranscriptEntry[];
+  scenarioConfig: Record<string, unknown>;
   createdAt: number;
 }
 
@@ -30,7 +31,7 @@ class ConversationStateManager {
     callId: string, 
     userId: string, 
     config: AIProspectConfig,
-    conversationHistory: any[] = []
+    conversationHistory: TranscriptEntry[] = []
   ): Promise<AIProspectEngine> {
     
     // Check if engine exists in memory
@@ -102,7 +103,7 @@ class ConversationStateManager {
   }
 
   // Serialize engine state for storage
-  private serializeEngine(engine: AIProspectEngine): any {
+  private serializeEngine(engine: AIProspectEngine): Record<string, unknown> {
     const conversationState = engine.getConversationState();
     const memory = engine.getMemory();
     
@@ -116,7 +117,7 @@ class ConversationStateManager {
   // Deserialize engine state from storage
   private deserializeEngine(
     config: AIProspectConfig, 
-    serializedState: any
+    serializedState: Record<string, unknown>
   ): AIProspectEngine {
     const engine = new AIProspectEngine(config);
     
@@ -134,7 +135,7 @@ class ConversationStateManager {
   }
 
   // Try to restore engine from database persistence
-  private async restoreFromPersistence(callId: string, userId: string): Promise<AIProspectEngine | null> {
+  private async restoreFromPersistence(callId: string, _userId: string): Promise<AIProspectEngine | null> {
     try {
       // In a real implementation, this would query your database
       // For now, we'll simulate with local storage fallback

@@ -661,6 +661,6 @@ Remember: You are this specific person in this specific situation. Be human, be 
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new NextResponse(null, { status: 200, headers: corsHeaders });
 }

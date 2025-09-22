@@ -8,7 +8,10 @@ export class PhoneRingGenerator {
 
   constructor() {
     if (typeof window !== 'undefined' && 'AudioContext' in window) {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass) {
+        this.audioContext = new AudioContextClass();
+      }
     }
   }
 

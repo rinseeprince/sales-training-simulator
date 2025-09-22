@@ -105,10 +105,29 @@ export interface ConversationState {
   decisionMakersIdentified: boolean;
 }
 
+export interface RevealedInformation {
+  company?: {
+    name?: string;
+    size?: string;
+    industry?: string;
+    challenges?: string[];
+  };
+  personal?: {
+    role?: string;
+    priorities?: string[];
+    concerns?: string[];
+  };
+  budget?: {
+    range?: string;
+    authority?: boolean;
+    timeline?: string;
+  };
+}
+
 export interface ProspectResponse {
   message: string;
   sentiment: Sentiment;
-  revealedInformation?: any;
+  revealedInformation?: RevealedInformation;
   raisedObjection?: string;
   emotionalTone?: string;
   bodyLanguageCues?: string[]; // For future video integration
@@ -123,13 +142,21 @@ export interface ProspectMemory {
     phase: string;
   }>;
   revealedInformation: {
-    company: any;
-    personal: any;
+    company: RevealedInformation['company'];
+    personal: RevealedInformation['personal'];
     challenges: string[];
     goals: string[];
-    budget: any;
-    timeline: any;
-    decisionProcess: any;
+    budget: RevealedInformation['budget'];
+    timeline: {
+      urgency?: string;
+      deadline?: string;
+      seasonality?: string;
+    };
+    decisionProcess: {
+      stakeholders?: string[];
+      criteria?: string[];
+      timeline?: string;
+    };
   };
   repTactics: {
     questionsAsked: string[];

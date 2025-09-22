@@ -8,7 +8,7 @@ export function generateCoachingFeedback(
   callType: CallType,
   personaLevel: PersonaLevel
 ): CoachingFeedback {
-  const templates = getCoachingTemplates(score.overallScore);
+  // const templates = getCoachingTemplates(score.overallScore);
   
   return {
     summary: generateSummary(score, callType, personaLevel),
@@ -275,7 +275,7 @@ function getStrengthObservation(metric: string, score: number): string {
   return observations[metric]?.[level] || 'Performed well in this area';
 }
 
-function getStrengthExample(metric: string, analysis: any): string {
+function getStrengthExample(metric: string, analysis: Record<string, unknown>): string {
   // This would pull from actual transcript analysis
   const examples: Record<string, string> = {
     talkRatio: 'Rep asked a question and then stayed quiet for the full answer',
@@ -328,7 +328,7 @@ function getImprovementSuggestion(metric: string): string {
   return suggestions[metric] || 'Focus on improving this skill';
 }
 
-function getImprovementExample(metric: string, analysis: any): string {
+function getImprovementExample(metric: string, analysis: Record<string, unknown>): string {
   const examples: Record<string, string> = {
     talkRatio: 'Rep interrupted prospect 3 times during explanation',
     discovery: 'Rep asked "Do you have budget?" instead of exploring value first',
@@ -364,7 +364,14 @@ function getPracticeExercise(metric: string, currentScore: number): string {
   return exercises[metric] || 'Practice this skill daily';
 }
 
-function getCoachingTemplates(score: number): any {
+interface CoachingTemplates {
+  motivation: string;
+  focus: string;
+  skillBuilding: string[];
+  practiceActivities: string[];
+}
+
+function getCoachingTemplates(score: number): CoachingTemplates {
   // Additional coaching templates based on score ranges
   return {
     motivation: score >= 70 ? 

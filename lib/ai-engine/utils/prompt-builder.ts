@@ -1,6 +1,6 @@
 // Dynamic prompt builder utilities
 
-import { ScenarioContext, PersonaConfig, CallType, DifficultyLevel } from '../types/prospect-types';
+import { ScenarioContext, PersonaConfig, CallType, DifficultyLevel, BusinessContext, ProductContext } from '../types/prospect-types';
 import { CallTranscript } from '@/lib/types';
 import { getPersonaDefinition } from '../config/persona-config';
 import { CALL_TYPE_CONFIGS } from '../prompts/call-type-contexts';
@@ -21,7 +21,7 @@ export class PromptBuilder {
     return sections.filter(Boolean).join('\n\n');
   }
 
-  private static buildPersonaSection(persona: PersonaConfig, businessContext: any): string {
+  private static buildPersonaSection(persona: PersonaConfig, businessContext: BusinessContext): string {
     const definition = getPersonaDefinition(persona.level);
     
     return `YOU ARE: ${persona.title || definition.titles[0]} at ${businessContext.companyName}
@@ -66,7 +66,7 @@ COOPERATION PARAMETERS:
 - Response delay: ${modifier.responseDelay}ms`;
   }
 
-  private static buildBusinessContextSection(context: any): string {
+  private static buildBusinessContextSection(context: BusinessContext): string {
     return `YOUR COMPANY CONTEXT:
 - Company: ${context.companyName}
 - Industry: ${context.industry}
@@ -77,7 +77,7 @@ ${context.budgetRange ? `- Budget range: ${context.budgetRange}` : ''}
 ${context.decisionTimeframe ? `- Timeline: ${context.decisionTimeframe}` : ''}`;
   }
 
-  private static buildProductAwarenessSection(product: any): string {
+  private static buildProductAwarenessSection(product: ProductContext): string {
     return `PRODUCT AWARENESS:
 You may have heard of ${product.productName} as a ${product.category} solution.
 You know they claim to ${product.valuePropositions[0]}.

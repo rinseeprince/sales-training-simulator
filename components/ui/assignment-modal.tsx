@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
+import { User } from '@/lib/types'
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { 
   Search, 
   Calendar as CalendarIcon, 
-  User, 
+  User as UserIcon, 
   Mail, 
   Users,
   X,
@@ -125,7 +126,7 @@ export function AssignmentModal({ isOpen, onClose, scenario }: AssignmentModalPr
         
         const apiData = await response.json()
         return { data: apiData.users, error: null }
-      }) as any
+      }) as { data: User[] | null; error: Error | null }
       
       if (error) {
         throw error
@@ -286,7 +287,7 @@ export function AssignmentModal({ isOpen, onClose, scenario }: AssignmentModalPr
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden">
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden z-[70]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
@@ -304,7 +305,7 @@ export function AssignmentModal({ isOpen, onClose, scenario }: AssignmentModalPr
             <p className="text-sm text-slate-600 line-clamp-2">{scenario?.prompt}</p>
             {scenario?.prospect_name && (
               <div className="flex items-center gap-1 mt-2">
-                <User className="h-3 w-3 text-slate-400" />
+                <UserIcon className="h-3 w-3 text-slate-400" />
                 <span className="text-xs text-slate-500">Prospect: {scenario.prospect_name}</span>
               </div>
             )}
@@ -334,7 +335,7 @@ export function AssignmentModal({ isOpen, onClose, scenario }: AssignmentModalPr
                     </div>
                   ) : filteredUsers.length === 0 ? (
                     <div className="text-center py-8 text-slate-500">
-                      <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <UserIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No users found</p>
                     </div>
                   ) : (
@@ -347,7 +348,7 @@ export function AssignmentModal({ isOpen, onClose, scenario }: AssignmentModalPr
                         >
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                              <User className="h-4 w-4 text-primary" />
+                              <UserIcon className="h-4 w-4 text-primary" />
                             </div>
                             <div>
                               <p className="font-medium text-slate-900">{user.name}</p>
@@ -391,7 +392,7 @@ export function AssignmentModal({ isOpen, onClose, scenario }: AssignmentModalPr
                     variant="outline"
                     className="flex items-center gap-2 px-3 py-1"
                   >
-                    <User className="h-3 w-3" />
+                    <UserIcon className="h-3 w-3" />
                     <span>{user.name}</span>
                     <Button
                       size="sm"
@@ -443,6 +444,7 @@ export function AssignmentModal({ isOpen, onClose, scenario }: AssignmentModalPr
           <Button 
             onClick={handleAssign} 
             disabled={selectedUsers.length === 0 || isAssigning}
+            className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium"
           >
             {isAssigning ? 'Assigning...' : `Assign to ${selectedUsers.length} User${selectedUsers.length === 1 ? '' : 's'}`}
           </Button>

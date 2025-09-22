@@ -4,7 +4,6 @@ import { CallTranscript } from '@/lib/types';
 import { 
   FILLER_WORDS, 
   CONFIDENCE_INDICATORS,
-  QUESTION_QUALITY,
   OBJECTION_TECHNIQUES 
 } from '../config/scoring-weights';
 

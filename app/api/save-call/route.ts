@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors, openai } from '@/lib/api-utils';
+import { SaveCallRequestBody, SaveCallResponse, TranscriptEntry, EnhancedScoring } from '@/lib/types';
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     validateEnvVars();
 
     // Parse request body
-    const body = await req.json();
+    const body: SaveCallRequestBody = await req.json();
     const { 
       callId,
       transcript, 
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
     let objectionsHandled = 0;
     let ctaUsed = false;
     let sentiment = 'neutral';
-    let enhancedScoring: any = null;
+    let enhancedScoring: EnhancedScoring | null = null;
 
     // Check if we have existing enhanced scoring data to prevent regeneration
     if (existingEnhancedScoring) {
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
       console.log('Transcript structure:', {
         length: transcript.length,
         firstEntry: transcript[0],
-        sample: transcript.slice(0, 2).map((entry: any, i: number) => ({
+        sample: transcript.slice(0, 2).map((entry: TranscriptEntry, i: number) => ({
           index: i,
           keys: Object.keys(entry || {}),
           speaker: entry?.speaker,
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
       
       // Format transcript for AI analysis
       const transcriptText = transcript
-        .map((turn: any) => {
+        .map((turn: TranscriptEntry) => {
           const speaker = turn.speaker || turn.role || 'UNKNOWN';
           const message = turn.message || turn.text || turn.content || '';
           return `${speaker.toUpperCase()}: ${message}`;
@@ -214,7 +215,7 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         console.error('Raw AI response:', aiEvaluation);
         
         // Calculate basic fallback values
-        const repMessages = transcript.filter((t: any) => (t.speaker || '').toLowerCase() === 'rep');
+        const repMessages = transcript.filter((t: TranscriptEntry) => (t.speaker || '').toLowerCase() === 'rep');
         const calculatedTalkRatio = transcript.length > 0 ? (repMessages.length / transcript.length) * 100 : 50;
         
         evaluation = {
@@ -272,7 +273,7 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
       console.error('Scenario-aware call scoring failed:', scoringError);
       // Fall back to basic scoring if new scoring fails
       try {
-        const repMessages = transcript.filter((t: any) => (t.speaker || '').toLowerCase() === 'rep');
+        const repMessages = transcript.filter((t: TranscriptEntry) => (t.speaker || '').toLowerCase() === 'rep');
         const calculatedTalkRatio = transcript.length > 0 ? (repMessages.length / transcript.length) * 100 : 50;
         
         score = 50;
@@ -416,6 +417,6 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new NextResponse(null, { status: 200, headers: corsHeaders });
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff, Loader2, Check, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -87,7 +86,7 @@ export function SimpleSignUpForm({ onSuccess }: SimpleSignUpFormProps) {
           <Alert>
             <Check className="h-4 w-4" />
             <AlertDescription>
-              We've sent a verification email to <strong>{formData.email}</strong>. 
+              We&apos;ve sent a verification email to <strong>{formData.email}</strong>. 
               Please check your email and click the verification link.
             </AlertDescription>
           </Alert>

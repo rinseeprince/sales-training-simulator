@@ -22,7 +22,7 @@ export function errorResponse(message: string, status: number = 400) {
 }
 
 // Success response helper
-export function successResponse(data: any, status: number = 200, headers?: Record<string, string>) {
+export function successResponse(data: unknown, status: number = 200, headers?: Record<string, string>) {
   return NextResponse.json(data, { status, headers });
 }
 

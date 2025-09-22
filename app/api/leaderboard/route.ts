@@ -192,6 +192,6 @@ function getCertifications(averageScore: number, totalCalls: number): string[] {
   return certifications;
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new NextResponse(null, { status: 200, headers: corsHeaders });
 } 

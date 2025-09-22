@@ -37,7 +37,7 @@ export class ContextExtractor {
   }
 
   private extractCompanyInfo(): { name?: string; size?: string; industry?: string } {
-    const info: any = {};
+    const info: { name?: string; size?: string; industry?: string } = {};
     
     this.transcript.forEach(turn => {
       const lower = turn.message.toLowerCase();

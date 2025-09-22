@@ -14,7 +14,7 @@ import { AI_MODEL_CONFIG } from '../config/ai-model-config';
 export interface ParsedScenario {
   businessContext: BusinessContext;
   productContext: ProductContext;
-  additionalContext?: any;
+  additionalContext?: Record<string, unknown>;
 }
 
 export class BusinessModelParser {
@@ -92,7 +92,7 @@ Provide a JSON response with this structure:
 Extract as much relevant information as possible. Make intelligent inferences based on industry standards when specific details aren't provided.`;
   }
 
-  private validateAndEnrichParsedData(parsed: any): ParsedScenario {
+  private validateAndEnrichParsedData(parsed: Record<string, unknown>): ParsedScenario {
     // Ensure all required fields exist
     const businessContext: BusinessContext = {
       companyName: parsed.businessContext?.companyName || 'Prospect Company',

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { AuthModal } from '@/components/auth/auth-modal'
-import { Mic, Plus, BarChart3, ChevronDown, Settings, DollarSign, Shield, User, Menu, ChevronUp, LogIn, UserPlus } from 'lucide-react'
+import { Mic, Plus, BarChart3, Settings, DollarSign, Shield, User, LogIn, UserPlus } from 'lucide-react'
 
 export function Homepage() {
   const router = useRouter()
@@ -144,7 +144,7 @@ export function Homepage() {
             {/* Hero Section */}
             <div className="space-y-4">
               <h1 className="text-3xl font-semibold text-slate-900">
-                What's on the agenda today?
+                What&apos;s on the agenda today?
               </h1>
               <p className="text-base font-normal text-slate-500">
                 Practice your sales skills with AI-powered roleplays

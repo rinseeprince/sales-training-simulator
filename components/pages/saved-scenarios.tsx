@@ -42,15 +42,15 @@ import {
   AlertCircle,
   Calendar,
   User,
-  Filter
+  X
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
-import { supabaseClient as supabase } from '@/lib/supabase-auth'
 import { useToast } from '@/hooks/use-toast'
-import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { AssignmentModal } from '@/components/ui/assignment-modal'
+import { AssignmentDetailsModal } from '@/components/ui/assignment-details-modal'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface SavedScenario {
   id: string
@@ -96,9 +96,14 @@ export function SavedScenarios() {
   const [userRole, setUserRole] = useState<string>('user')
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false)
   const [scenarioToAssign, setScenarioToAssign] = useState<SavedScenario | null>(null)
+  const [assignmentDetailsModalOpen, setAssignmentDetailsModalOpen] = useState(false)
+  const [assignmentToStart, setAssignmentToStart] = useState<ScenarioAssignment | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [scenarioToDelete, setScenarioToDelete] = useState<SavedScenario | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [selectedScenarios, setSelectedScenarios] = useState<Set<string>>(new Set())
+  const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false)
   
   // Define load functions with useCallback to prevent recreation
   const loadUserRole = useCallback(async () => {
@@ -242,32 +247,9 @@ export function SavedScenarios() {
   const handleRunAssignment = (assignment: ScenarioAssignment) => {
     if (!assignment.scenario) return
     
-    // Store scenario data with assignment ID
-    localStorage.setItem('selectedScenario', JSON.stringify({
-      title: assignment.scenario.title,
-      prompt: assignment.scenario.prompt,
-      prospectName: assignment.scenario.prospect_name,
-      duration: assignment.scenario.duration,
-      voice: assignment.scenario.voice,
-      assignmentId: assignment.id,
-      enableStreaming: true,
-      timestamp: Date.now()
-    }))
-    
-    // Update assignment status to in_progress if not started
-    if (assignment.status === 'not_started') {
-      supabase
-        .from('scenario_assignments')
-        .update({ status: 'in_progress', updated_at: new Date().toISOString() })
-        .eq('id', assignment.id)
-        .then(() => {
-          // Reload assignments to reflect the change
-          loadAssignments()
-        })
-    }
-    
-    // Navigate to scenario builder
-    router.push('/scenario-builder')
+    // Open assignment details modal instead of navigating to scenario builder
+    setAssignmentToStart(assignment)
+    setAssignmentDetailsModalOpen(true)
   }
   
   const handleEditScenario = (scenario: SavedScenario) => {
@@ -318,6 +300,70 @@ export function SavedScenarios() {
   const handleAssignScenario = (scenario: SavedScenario) => {
     setScenarioToAssign(scenario)
     setAssignmentModalOpen(true)
+  }
+
+  const handleSelectScenario = (scenarioId: string, checked: boolean) => {
+    const newSelected = new Set(selectedScenarios)
+    if (checked) {
+      newSelected.add(scenarioId)
+    } else {
+      newSelected.delete(scenarioId)
+    }
+    setSelectedScenarios(newSelected)
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedScenarios(new Set(filteredScenarios.map(s => s.id)))
+    } else {
+      setSelectedScenarios(new Set())
+    }
+  }
+
+  const handleBatchDeleteClick = () => {
+    setBatchDeleteDialogOpen(true)
+  }
+
+  const handleBatchDeleteConfirm = async () => {
+    try {
+      setIsBatchDeleting(true)
+      
+      const response = await fetch('/api/scenarios/batch', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scenarioIds: Array.from(selectedScenarios)
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete scenarios')
+      }
+      
+      toast({
+        title: "Success",
+        description: `${selectedScenarios.size} scenario${selectedScenarios.size === 1 ? '' : 's'} deleted successfully`,
+      })
+      
+      setBatchDeleteDialogOpen(false)
+      setSelectedScenarios(new Set())
+      loadScenarios()
+    } catch (error) {
+      console.error('Error deleting scenarios:', error)
+      toast({
+        title: "Error",
+        description: "Failed to delete scenarios",
+        variant: "destructive",
+      })
+    } finally {
+      setIsBatchDeleting(false)
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedScenarios(new Set())
   }
   
   // Filter scenarios based on search
@@ -371,7 +417,7 @@ export function SavedScenarios() {
           <h1 className="text-3xl font-bold text-slate-900">Saved Scenarios</h1>
           <p className="text-slate-600 mt-2">Manage your training scenarios and assignments</p>
         </div>
-        <Button onClick={() => router.push('/scenario-builder')} className="rounded-xl">
+        <Button onClick={() => router.push('/scenario-builder')} className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
           Create New Scenario
         </Button>
       </div>
@@ -413,19 +459,67 @@ export function SavedScenarios() {
               <p className="text-slate-500">No scenarios found</p>
             </div>
           ) : (
-            <div className="border rounded-xl overflow-hidden">
+            <div className="space-y-4">
+              {/* Bulk Actions Bar */}
+              {selectedScenarios.size > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-xl"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-blue-900">
+                      {selectedScenarios.size} scenario{selectedScenarios.size === 1 ? '' : 's'} selected
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearSelection}
+                      className="text-blue-600 hover:text-blue-700 h-8"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Clear
+                    </Button>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleBatchDeleteClick}
+                    className="h-8"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete Selected
+                  </Button>
+                </motion.div>
+              )}
+              
+              <div className="border rounded-xl overflow-hidden">
               <Table>
-                                 <TableHeader>
-                   <TableRow className="bg-slate-50">
-                     <TableHead className="font-semibold">Title</TableHead>
-                     <TableHead className="font-semibold">Prospect</TableHead>
-                     <TableHead className="font-semibold">Created</TableHead>
-                     <TableHead className="font-semibold">Actions</TableHead>
-                   </TableRow>
-                 </TableHeader>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={filteredScenarios.length > 0 && selectedScenarios.size === filteredScenarios.length}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all scenarios"
+                      />
+                    </TableHead>
+                    <TableHead className="font-semibold">Title</TableHead>
+                    <TableHead className="font-semibold">Prospect</TableHead>
+                    <TableHead className="font-semibold">Created</TableHead>
+                    <TableHead className="font-semibold">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {filteredScenarios.map((scenario) => (
                     <TableRow key={scenario.id} className="hover:bg-slate-50/50">
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedScenarios.has(scenario.id)}
+                          onCheckedChange={(checked) => handleSelectScenario(scenario.id, checked as boolean)}
+                          aria-label={`Select ${scenario.title}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         <div>
                           <p className="font-semibold text-slate-900">{scenario.title}</p>
@@ -448,7 +542,7 @@ export function SavedScenarios() {
                           <Button
                             size="sm"
                             onClick={() => handleRunScenario(scenario)}
-                            className="rounded-lg"
+                            className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
                           >
                             <Play className="h-4 w-4 mr-1" />
                             Run
@@ -489,6 +583,7 @@ export function SavedScenarios() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </div>
           )}
         </TabsContent>
@@ -570,7 +665,7 @@ export function SavedScenarios() {
                           <Button
                             size="sm"
                             onClick={() => handleRunAssignment(assignment)}
-                            className="rounded-lg"
+                            className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
                           >
                             <Play className="h-4 w-4 mr-1" />
                             Start
@@ -592,7 +687,7 @@ export function SavedScenarios() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Scenario</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{scenarioToDelete?.title}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{scenarioToDelete?.title}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -606,13 +701,43 @@ export function SavedScenarios() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-              </AlertDialog>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation Dialog */}
+      <AlertDialog open={batchDeleteDialogOpen} onOpenChange={setBatchDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Scenarios</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedScenarios.size} scenario{selectedScenarios.size === 1 ? '' : 's'}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBatchDeleteConfirm}
+              disabled={isBatchDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isBatchDeleting ? 'Deleting...' : 'Delete All'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
         
         {/* Assignment Modal */}
         <AssignmentModal
           isOpen={assignmentModalOpen}
           onClose={() => setAssignmentModalOpen(false)}
           scenario={scenarioToAssign}
+        />
+
+        {/* Assignment Details Modal */}
+        <AssignmentDetailsModal
+          isOpen={assignmentDetailsModalOpen}
+          onClose={() => setAssignmentDetailsModalOpen(false)}
+          assignment={assignmentToStart}
+          onAssignmentUpdated={loadAssignments}
         />
       </div>
     )

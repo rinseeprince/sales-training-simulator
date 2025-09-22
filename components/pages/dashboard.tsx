@@ -2,7 +2,6 @@
 
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Play, FileText, Clock, CheckCircle, AlertCircle, Trophy, Target, TrendingUp, Phone } from 'lucide-react'
@@ -36,32 +35,32 @@ interface Stats {
   improvement: number
 }
 
-const recentSimulations = [
-  {
-    id: 1,
-    title: 'Cold Outbound - Tech Startup',
-    status: 'completed',
-    score: 85,
-    date: '2024-01-15',
-    duration: '12 min'
-  },
-  {
-    id: 2,
-    title: 'Objection Handling - Enterprise',
-    status: 'awaiting_review',
-    score: null,
-    date: '2024-01-14',
-    duration: '18 min'
-  },
-  {
-    id: 3,
-    title: 'Negotiation - SaaS Deal',
-    status: 'certified',
-    score: 92,
-    date: '2024-01-13',
-    duration: '25 min'
-  }
-]
+// const recentSimulations = [
+//   {
+//     id: 1,
+//     title: 'Cold Outbound - Tech Startup',
+//     status: 'completed',
+//     score: 85,
+//     date: '2024-01-15',
+//     duration: '12 min'
+//   },
+//   {
+//     id: 2,
+//     title: 'Objection Handling - Enterprise',
+//     status: 'awaiting_review',
+//     score: null,
+//     date: '2024-01-14',
+//     duration: '18 min'
+//   },
+//   {
+//     id: 3,
+//     title: 'Negotiation - SaaS Deal',
+//     status: 'certified',
+//     score: 92,
+//     date: '2024-01-13',
+//     duration: '25 min'
+//   }
+// ]
 
 const savedScenarios = [
   {

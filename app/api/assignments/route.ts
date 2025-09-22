@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, errorResponse, successResponse, corsHeaders, handleCors } from '@/lib/api-utils'
+import { errorResponse, successResponse, corsHeaders, handleCors, supabase } from '@/lib/api-utils'
 import { createClient } from '@supabase/supabase-js'
+import { CreateAssignmentsRequestBody, UpdateAssignmentRequestBody, AssignmentData } from '@/lib/types'
 
 // GET: Fetch assignments for a user or by a manager
 export async function GET(req: NextRequest) {
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     const corsResponse = handleCors(req)
     if (corsResponse) return corsResponse
 
-    const body = await req.json()
+    const body: CreateAssignmentsRequestBody = await req.json()
     
     // Support both formats for flexibility
     const assignments = body.assignments || null
@@ -141,12 +142,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Create assignments for each user
-    const legacyAssignments = assignedToUsers.map((userId: string) => ({
+    const legacyAssignments: AssignmentData[] = assignedToUsers.map((userId: string) => ({
       scenario_id: scenarioId,
       assigned_by: assignedBy,
       assigned_to_user: userId,
       deadline: deadline || null,
-      status: 'not_started',
+      status: 'not_started' as const,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }))
@@ -193,15 +194,15 @@ export async function PATCH(req: NextRequest) {
     const corsResponse = handleCors(req)
     if (corsResponse) return corsResponse
 
-    const body = await req.json()
+    const body: UpdateAssignmentRequestBody = await req.json()
     const { assignmentId, status, callId, approvedBy } = body
 
     if (!assignmentId || !status) {
       return errorResponse('assignmentId and status are required', 400)
     }
 
-    const updateData: any = {
-      status,
+    const updateData: Partial<AssignmentData & { call_id?: string; approved_by?: string }> = {
+      status: status as 'not_started' | 'in_progress' | 'completed' | 'approved',
       updated_at: new Date().toISOString()
     }
 
@@ -240,6 +241,6 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new NextResponse(null, { status: 200, headers: corsHeaders })
 } 

@@ -141,7 +141,7 @@ export async function signUpWithEmail(email: string, password: string, name?: st
       message: 'Failed to create account',
     };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Sign up error:', error);
     return {
       success: false,
@@ -188,7 +188,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
       message: 'Sign in failed',
     };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Sign in error:', error);
     return {
       success: false,

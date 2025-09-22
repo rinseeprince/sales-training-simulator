@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { supabase, errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors } from '@/lib/api-utils'
+import { errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors } from '@/lib/api-utils'
 import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
@@ -77,6 +77,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function OPTIONS(request: NextRequest) {
+export async function OPTIONS(_request: NextRequest) {
   return new Response(null, { status: 200, headers: corsHeaders })
 } 

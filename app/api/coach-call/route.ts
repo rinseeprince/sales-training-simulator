@@ -232,6 +232,6 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS(_req: NextRequest) {
   return new NextResponse(null, { status: 200, headers: corsHeaders });
 }

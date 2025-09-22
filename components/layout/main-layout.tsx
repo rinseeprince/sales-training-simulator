@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Home, FileText, Phone, BarChart3, Settings, Users, Shield, Menu, X, LogOut, Moon, Sun, BookOpen, History, DollarSign, ChevronDown, ChevronUp, Plus, ArrowLeft, ArrowRight, HelpCircle } from 'lucide-react'
+import { Home, FileText, Settings, Users, Shield, Menu, LogOut, Moon, Sun, BookOpen, History, DollarSign, Plus, ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
@@ -47,26 +47,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
 
-  // Load user profile with avatar
-  useEffect(() => {
-    if (user?.id) {
-      loadUserProfile()
-    }
-  }, [user?.id, user?.avatar_url])
-
-  // Listen for avatar updates
-  useEffect(() => {
-    const handleAvatarUpdate = () => {
-      loadUserProfile()
-    }
-
-    window.addEventListener('avatar-updated', handleAvatarUpdate)
-    return () => {
-      window.removeEventListener('avatar-updated', handleAvatarUpdate)
-    }
-  }, [user?.id])
-
-  const loadUserProfile = async () => {
+  // Define loadUserProfile function first
+  const loadUserProfile = useCallback(async () => {
     if (!user?.id) return
     
     try {
@@ -84,7 +66,26 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Failed to load user profile:', error)
     }
-  }
+  }, [user?.id])
+
+  // Load user profile with avatar
+  useEffect(() => {
+    if (user?.id) {
+      loadUserProfile()
+    }
+  }, [user?.id, user?.avatar_url, loadUserProfile])
+
+  // Listen for avatar updates
+  useEffect(() => {
+    const handleAvatarUpdate = () => {
+      loadUserProfile()
+    }
+
+    window.addEventListener('avatar-updated', handleAvatarUpdate)
+    return () => {
+      window.removeEventListener('avatar-updated', handleAvatarUpdate)
+    }
+  }, [loadUserProfile])
 
   const handleSidebarToggle = (newState: boolean) => {
     setSidebarOpen(newState)
@@ -94,7 +95,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   }
 
   // Flatten navigation sections for easy access
-  const allNavigationItems = navigationSections.flatMap(section => section.items)
+  // const allNavigationItems = navigationSections.flatMap(section => section.items)
 
   return (
     <div className="min-h-screen bg-background">

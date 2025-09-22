@@ -1,17 +1,19 @@
 // Conversation Management Types
 
+export interface ConversationMetadata {
+  phase?: string;
+  sentiment?: string;
+  intent?: string;
+  entities?: Record<string, unknown>;
+  confidence?: number;
+}
+
 export interface ConversationTurn {
   id: string;
   speaker: 'rep' | 'prospect';
   message: string;
   timestamp: string;
-  metadata?: {
-    phase?: string;
-    sentiment?: string;
-    intent?: string;
-    entities?: any;
-    confidence?: number;
-  };
+  metadata?: ConversationMetadata;
 }
 
 export interface ConversationContext {
@@ -29,10 +31,16 @@ export interface ConversationContext {
   };
 }
 
+export interface ConversationEventDetails {
+  description?: string;
+  value?: string | number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface ConversationEvent {
   type: 'phase-change' | 'objection' | 'commitment' | 'question' | 'value-prop' | 'closing-attempt';
   timestamp: string;
-  details: any;
+  details: ConversationEventDetails;
   impact: 'positive' | 'neutral' | 'negative';
 }
 

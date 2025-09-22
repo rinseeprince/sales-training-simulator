@@ -11,8 +11,7 @@ import {
   CTAAnalysis,
   ConfidenceAnalysis,
   SentimentAnalysis,
-  MethodologyAnalysis,
-  CoachingFeedback
+  MethodologyAnalysis
 } from '../types/scoring-types';
 import { CallType } from '../types/prospect-types';
 import { 

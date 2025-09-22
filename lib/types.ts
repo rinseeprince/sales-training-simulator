@@ -10,12 +10,20 @@ export interface User {
   updated_at: string;
 }
 
+export interface ScenarioSettings {
+  voiceId?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  duration?: number;
+  industry?: string;
+  customFields?: Record<string, string | number | boolean>;
+}
+
 export interface Scenario {
   id: string;
   user_id: string;
   title: string;
   prompt: string;
-  settings: Record<string, any>;
+  settings: ScenarioSettings;
   persona: string;
   difficulty: 'easy' | 'medium' | 'hard';
   industry: string;
@@ -237,7 +245,7 @@ export interface SaveScenarioRequest {
   difficulty?: string;
   industry?: string;
   tags?: string[];
-  settings?: Record<string, any>;
+  settings?: ScenarioSettings;
 }
 
 export interface AuthRequest {
@@ -248,9 +256,31 @@ export interface AuthRequest {
   department?: string;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  aud: string;
+  role?: string;
+  email_confirmed_at?: string;
+  phone?: string;
+  created_at: string;
+  updated_at: string;
+  user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+}
+
+export interface AuthSession {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  expires_at?: number;
+  token_type: string;
+  user: AuthUser;
+}
+
 export interface AuthResponse {
-  user: any;
-  session?: any;
+  user: AuthUser | null;
+  session?: AuthSession | null;
   profile?: User | null;
   message: string;
 }
@@ -271,4 +301,87 @@ export interface EnvironmentVariables {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   DEFAULT_VOICE_ID?: string; // Legacy - will be deprecated
+}
+
+// Additional API Types
+export interface TranscriptEntry {
+  speaker?: 'rep' | 'ai' | 'prospect';
+  role?: 'rep' | 'ai' | 'prospect';
+  message?: string;
+  text?: string;
+  content?: string;
+  timestamp?: string;
+}
+
+export interface SaveCallRequestBody {
+  callId?: string;
+  transcript: TranscriptEntry[];
+  repId: string;
+  scenarioName: string;
+  scenarioPrompt?: string;
+  scenario_prompt?: string;
+  scenario_prospect_name?: string;
+  scenario_voice?: string;
+  duration?: number;
+  audioUrl?: string;
+  conversationHistory?: TranscriptEntry[];
+  scoreOnly?: boolean;
+  existingEnhancedScoring?: EnhancedScoring | null;
+  assignmentId?: string;
+}
+
+export interface SaveCallResponse {
+  callId?: string;
+  score: number;
+  feedback: string[];
+  talk_ratio: number;
+  objections_handled: number;
+  cta_used: boolean;
+  sentiment: string;
+  success: boolean;
+  enhancedScoring?: EnhancedScoring;
+}
+
+export interface AssignmentData {
+  id?: string;
+  scenario_id: string;
+  assigned_by: string;
+  assigned_to_user: string;
+  deadline?: string | null;
+  status: 'not_started' | 'in_progress' | 'completed' | 'approved';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateAssignmentsRequestBody {
+  assignments?: AssignmentData[];
+  scenarioId?: string;
+  assignedBy?: string;
+  assignedToUsers?: string[];
+  deadline?: string;
+}
+
+export interface UpdateAssignmentRequestBody {
+  assignmentId: string;
+  status: string;
+  callId?: string;
+  approvedBy?: string;
+}
+
+export interface ScenarioData {
+  prompt?: string;
+  voice?: string;
+  scenario?: string;
+  [key: string]: unknown;
+}
+
+export interface NotificationData {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  metadata?: Record<string, unknown>;
 } 

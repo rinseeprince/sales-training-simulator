@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import { TranscriptEntry } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -158,10 +159,24 @@ const MiniSparkline = ({ points = [] }: { points?: number[] }) => {
   )
 }
 
+interface CoachingData {
+  strengths?: string[];
+  areasForImprovement?: string[];
+  improvements?: string[];
+  keyMoments?: Array<{
+    moment: string;
+    feedback: string;
+  }>;
+  coachingTips?: string[];
+  overallScore?: number;
+  scenarioFit?: number;
+  readyForRealCustomers?: boolean;
+}
+
 const CoachingPanel = ({ 
   data
 }: { 
-  data: any; 
+  data: CoachingData; 
 }) => {
   const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({
     strengths: true,
@@ -291,10 +306,10 @@ interface TempCallData {
   scenarioVoice?: string;
   duration: string;
   audioUrl: string;
-  conversationHistory: any[];
-  transcript: any[];
-  enhanced_scoring?: any;
-  enhancedScoring?: any;
+  conversationHistory: TranscriptEntry[];
+  transcript: TranscriptEntry[];
+  enhanced_scoring?: CoachingData;
+  enhancedScoring?: CoachingData;
   created_at?: string;
   assignmentId?: string;
 }
@@ -374,9 +389,9 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
   const [tempCallData, setTempCallData] = useState<TempCallData | null>(null)
   const [isSavingCall, setIsSavingCall] = useState(false)
   const [callSaved, setCallSaved] = useState(false)
-  const [coachingFeedback, setCoachingFeedback] = useState<any>(null)
+  const [coachingFeedback, setCoachingFeedback] = useState<CoachingData | null>(null)
   const [isLoadingCoaching, setIsLoadingCoaching] = useState(false)
-  const [mostRecentCall, setMostRecentCall] = useState<any>(null)
+  const [mostRecentCall, setMostRecentCall] = useState<TempCallData | null>(null)
   const [loadingRecentCall, setLoadingRecentCall] = useState(false)
 
   // Check for temporary call data on mount
@@ -409,7 +424,7 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
     } else if (tempCallData === null && !call && !mostRecentCall) {
       setSimulationName('Enterprise Software Demo') // Default fallback
     }
-  }, [call?.scenario_name, mostRecentCall?.scenario_name, tempCallData, callSaved]) // Include callSaved in dependencies
+  }, [call?.scenario_name, mostRecentCall?.scenario_name, tempCallData, callSaved, call, mostRecentCall]) // Include call and mostRecentCall in dependencies
 
   const handleSaveSimulationName = async () => {
     if (!callId || !simulationName.trim()) return
@@ -693,7 +708,7 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
     };
     
     loadCoachingFeedback();
-  }, [safeDisplayData.transcript, safeDisplayData.enhancedScoring]);
+  }, [safeDisplayData.transcript, safeDisplayData.enhancedScoring, coachingFeedback, isLoadingCoaching]);
   
   // Debug logging (only when explicitly needed)
   // useEffect(() => {

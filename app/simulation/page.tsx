@@ -10,7 +10,7 @@ export default function SimulationPage() {
   const { user, isLoading } = useSupabaseAuth()
   const router = useRouter()
 
-  // Force redirect to scenario builder - this page should only be accessed through scenario builder
+  // Ensure valid scenario data exists - this page can be accessed from scenario builder or assignment modal
   useEffect(() => {
     const savedScenario = localStorage.getItem('currentScenario')
     

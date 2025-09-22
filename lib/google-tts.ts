@@ -1,5 +1,4 @@
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
-import { RegionalVoice } from './types';
 import { getRegionalVoiceById } from './voice-constants';
 
 let googleTTSClient: TextToSpeechClient | null = null;
@@ -45,9 +44,21 @@ export interface GoogleTTSOptions {
  * Main function to generate Google TTS audio - compatible with ElevenLabs interface
  * Returns the same format as ElevenLabs for seamless migration
  */
+interface VoiceSettings {
+  voiceId?: string;
+  pitch?: number;
+  speed?: number;
+  emotionalTone?: string;
+  stability?: number;
+  similarityBoost?: number;
+  style?: number;
+  useSpeakerBoost?: boolean;
+  region?: 'US' | 'UK';
+}
+
 export async function generateGoogleTTSAudio(
   text: string, 
-  voiceSettings: any = {}
+  voiceSettings: VoiceSettings = {}
 ): Promise<{ success: boolean; audioBase64?: string; error?: string; fallbackReason?: string }> {
   try {
     const client = await getGoogleTTSClient();
@@ -109,7 +120,7 @@ export async function generateGoogleTTSAudio(
  * Convert ElevenLabs voice settings to Google TTS parameters
  * Maintains compatibility with existing voiceSettings objects
  */
-function convertElevenLabsToGoogleTTS(elevenLabsSettings: any = {}) {
+function convertElevenLabsToGoogleTTS(elevenLabsSettings: VoiceSettings = {}) {
   // Map ElevenLabs voiceId to Google TTS voice
   const voiceMapping = getGoogleVoiceFromElevenLabs(elevenLabsSettings.voiceId);
   
