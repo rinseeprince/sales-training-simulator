@@ -20,7 +20,7 @@ export default function AdminPage() {
     return null
   }
 
-  if (user.subscription_status !== 'admin') {
+  if (user.role !== 'admin' && user.role !== 'manager') {
     redirect('/')
   }
 

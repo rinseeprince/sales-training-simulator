@@ -21,6 +21,17 @@ export async function DELETE(
 
     console.log('Deleting call:', { callId })
 
+    // First, update any scenario_assignments that reference this call to set call_id to NULL
+    const { error: updateError } = await supabase
+      .from('scenario_assignments')
+      .update({ call_id: null })
+      .eq('call_id', callId)
+
+    if (updateError) {
+      console.error('Error updating scenario assignments:', updateError)
+      return errorResponse(`Failed to update assignments: ${updateError.message}`, 500)
+    }
+
     // Delete the call from the database
     const { data, error } = await supabase
       .from('calls')

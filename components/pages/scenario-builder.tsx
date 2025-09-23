@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Play, Settings, TrendingUp, Mic, User, MessageSquare, Lightbulb, Folder } from 'lucide-react'
+import { Play, Settings, TrendingUp, Mic, User, MessageSquare, Lightbulb } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
@@ -29,13 +29,11 @@ export function ScenarioBuilder() {
     voice: '',
     saveReuse: false
   })
-  const [savedScenarios, setSavedScenarios] = useState([])
 
 
-  // Load saved scenarios and check for edit mode
+
+  // Check for edit mode
   useEffect(() => {
-    loadSavedScenarios()
-    
     // Check if we're editing a scenario
     const editScenario = localStorage.getItem('editScenario')
     if (editScenario) {
@@ -77,55 +75,9 @@ export function ScenarioBuilder() {
     }
   }, [user])
 
-  const loadSavedScenarios = async () => {
-    if (!user) return
-    
-    try {
-      // Get the correct user ID from simple_users table
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-      const profileData = await profileResponse.json();
-      
-      if (!profileData.success) {
-        console.error('Failed to get user profile:', profileData.error);
-        return;
-      }
 
-      const actualUserId = profileData.userProfile.id;
-      
-      const response = await fetch(`/api/scenarios?userId=${actualUserId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setSavedScenarios(data.scenarios || [])
-      }
-    } catch (error) {
-      console.error('Error loading saved scenarios:', error)
-    }
-  }
 
-  interface SavedScenario {
-    id: string;
-    title: string;
-    prompt: string;
-    prospect_name?: string;
-    voice?: string;
-  }
 
-  const handleLoadScenario = (scenario: SavedScenario) => {
-    console.log('🔍 Loading saved scenario:', scenario);
-    setScenarioData({
-      title: scenario.title,
-      prompt: scenario.prompt,
-      prospectName: scenario.prospect_name || '', // Load saved prospect name
-      voice: scenario.voice || '',
-      saveReuse: true
-    })
-    console.log('🔍 Set scenario data with prospectName:', scenario.prospect_name);
-    
-    toast({
-      title: "Scenario Loaded",
-      description: `Loaded "${scenario.title}" successfully`,
-    })
-  }
 
   const handleStartSimulation = async () => {
     // Validate required fields
@@ -299,57 +251,7 @@ export function ScenarioBuilder() {
       </motion.div>
 
       <div className="space-y-6">
-        {/* Load Saved Scenario Section */}
-        {savedScenarios.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.05 }}
-            className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
-          >
-            <div className="mb-6">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-1">Load Saved Scenario</h3>
-                  <p className="text-sm text-slate-500">Start with a previously saved scenario template</p>
-                </div>
-                <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Folder className="h-4 w-4 text-emerald-600" />
-                </div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="saved-scenario-select" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Choose a saved scenario</Label>
-              <Select onValueChange={(value) => {
-                if (value && value !== 'none') {
-                  const scenario = savedScenarios.find((s: SavedScenario) => s.id === value)
-                  if (scenario) {
-                    handleLoadScenario(scenario)
-                  }
-                }
-              }}>
-                <SelectTrigger className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary">
-                  <SelectValue placeholder="Select a saved scenario to load..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Select a scenario...</SelectItem>
-                  {savedScenarios.map((scenario: SavedScenario) => (
-                    <SelectItem key={scenario.id} value={scenario.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <div className="flex-1">
-                          <div className="font-medium">{scenario.title}</div>
-                          <div className="text-xs text-slate-500">
-                            {scenario.voice && `${scenario.voice}`}
-                          </div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </motion.div>
-        )}
+
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Main Form - Takes 2 columns */}

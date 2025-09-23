@@ -410,17 +410,27 @@ export function SavedScenarios() {
   const isManagerOrAdmin = userRole === 'manager' || userRole === 'admin'
   
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Compressed Hero Bar - Similar to All Simulations */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] px-6 py-4 h-20"
+      >
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Saved Scenarios</h1>
-          <p className="text-slate-600 mt-2">Manage your training scenarios and assignments</p>
+          <h1 className="text-xl font-semibold text-slate-900">Saved Scenarios</h1>
+          <p className="text-sm text-slate-500">
+            Manage your training scenarios and assignments
+          </p>
         </div>
-        <Button onClick={() => router.push('/scenario-builder')} className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
+        <Button 
+          onClick={() => router.push('/scenario-builder')} 
+          className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium text-sm"
+        >
           Create New Scenario
         </Button>
-      </div>
+      </motion.div>
       
       {/* Search Bar */}
       <div className="relative">
@@ -494,95 +504,95 @@ export function SavedScenarios() {
               )}
               
               <div className="border rounded-xl overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50">
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={filteredScenarios.length > 0 && selectedScenarios.size === filteredScenarios.length}
-                        onCheckedChange={handleSelectAll}
-                        aria-label="Select all scenarios"
-                      />
-                    </TableHead>
-                    <TableHead className="font-semibold">Title</TableHead>
-                    <TableHead className="font-semibold">Prospect</TableHead>
-                    <TableHead className="font-semibold">Created</TableHead>
-                    <TableHead className="font-semibold">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredScenarios.map((scenario) => (
-                    <TableRow key={scenario.id} className="hover:bg-slate-50/50">
-                      <TableCell>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead className="w-12">
                         <Checkbox
-                          checked={selectedScenarios.has(scenario.id)}
-                          onCheckedChange={(checked) => handleSelectScenario(scenario.id, checked as boolean)}
-                          aria-label={`Select ${scenario.title}`}
+                          checked={filteredScenarios.length > 0 && selectedScenarios.size === filteredScenarios.length}
+                          onCheckedChange={handleSelectAll}
+                          aria-label="Select all scenarios"
                         />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <div>
-                          <p className="font-semibold text-slate-900">{scenario.title}</p>
-                          <p className="text-sm text-slate-500 line-clamp-1">{scenario.prompt}</p>
-                        </div>
-                      </TableCell>
-                                             <TableCell>
-                         <div className="flex items-center gap-1">
-                           <User className="h-4 w-4 text-slate-400" />
-                           <span className="text-slate-600">
-                             {scenario.prospect_name || 'Default'}
-                           </span>
-                         </div>
-                       </TableCell>
-                       <TableCell className="text-slate-600">
-                         {formatDate(scenario.created_at)}
-                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleRunScenario(scenario)}
-                            className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
-                          >
-                            <Play className="h-4 w-4 mr-1" />
-                            Run
-                          </Button>
-                          {isManagerOrAdmin && (
+                      </TableHead>
+                      <TableHead className="font-semibold">Title</TableHead>
+                      <TableHead className="font-semibold">Prospect</TableHead>
+                      <TableHead className="font-semibold">Created</TableHead>
+                      <TableHead className="font-semibold">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredScenarios.map((scenario) => (
+                      <TableRow key={scenario.id} className="hover:bg-slate-50/50">
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedScenarios.has(scenario.id)}
+                            onCheckedChange={(checked) => handleSelectScenario(scenario.id, checked as boolean)}
+                            aria-label={`Select ${scenario.title}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <div>
+                            <p className="font-semibold text-slate-900">{scenario.title}</p>
+                            <p className="text-sm text-slate-500 line-clamp-1">{scenario.prompt}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <User className="h-4 w-4 text-slate-400" />
+                            <span className="text-slate-600">
+                              {scenario.prospect_name || 'Default'}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600">
+                          {formatDate(scenario.created_at)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => handleAssignScenario(scenario)}
-                              className="rounded-lg"
+                              onClick={() => handleRunScenario(scenario)}
+                              className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
                             >
-                              <Users className="h-4 w-4" />
+                              <Play className="h-4 w-4 mr-1" />
+                              Run
                             </Button>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button size="sm" variant="ghost">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditScenario(scenario)}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleDeleteClick(scenario)}
-                                className="text-red-600"
+                            {isManagerOrAdmin && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleAssignScenario(scenario)}
+                                className="rounded-lg"
                               >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                                <Users className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="ghost">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleEditScenario(scenario)}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteClick(scenario)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             </div>
           )}
@@ -680,7 +690,7 @@ export function SavedScenarios() {
           )}
         </TabsContent>
       </Tabs>
-      
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

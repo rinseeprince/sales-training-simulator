@@ -12,9 +12,11 @@ interface ReviewModalProps {
   onClose: () => void
   callId: string | null
   title?: string
+  isManagerReview?: boolean
+  onReviewSubmit?: (reviewData: { status: string; feedback?: string; scoreOverride?: number }) => void
 }
 
-export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps) {
+export function ReviewModal({ isOpen, onClose, callId, title, isManagerReview, onReviewSubmit }: ReviewModalProps) {
   // Check for reviewCallId in URL on mount to support direct links
   useEffect(() => {
     if (!isOpen) {
@@ -94,6 +96,8 @@ export function ReviewModal({ isOpen, onClose, callId, title }: ReviewModalProps
                 <PostCallReview 
                   modalCallId={callId}
                   isInModal={true}
+                  isManagerReview={isManagerReview}
+                  onReviewSubmit={onReviewSubmit}
                 />
               ) : (
                 <div className="flex items-center justify-center h-64">

@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FileText, Clock, Search, Filter, Download, Settings, CheckCircle } from 'lucide-react'
+import { TemplateManagement } from '@/components/admin/template-management'
 
 const leaderboardData = [
   { id: 1, name: 'Sarah Johnson', calls: 47, avgScore: 89, certifications: 8, trend: '+5%' },
@@ -19,12 +20,6 @@ const leaderboardData = [
   { id: 5, name: 'Jessica Kim', calls: 33, avgScore: 87, certifications: 7, trend: '+15%' },
 ]
 
-const reviewQueue = [
-  { id: 1, rep: 'Sarah Johnson', scenario: 'Enterprise Demo', date: '2024-01-15', status: 'pending' },
-  { id: 2, rep: 'Mike Chen', scenario: 'Objection Handling', date: '2024-01-15', status: 'pending' },
-  { id: 3, rep: 'Emily Davis', scenario: 'Negotiation', date: '2024-01-14', status: 'reviewed' },
-  { id: 4, rep: 'Alex Rodriguez', scenario: 'Cold Outbound', date: '2024-01-14', status: 'pending' },
-]
 
 const scenarios = [
   { id: 1, title: 'Enterprise Software Demo', type: 'Warm Inbound', difficulty: 'Medium', uses: 23 },
@@ -68,8 +63,8 @@ export function AdminPanel() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-2">
           <TabsList className="grid w-full grid-cols-4 bg-slate-50 rounded-lg">
             <TabsTrigger value="leaderboard" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Leaderboard</TabsTrigger>
-            <TabsTrigger value="reviews" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Review Queue</TabsTrigger>
             <TabsTrigger value="scenarios" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Scenario Library</TabsTrigger>
+            <TabsTrigger value="templates" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Templates</TabsTrigger>
             <TabsTrigger value="settings" className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm">Settings</TabsTrigger>
           </TabsList>
         </div>
@@ -142,54 +137,6 @@ export function AdminPanel() {
           </motion.div>
         </TabsContent>
 
-        <TabsContent value="reviews" className="space-y-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle>Review Queue</CardTitle>
-                <CardDescription>
-                  Calls awaiting manager review and approval
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {reviewQueue.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex items-center space-x-4">
-                        {item.status === 'pending' ? (
-                          <Clock className="h-5 w-5 text-yellow-500" />
-                        ) : (
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        )}
-                        <div>
-                          <p className="font-medium">{item.rep}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {item.scenario} • {item.date}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant={item.status === 'pending' ? 'outline' : 'secondary'}>
-                          {item.status}
-                        </Badge>
-                        {item.status === 'pending' && (
-                          <Button size="sm">Review</Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
 
         <TabsContent value="scenarios" className="space-y-6">
           <motion.div
@@ -304,6 +251,10 @@ export function AdminPanel() {
               </CardContent>
             </Card>
           </motion.div>
+        </TabsContent>
+
+        <TabsContent value="templates" className="space-y-6">
+          <TemplateManagement />
         </TabsContent>
       </Tabs>
     </div>

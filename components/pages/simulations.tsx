@@ -169,6 +169,8 @@ export function Simulations() {
     
     setIsDeleting(true)
     try {
+      console.log('Deleting individual simulation:', simulationToDelete.id)
+      
       const response = await fetch(`/api/calls/${simulationToDelete.id}`, {
         method: 'DELETE',
       })
@@ -178,11 +180,27 @@ export function Simulations() {
         setSimulations(prev => prev.filter(sim => sim.id !== simulationToDelete.id))
         setDeleteDialogOpen(false)
         setSimulationToDelete(null)
+        
+        toast({
+          title: "Success",
+          description: "Simulation deleted successfully",
+        })
       } else {
-        console.error('Failed to delete simulation')
+        const errorText = await response.text()
+        console.error('Failed to delete simulation:', response.status, errorText)
+        toast({
+          title: "Error",
+          description: `Failed to delete simulation: ${response.status}`,
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error('Error deleting simulation:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete simulation",
+        variant: "destructive",
+      })
     } finally {
       setIsDeleting(false)
     }
@@ -215,26 +233,51 @@ export function Simulations() {
     try {
       setIsBatchDeleting(true)
       
+      if (!user) {
+        throw new Error('User not authenticated')
+      }
+
+      // Get the actual user ID from the user profile
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const profileData = await profileResponse.json()
+      
+      if (!profileData.success) {
+        throw new Error('Failed to get user profile')
+      }
+
+      const actualUserId = profileData.userProfile.id
+      const callIds = Array.from(selectedSimulations)
+      console.log('Attempting to delete simulations:', callIds, 'for user:', actualUserId)
+      
       const response = await fetch('/api/calls/batch', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          callIds: Array.from(selectedSimulations)
+          callIds: callIds,
+          userId: actualUserId
         }),
       })
       
+      console.log('Response status:', response.status)
+      
       if (!response.ok) {
-        throw new Error('Failed to delete simulations')
+        const errorText = await response.text()
+        console.error('API error response:', errorText)
+        throw new Error(`Failed to delete simulations: ${response.status} ${errorText}`)
       }
       
-      // Remove from local state
-      setSimulations(prev => prev.filter(sim => !selectedSimulations.has(sim.id)))
+      const result = await response.json()
+      console.log('Delete successful:', result)
+      
+      // Remove from local state - only remove the ones that were actually deleted
+      const deletedIds = result.deletedIds || callIds
+      setSimulations(prev => prev.filter(sim => !deletedIds.includes(sim.id)))
       
       toast({
         title: "Success",
-        description: `${selectedSimulations.size} simulation${selectedSimulations.size === 1 ? '' : 's'} deleted successfully`,
+        description: `${result.deletedCount || selectedSimulations.size} simulation${(result.deletedCount || selectedSimulations.size) === 1 ? '' : 's'} deleted successfully`,
       })
       
       setBatchDeleteDialogOpen(false)
@@ -243,7 +286,7 @@ export function Simulations() {
       console.error('Error deleting simulations:', error)
       toast({
         title: "Error",
-        description: "Failed to delete simulations",
+        description: error instanceof Error ? error.message : "Failed to delete simulations",
         variant: "destructive",
       })
     } finally {
@@ -297,15 +340,16 @@ export function Simulations() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
+              placeholder="Search simulations..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+              className="pl-10 pr-4 py-3 rounded-lg border-slate-200 focus:ring-primary"
             />
           </div>
           
           <div className="flex items-center space-x-3">
             <Select value={filterScore} onValueChange={setFilterScore}>
-              <SelectTrigger className="w-full sm:w-48 rounded-full border-slate-200 px-4 py-2 focus:ring-primary bg-slate-50 hover:bg-slate-100">
+              <SelectTrigger className="w-full sm:w-48 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary">
                 <Filter className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Filter by score" />
               </SelectTrigger>
@@ -333,7 +377,7 @@ export function Simulations() {
             </Select>
             
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-full sm:w-48 rounded-full border-slate-200 px-4 py-2 focus:ring-primary bg-slate-50 hover:bg-slate-100">
+              <SelectTrigger className="w-full sm:w-48 rounded-lg border-slate-200 px-4 py-3 focus:ring-primary">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>

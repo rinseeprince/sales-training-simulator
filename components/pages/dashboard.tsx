@@ -4,12 +4,21 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Play, FileText, Clock, CheckCircle, AlertCircle, Trophy, Target, TrendingUp, Phone } from 'lucide-react'
+import { Play, FileText, Clock, CheckCircle, Trophy, Target, TrendingUp, Phone, Users } from 'lucide-react'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ReviewModal } from '@/components/ui/review-modal'
+import { supabaseClient } from '@/lib/supabase-auth'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 
 // Type definitions
 interface Call {
@@ -33,6 +42,53 @@ interface Stats {
   averageScore: number
   certifications: number
   improvement: number
+}
+
+interface TeamMember {
+  id: string
+  name: string
+  email: string
+  role: string
+  department: string
+}
+
+interface TeamMetrics {
+  totalCalls: number
+  avgScore: number
+  pendingReviews: number
+  approvedCalls: number
+  teamMembers: number
+  completionRate: number
+}
+
+interface Review {
+  id: string
+  status: string
+  manager_feedback?: string
+  score_override?: number
+  reviewed_at?: string
+  created_at: string
+  calls?: {
+    id: string
+    score?: number
+    transcript?: string
+    duration?: string
+    rep_id: string
+    created_at: string
+    simple_users?: {
+      id: string
+      name: string
+      email: string
+    }
+  }
+  assignment_id?: string
+  scenario_assignments?: {
+    id: string
+    scenario_id: string
+    scenarios?: {
+      title: string
+    }
+  }
 }
 
 // const recentSimulations = [
@@ -107,6 +163,63 @@ export function Dashboard() {
     remaining: number;
     isPaid: boolean;
   } | null>(null)
+  
+  // Manager Dashboard State
+  const [userRole, setUserRole] = useState<string>('user')
+  const [isManagerView, setIsManagerView] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [teamMetrics, setTeamMetrics] = useState<TeamMetrics>({
+    totalCalls: 0,
+    avgScore: 0,
+    pendingReviews: 0,
+    approvedCalls: 0,
+    teamMembers: 0,
+    completionRate: 0
+  })
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [isLoadingManagerData, setIsLoadingManagerData] = useState(false)
+  const [managerDataError, setManagerDataError] = useState<string | null>(null)
+  const [selectedUser, setSelectedUser] = useState('all')
+  const [assignmentFilter, setAssignmentFilter] = useState('pending')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [dateRange, setDateRange] = useState('30')
+
+  // Helper function to get auth headers
+  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
+    const session = await supabaseClient.auth.getSession()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    }
+    
+    if (session.data.session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.data.session.access_token}`
+    }
+    
+    return headers
+  }, [])
+  
+  // Load user role
+  const loadUserRole = useCallback(async () => {
+    if (!user) return
+    
+    try {
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const profileData = await profileResponse.json()
+      
+      if (profileData.success) {
+        setUserRole(profileData.userProfile.role || 'user')
+      }
+    } catch (error) {
+      console.error('Error loading user role:', error)
+    }
+  }, [user])
+  
+  // Load user role when component mounts
+  useEffect(() => {
+    if (user) {
+      loadUserRole()
+    }
+  }, [user, loadUserRole])
 
   // Fetch calls and scenarios data
   useEffect(() => {
@@ -176,32 +289,213 @@ export function Dashboard() {
     
     fetchData()
   }, [user])
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'awaiting_review':
-        return <Clock className="h-4 w-4 text-yellow-500" />
-      case 'certified':
-        return <Trophy className="h-4 w-4 text-primary" />
-      default:
-        return <AlertCircle className="h-4 w-4 text-gray-500" />
+  
+  // Fetch manager data when in manager view with exact same fallback as assign scenario modal
+  useEffect(() => {
+    const fetchManagerData = async () => {
+      if (!user || !isManagerView || !['manager', 'admin'].includes(userRole || '')) {
+        console.log('🚫 Manager Dashboard: Skipping fetch', { user: !!user, isManagerView, userRole })
+        return
+      }
+      
+      console.log('🔄 Manager Dashboard: Starting data fetch...', { 
+        userRole, 
+        isManagerView, 
+        userId: user.id,
+        timestamp: new Date().toISOString()
+      })
+      setIsLoadingManagerData(true)
+      setManagerDataError(null)
+      
+      try {
+        // Get team metrics with exact same fallback pattern as assign scenario modal
+        console.log('📊 Fetching team metrics...')
+        const metricsTimeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Metrics query timeout')), 5000)
+        })
+        
+        const headers = await getAuthHeaders()
+        const metricsQueryPromise = fetch(`/api/manager-reviews/metrics?timeRange=${dateRange}`, { headers })
+          .then(async (response) => {
+            if (response.ok) {
+              const data = await response.json()
+              return { data: data.metrics || {}, error: null }
+            } else {
+              throw new Error(`Metrics API error: ${response.status}`)
+            }
+          })
+        
+        const { data: metricsData, error: metricsError } = await Promise.race([
+          metricsQueryPromise,
+          metricsTimeoutPromise
+        ]).catch(async (timeoutError) => {
+          console.warn('📊 Metrics API timed out, using fallback:', timeoutError)
+          // Fallback: API call with fresh headers with better error handling
+          try {
+            const response = await fetch('/api/manager-reviews/metrics?' + new URLSearchParams({
+              timeRange: dateRange
+            }), { headers: await getAuthHeaders() })
+            
+            if (response.ok) {
+              const fallbackData = await response.json()
+              return { data: fallbackData.metrics || {}, error: null }
+            } else {
+              console.warn('📊 Fallback metrics API failed, returning empty metrics')
+              return { 
+                data: {
+                  totalCalls: 0,
+                  avgScore: 0,
+                  pendingReviews: 0,
+                  approvedCalls: 0,
+                  teamMembers: 0,
+                  completionRate: 0
+                }, 
+                error: null 
+              }
+            }
+          } catch (fallbackError) {
+            console.warn('📊 Fallback metrics threw error, returning empty metrics:', fallbackError)
+            return { 
+              data: {
+                totalCalls: 0,
+                avgScore: 0,
+                pendingReviews: 0,
+                approvedCalls: 0,
+                teamMembers: 0,
+                completionRate: 0
+              }, 
+              error: null 
+            }
+          }
+        }) as { data: TeamMetrics; error: Error | null }
+        
+        if (metricsError) {
+          console.error('❌ Failed to load team metrics:', metricsError)
+        } else {
+          console.log('✅ Team metrics loaded:', metricsData)
+          setTeamMetrics(metricsData)
+        }
+        
+        // Get team members with exact same fallback pattern as assign scenario modal
+        console.log('👥 Fetching team members...')
+        const emailDomain = user.email?.split('@')[1] || ''
+        
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Query timeout')), 5000)
+        })
+        
+        const queryPromise = supabaseClient
+          .from('simple_users')
+          .select('id, email, name, role, department')
+          .like('email', `%@${emailDomain}`)
+          .order('name')
+        
+        const { data: teamMembersData, error: teamMembersError } = await Promise.race([
+          queryPromise,
+          timeoutPromise
+        ]).catch(async (timeoutError) => {
+          console.warn('👥 Team members query timed out, using fallback:', timeoutError)
+          // Fallback to using the API endpoint directly (like assign scenario modal)
+          const response = await fetch('/api/assignments?' + new URLSearchParams({
+            domain: emailDomain
+          }))
+          
+          if (!response.ok) {
+            throw new Error('Failed to load users via API')
+          }
+          
+          const apiData = await response.json()
+          return { data: apiData.users, error: null }
+        }) as { data: TeamMember[] | null; error: Error | null }
+        
+        if (teamMembersError) {
+          console.error('❌ Failed to load team members:', teamMembersError)
+          setManagerDataError('Failed to load team members. Please refresh or try again.')
+        } else {
+          console.log('✅ Team members loaded:', teamMembersData?.length || 0, 'members')
+          setTeamMembers(teamMembersData || [])
+        }
+        
+        // Get reviews with timeout fallback
+        console.log('📋 Fetching reviews...')
+        const reviewsTimeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Reviews query timeout')), 5000)
+        })
+        
+        const reviewParams = new URLSearchParams({
+          status: assignmentFilter === 'all' ? 'pending' : assignmentFilter,
+          search: searchQuery,
+          user: selectedUser
+        })
+        
+        const reviewsQueryPromise = fetch(`/api/manager-reviews?${reviewParams}`, { headers })
+          .then(async (response) => {
+            if (response.ok) {
+              const data = await response.json()
+              return { data: data.reviews || [], error: null }
+            } else {
+              throw new Error(`Reviews API error: ${response.status}`)
+            }
+          })
+        
+        const { data: reviewsData, error: reviewsError } = await Promise.race([
+          reviewsQueryPromise,
+          reviewsTimeoutPromise
+        ]).catch(async (timeoutError) => {
+          console.warn('📋 Reviews API timed out, using fallback:', timeoutError)
+          // Fallback: Fresh API call with simpler error handling
+          try {
+            const response = await fetch(`/api/manager-reviews?${reviewParams}`, { 
+              headers: await getAuthHeaders() 
+            })
+            
+            if (response.ok) {
+              const fallbackData = await response.json()
+              return { data: fallbackData.reviews || [], error: null }
+            } else {
+              console.warn('📋 Fallback API also failed, returning empty array')
+              return { data: [], error: null }
+            }
+          } catch (fallbackError) {
+            console.warn('📋 Fallback API threw error, returning empty array:', fallbackError)
+            return { data: [], error: null }
+          }
+        }) as { data: Review[]; error: Error | null }
+        
+        if (reviewsError) {
+          console.error('❌ Failed to load reviews:', reviewsError)
+        } else {
+          console.log('✅ Reviews loaded:', reviewsData?.length || 0, 'reviews')
+          setReviews(reviewsData || [])
+        }
+        
+      } catch (error) {
+        console.error('💥 Error fetching manager data:', error)
+        setManagerDataError('Failed to load manager dashboard data. Please refresh or try again.')
+      } finally {
+        setIsLoadingManagerData(false)
+      }
     }
-  }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <Badge variant="secondary">Completed</Badge>
-      case 'awaiting_review':
-        return <Badge variant="outline">Awaiting Review</Badge>
-      case 'certified':
-        return <Badge className="bg-primary">Certified</Badge>
-      default:
-        return <Badge variant="outline">Unknown</Badge>
+    // Add visibility change listener like assign scenario modal
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isManagerView && user) {
+        console.log('👁️ Tab became visible, refreshing manager data...')
+        fetchManagerData()
+      }
     }
-  }
+
+    fetchManagerData()
+    
+    // Reload data when tab becomes visible (like assign scenario modal)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [user, isManagerView, userRole, selectedUser, assignmentFilter, dateRange, searchQuery, getAuthHeaders])
+
+  // Moved status helper functions inline since they're only used in one place
 
   return (
     <div className="space-y-6">
@@ -223,18 +517,50 @@ export function Dashboard() {
             }!
           </h1>
           <p className="text-sm text-slate-500">
-            Ready to improve your sales skills?
+            {isManagerView ? 'Review and approve your team\'s performance' : 'Ready to improve your sales skills?'}
           </p>
         </div>
-        <Link href="/scenario-builder">
-          <Button className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
-            <Play className="mr-2 h-4 w-4" />
-            Start New Simulation
-          </Button>
-        </Link>
+        <div className="flex items-center space-x-4">
+          {/* View Toggle for Managers/Admins */}
+          {(userRole === 'manager' || userRole === 'admin') && (
+            <div className="flex items-center space-x-3 bg-slate-50 rounded-lg p-1">
+              <button
+                onClick={() => setIsManagerView(false)}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                  !isManagerView 
+                    ? 'bg-white text-slate-900 shadow-sm' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Play className="h-4 w-4" />
+                <span>My Dashboard</span>
+              </button>
+              <button
+                onClick={() => setIsManagerView(true)}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                  isManagerView 
+                    ? 'bg-white text-slate-900 shadow-sm' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                <span>Team Review</span>
+              </button>
+            </div>
+          )}
+          <Link href="/scenario-builder">
+            <Button className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium">
+              <Play className="mr-2 h-4 w-4" />
+              Start New Simulation
+            </Button>
+          </Link>
+        </div>
       </motion.div>
 
-      {/* Modern Metric Tiles */}
+      {/* Conditional Rendering: Manager View or Regular Dashboard */}
+      {!isManagerView ? (
+        <>
+          {/* Modern Metric Tiles */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -649,6 +975,224 @@ export function Dashboard() {
           </div>
         </div>
       </motion.div>
+
+        </>
+      ) : (
+        /* Manager Dashboard View */
+        <div className="space-y-6">
+          {/* Manager Filters */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* User Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Team Member</label>
+                <Select value={selectedUser} onValueChange={setSelectedUser}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Team Members</SelectItem>
+                    {(() => {
+                      console.log('🔍 Rendering team members dropdown:', teamMembers?.length || 0, 'members')
+                      return teamMembers.map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.name}
+                        </SelectItem>
+                      ))
+                    })()}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Assignment Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Review Status</label>
+                <Select value={assignmentFilter} onValueChange={setAssignmentFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending Review</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="needs_improvement">Needs Improvement</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="all">All Reviews</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date Range */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Time Range</label>
+                <Select value={dateRange} onValueChange={setDateRange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">Last 7 days</SelectItem>
+                    <SelectItem value="30">Last 30 days</SelectItem>
+                    <SelectItem value="90">Last 90 days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Search */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Search</label>
+                <Input
+                  placeholder="Search calls, users..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Manager Metrics */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+          >
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">PENDING REVIEWS</span>
+                <Clock className="h-4 w-4 text-slate-400" />
+              </div>
+              <div className="text-3xl font-semibold text-slate-900 mb-1">
+                {isLoadingManagerData ? (
+                  <div className="w-12 h-8 bg-slate-200 rounded skeleton"></div>
+                ) : (
+                  teamMetrics.pendingReviews
+                )}
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">TEAM AVG SCORE</span>
+                <Target className="h-4 w-4 text-slate-400" />
+              </div>
+              <div className="text-3xl font-semibold text-slate-900 mb-1">
+                {isLoadingManagerData ? (
+                  <div className="w-12 h-8 bg-slate-200 rounded skeleton"></div>
+                ) : (
+                  Math.round(teamMetrics.avgScore || 0)
+                )}
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">TEAM MEMBERS</span>
+                <Users className="h-4 w-4 text-slate-400" />
+              </div>
+              <div className="text-3xl font-semibold text-slate-900 mb-1">
+                {isLoadingManagerData ? (
+                  <div className="w-12 h-8 bg-slate-200 rounded skeleton"></div>
+                ) : (
+                  teamMembers.length
+                )}
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">COMPLETION RATE</span>
+                <TrendingUp className="h-4 w-4 text-slate-400" />
+              </div>
+              <div className="text-3xl font-semibold text-slate-900 mb-1">
+                {isLoadingManagerData ? (
+                  <div className="w-12 h-8 bg-slate-200 rounded skeleton"></div>
+                ) : (
+                  `${Math.round(teamMetrics.completionRate || 0)}%`
+                )}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Review Queue */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
+          >
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-1">Review Queue</h3>
+              <p className="text-sm text-slate-500">Calls awaiting your review and approval</p>
+            </div>
+            
+            {managerDataError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-600">{managerDataError}</p>
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              {isLoadingManagerData ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between p-4 rounded-lg border border-slate-100">
+                      <div className="flex items-center space-x-3 flex-1">
+                        <div className="w-8 h-8 bg-slate-200 rounded-full skeleton"></div>
+                        <div className="flex-1">
+                          <div className="w-48 h-4 bg-slate-200 rounded skeleton mb-2"></div>
+                          <div className="w-32 h-3 bg-slate-200 rounded skeleton"></div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="w-16 h-6 bg-slate-200 rounded-full skeleton"></div>
+                        <div className="w-20 h-8 bg-slate-200 rounded skeleton"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : reviews.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="h-12 w-12 text-slate-400 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500 mb-2">No reviews pending</p>
+                  <p className="text-xs text-slate-400">All team calls have been reviewed</p>
+                </div>
+              ) : (
+                reviews.slice(0, 10).map((review) => (
+                  <div
+                    key={review.id}
+                    className="flex items-center justify-between p-4 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all duration-150"
+                  >
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Phone className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-slate-900 truncate">
+                          {review.calls?.simple_users?.name || 'Unknown User'} - {review.scenario_assignments?.scenarios?.title || 'Unknown Scenario'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {new Date(review.created_at).toLocaleDateString()} • 
+                          Score: {review.calls?.score || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3 flex-shrink-0">
+                      <Badge variant="outline">{review.status}</Badge>
+                      <Button size="sm" variant="outline">
+                        Review
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Review Modal */}
       <ReviewModal

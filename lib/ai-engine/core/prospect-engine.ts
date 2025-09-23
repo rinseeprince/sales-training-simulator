@@ -124,6 +124,11 @@ CURRENT CONVERSATION STATE:
       // Update conversation state based on analysis
       this.updateConversationState(messageAnalysis);
 
+      // Check if prospect should hang up
+      if (this.conversationState.shouldHangup) {
+        return this.generateHangupResponse();
+      }
+
       // Build conversation context for AI
       const messages = this.buildConversationContext();
 
@@ -166,7 +171,8 @@ CURRENT CONVERSATION STATE:
       hasObjectionResponse: this.detectObjectionHandling(message),
       hasClosingAttempt: this.detectClosingAttempt(message),
       sentiment: this.analyzeMessageSentiment(message),
-      topics: this.extractTopics(message)
+      topics: this.extractTopics(message),
+      hangupTriggers: this.detectHangupTriggers(message)
     };
 
     return analysis;
@@ -241,7 +247,167 @@ CURRENT CONVERSATION STATE:
     return topics;
   }
 
+  private detectHangupTriggers(message: string): string[] {
+    const triggers = [];
+    const lowerMessage = message.toLowerCase();
+    const { difficulty, personaConfig } = this.config.scenarioContext;
+    
+    // Only check for hangup triggers on ultra-hard scenarios (advanced difficulty)
+    if (difficulty !== 'advanced') return triggers;
+    
+    // Generic hangup triggers that apply to all ultra-hard prospects
+    if (this.isGenericPitch(message)) triggers.push('generic_pitch');
+    if (this.isPrematureProbing(message)) triggers.push('premature_probing');
+    if (this.isIgnoringObjections(message)) triggers.push('ignoring_objections');
+    if (this.isUnprofessionalOpening(message)) triggers.push('unprofessional_opening');
+    
+    // Persona-specific hangup triggers based on prospect name/type
+    const prospectName = personaConfig.name?.toLowerCase() || '';
+    
+    if (prospectName.includes('robert') || prospectName.includes('cto')) {
+      // Hostile CTO triggers
+      if (lowerMessage.includes('revolutionary') || lowerMessage.includes('game-changing')) triggers.push('buzzwords');
+      if (lowerMessage.includes('how are you') || lowerMessage.includes('hope you\'re doing well')) triggers.push('generic_pleasantries');
+      if (this.askingAboutTechStack(message)) triggers.push('tech_stack_probing');
+    }
+    
+    if (prospectName.includes('victoria') || prospectName.includes('vp') && prospectName.includes('sales')) {
+      // Arrogant VP Sales triggers
+      if (this.cannotProveSalesCredibility(message)) triggers.push('no_sales_credibility');
+      if (this.tryingToTeachSales(message)) triggers.push('teaching_sales');
+    }
+    
+    if (prospectName.includes('amanda') || prospectName.includes('ciso')) {
+      // Paranoid CISO triggers
+      if (this.askingAboutSecurity(message)) triggers.push('security_probing');
+      if (this.soundsLikeSocialEngineering(message)) triggers.push('social_engineering');
+    }
+    
+    if (prospectName.includes('richard') || prospectName.includes('cfo')) {
+      // Ice-Cold CFO triggers
+      if (this.noROIInFirst60Seconds(message)) triggers.push('no_roi_focus');
+      if (this.usingEmotionalLanguage(message)) triggers.push('emotional_language');
+    }
+    
+    if (prospectName.includes('marcus') || (prospectName.includes('ceo') && lowerMessage.includes('rude'))) {
+      // Rude CEO triggers
+      if (this.notAcknowledgingStatus(message)) triggers.push('no_status_acknowledgment');
+      if (this.takingTooLong(message)) triggers.push('taking_too_long');
+    }
+    
+    if (prospectName.includes('jennifer') || prospectName.includes('cio')) {
+      // Skeptical CIO triggers
+      if (this.makingBigPromises(message)) triggers.push('big_promises');
+      if (this.minimizingRisks(message)) triggers.push('minimizing_risks');
+    }
+    
+    return triggers;
+  }
+
+  // Hangup trigger detection helpers
+  private isGenericPitch(message: string): boolean {
+    const pitchPhrases = ['we help companies', 'our solution provides', 'leading provider', 'industry-leading'];
+    return pitchPhrases.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
+  private isPrematureProbing(message: string): boolean {
+    if (this.memory.conversationHistory.length > 2) return false; // Only in first exchange
+    const probingQuestions = ['tell me about your', 'what are your current', 'how do you currently', 'what challenges'];
+    return probingQuestions.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
+  private isIgnoringObjections(message: string): boolean {
+    const lastProspectMessage = this.memory.conversationHistory
+      .filter(turn => turn.speaker === 'prospect')
+      .slice(-1)[0];
+    
+    if (!lastProspectMessage) return false;
+    
+    const hadObjection = lastProspectMessage.message.toLowerCase().includes('not interested') ||
+                        lastProspectMessage.message.toLowerCase().includes('don\'t have time') ||
+                        lastProspectMessage.message.toLowerCase().includes('not buying');
+    
+    const acknowledgesObjection = message.toLowerCase().includes('understand') ||
+                                 message.toLowerCase().includes('hear you') ||
+                                 message.toLowerCase().includes('respect that');
+    
+    return hadObjection && !acknowledgesObjection;
+  }
+
+  private isUnprofessionalOpening(message: string): boolean {
+    if (this.memory.conversationHistory.length > 1) return false; // Only check opening
+    const unprofessionalPhrases = ['how are you today', 'hope you\'re having a great day', 'this is a sales call'];
+    return unprofessionalPhrases.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
+  private askingAboutTechStack(message: string): boolean {
+    const techQuestions = ['current tech stack', 'what tools', 'what systems', 'how do you handle'];
+    return techQuestions.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
+  private cannotProveSalesCredibility(message: string): boolean {
+    // This would need to be enhanced with actual credential checking
+    const hasCredentials = message.toLowerCase().includes('quota') ||
+                          message.toLowerCase().includes('carried') ||
+                          message.toLowerCase().includes('achieved') ||
+                          message.toLowerCase().includes('top performer');
+    return !hasCredentials;
+  }
+
+  private tryingToTeachSales(message: string): boolean {
+    const teachingPhrases = ['you should', 'best practice', 'what we recommend', 'studies show'];
+    return teachingPhrases.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
+  private askingAboutSecurity(message: string): boolean {
+    const securityQuestions = ['security tools', 'current setup', 'infrastructure', 'what you use'];
+    return securityQuestions.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
+  private soundsLikeSocialEngineering(message: string): boolean {
+    const fishingPhrases = ['who handles', 'what vendor', 'recent incident', 'breach'];
+    return fishingPhrases.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
+  private noROIInFirst60Seconds(message: string): boolean {
+    if (this.memory.conversationHistory.length > 2) return false; // First exchange only
+    const roiTerms = ['roi', 'save', 'cost', 'revenue', 'profit', 'million', 'thousand', '%'];
+    return !roiTerms.some(term => message.toLowerCase().includes(term));
+  }
+
+  private usingEmotionalLanguage(message: string): boolean {
+    const emotionalWords = ['excited', 'amazing', 'fantastic', 'love', 'passionate'];
+    return emotionalWords.some(word => message.toLowerCase().includes(word));
+  }
+
+  private notAcknowledgingStatus(message: string): boolean {
+    const statusAcknowledgment = ['ceo', 'executive', 'leader', 'appreciate your time', 'valuable time'];
+    return !statusAcknowledgment.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
+  private takingTooLong(message: string): boolean {
+    return message.length > 200; // More than 200 characters is too long for impatient CEO
+  }
+
+  private makingBigPromises(message: string): boolean {
+    const promiseWords = ['guarantee', 'promise', 'ensure', 'will definitely', 'always works'];
+    return promiseWords.some(word => message.toLowerCase().includes(word));
+  }
+
+  private minimizingRisks(message: string): boolean {
+    const minimizingPhrases = ['no risk', 'easy implementation', 'simple', 'nothing to worry about'];
+    return minimizingPhrases.some(phrase => message.toLowerCase().includes(phrase));
+  }
+
   private updateConversationState(analysis: any): void {
+    // Check for hangup triggers first
+    if (analysis.hangupTriggers && analysis.hangupTriggers.length > 0) {
+      this.conversationState.shouldHangup = true;
+      this.conversationState.hangupReason = analysis.hangupTriggers[0]; // Use first trigger as primary reason
+      this.conversationState.hangupTriggers = analysis.hangupTriggers;
+      return; // Skip other updates if hanging up
+    }
+    
     // Update rapport based on rep's approach
     if (analysis.hasQuestion && analysis.questionType !== 'none') {
       this.conversationState.rapportLevel = Math.min(1, this.conversationState.rapportLevel + 0.05);

@@ -103,6 +103,9 @@ export interface ConversationState {
   budgetDiscussed: boolean;
   timelineDiscussed: boolean;
   decisionMakersIdentified: boolean;
+  shouldHangup?: boolean;
+  hangupReason?: string;
+  hangupTriggers?: string[];
 }
 
 export interface RevealedInformation {

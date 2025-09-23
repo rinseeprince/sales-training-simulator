@@ -14,6 +14,7 @@ import { useCallData } from '@/hooks/use-call-data'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
+import { ManagerReviewActions } from '@/components/ui/manager-review-actions'
 
 const callData = {
   score: 87,
@@ -317,9 +318,11 @@ interface TempCallData {
 interface PostCallReviewProps {
   modalCallId?: string
   isInModal?: boolean
+  isManagerReview?: boolean
+  onReviewSubmit?: (reviewData: { status: string; feedback?: string; scoreOverride?: number }) => void
 }
 
-export function PostCallReview({ modalCallId, isInModal = false }: PostCallReviewProps = {}) {
+export function PostCallReview({ modalCallId, isInModal = false, isManagerReview = false, onReviewSubmit }: PostCallReviewProps = {}) {
   const { user } = useSupabaseAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -1136,6 +1139,15 @@ export function PostCallReview({ modalCallId, isInModal = false }: PostCallRevie
                 </Button>
               </div>
             </div>
+
+            {/* Manager Review Actions */}
+            {isManagerReview && onReviewSubmit && (
+              <ManagerReviewActions
+                callId={callId || ''}
+                currentScore={safeDisplayData.enhancedScoring?.overallScore || coachingFeedback?.overallScore || safeDisplayData.score}
+                onReviewSubmit={onReviewSubmit}
+              />
+            )}
           </motion.div>
         </div>
 
