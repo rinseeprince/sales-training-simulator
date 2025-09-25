@@ -10,63 +10,65 @@ import Link from 'next/link';
 
 const plans = [
   {
-    name: 'Free Beta',
+    name: 'Free',
     price: '$0',
     period: 'forever',
-    description: 'Full access during our beta period',
+    description: 'Get started with sales training',
     icon: Rocket,
     iconColor: 'text-emerald-600',
     iconBg: 'bg-emerald-100',
     features: [
-      'Unlimited simulations',
+      '3 simulations per month',
+      'Basic AI responses',
+      'Standard scenarios',
+      'Voice streaming',
+      'Basic analytics',
+      'Community support',
+    ],
+    buttonText: 'Get Started',
+    popular: false,
+    action: 'redirect',
+    href: '/dashboard',
+  },
+  {
+    name: 'Pro',
+    price: '$30',
+    period: 'per month',
+    description: 'For serious sales professionals',
+    icon: Users,
+    iconColor: 'text-blue-600',
+    iconBg: 'bg-blue-100',
+    features: [
+      '50 simulations per month',
       'Advanced AI responses',
       'Custom scenarios',
       'Voice streaming',
       'Detailed analytics',
       'Priority support',
-      'Early access to new features',
-    ],
-    buttonText: 'Get Started',
-    popular: true,
-    action: 'redirect',
-    href: '/dashboard',
-  },
-  {
-    name: 'Pro (Coming Soon)',
-    price: '$29',
-    period: 'per month',
-    description: 'Premium features for power users',
-    icon: Users,
-    iconColor: 'text-blue-600',
-    iconBg: 'bg-blue-100',
-    features: [
-      'Everything in Free Beta',
-      'Team collaboration',
       'Advanced reporting',
-      'Custom integrations',
-      'Dedicated support',
-      'API access',
     ],
-    buttonText: 'Join Waitlist',
-    popular: false,
-    action: 'waitlist',
+    buttonText: 'Upgrade to Pro',
+    popular: true,
+    action: 'waitlist', // Use waitlist action to trigger upgrade flow
   },
   {
     name: 'Enterprise',
     price: 'Custom',
-    period: 'per month',
+    period: 'contact us',
     description: 'For teams and organizations',
     icon: Building,
     iconColor: 'text-purple-600',
     iconBg: 'bg-purple-100',
     features: [
-      'Everything in Pro',
-      'Custom training',
+      'Unlimited simulations',
+      'Custom AI training',
+      'Team collaboration',
       'SLA guarantee',
       'On-premise deployment',
       'White-label options',
+      'Dedicated support',
     ],
-    buttonText: 'Contact Us',
+    buttonText: 'Book Demo',
     popular: false,
     action: 'contact',
   },
@@ -86,8 +88,8 @@ export function PricingPage() {
         window.location.href = plan.href;
         break;
       case 'waitlist':
-        // You can add a waitlist signup form here
-        alert('Thanks for your interest! We\'ll notify you when Pro plans are available.');
+        // Handle Pro plan upgrade
+        window.location.href = '/dashboard?upgrade=pro';
         break;
       case 'contact':
         window.location.href = 'mailto:sales@yourcompany.com?subject=Enterprise%20Inquiry';
@@ -97,19 +99,13 @@ export function PricingPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
-      {/* Streamlined Hero Section */}
+      {/* Hero Section */}
       <div className="text-center mb-8">
-        <div className="flex justify-center mb-4">
-          <div className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 text-xs font-medium">
-            <Sparkles className="w-3 h-3 mr-1" />
-            Free Beta Access
-          </div>
-        </div>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900 mb-2">
-          Start Training Today
+          Choose Your Training Plan
         </h1>
         <p className="text-sm text-slate-500 max-w-xl mx-auto">
-          We're in beta and offering full access for free. Help us improve by providing feedback!
+          Start with our free plan or upgrade to Pro for unlimited access to advanced features.
         </p>
       </div>
 
@@ -200,10 +196,9 @@ export function PricingPage() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-8 max-w-4xl mx-auto">
           <div className="flex items-start justify-between mb-6">
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Why Free Beta?</h3>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Start Free, Upgrade When Ready</h3>
               <p className="text-sm text-slate-500 leading-relaxed">
-                We're building the best sales training platform and need your feedback to make it perfect. 
-                Use all features for free and help us improve!
+                Get started with 3 free simulations to experience our platform. Upgrade to Pro when you're ready for unlimited access.
               </p>
             </div>
             <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 ml-6">
@@ -222,7 +217,7 @@ export function PricingPage() {
               <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
                 <Check className="h-3 w-3 text-emerald-600" />
               </div>
-              <span className="text-slate-700">Full feature access</span>
+              <span className="text-slate-700">Instant access</span>
             </div>
             <div className="flex items-center justify-center md:justify-start">
               <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">

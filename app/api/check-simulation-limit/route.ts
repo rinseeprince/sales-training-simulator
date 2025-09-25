@@ -44,31 +44,32 @@ export async function GET(request: NextRequest) {
 
       if (queryError || !userData) {
         console.error('Fallback query error:', queryError);
-        // New user - return default limits
+        // New user - return default limits for free tier
         return NextResponse.json({ 
           success: true,
           canSimulate: true,
           count: 0,
-          limit: 50,
-          remaining: 50,
+          limit: 3,
+          remaining: 3,
           is_paid: false,
-          message: 'Welcome! You have 50 free simulations.'
+          message: 'Welcome! You have 3 free simulations.'
         });
       }
 
       // Process the direct query data
       const count = userData.simulation_count || 0;
-      const limit = userData.simulation_limit || 50;
+      const limit = userData.simulation_limit || 3; // Default to 3 for new free users
       const isPaid = userData.subscription_status === 'paid' || userData.subscription_status === 'trial';
+      const isEnterprise = userData.subscription_status === 'enterprise';
       
       return NextResponse.json({ 
         success: true,
-        canSimulate: isPaid || count < limit,
+        canSimulate: isPaid || isEnterprise || count < limit,
         count: count,
-        limit: limit,
-        remaining: isPaid ? -1 : Math.max(0, limit - count),
-        is_paid: isPaid,
-        message: count >= limit && !isPaid ? 'You have reached your free simulation limit. Please upgrade to continue.' : null
+        limit: isEnterprise ? -1 : limit,
+        remaining: (isPaid || isEnterprise) ? -1 : Math.max(0, limit - count),
+        is_paid: isPaid || isEnterprise,
+        message: count >= limit && !isPaid && !isEnterprise ? 'You have reached your free simulation limit. Please upgrade to continue.' : null
       });
     }
 
@@ -80,10 +81,10 @@ export async function GET(request: NextRequest) {
         success: true,
         canSimulate: true,
         count: 0,
-        limit: 50,
-        remaining: 50,
+        limit: 3,
+        remaining: 3,
         is_paid: false,
-        message: 'Welcome! You have 50 free simulations.'
+        message: 'Welcome! You have 3 free simulations.'
       });
     }
 
@@ -99,10 +100,10 @@ export async function GET(request: NextRequest) {
       success: true,
       canSimulate: true,
       count: 0,
-      limit: 50,
-      remaining: 50,
+      limit: 3,
+      remaining: 3,
       is_paid: false,
-      message: 'Welcome! You have 50 free simulations.'
+      message: 'Welcome! You have 3 free simulations.'
     });
   }
 } 

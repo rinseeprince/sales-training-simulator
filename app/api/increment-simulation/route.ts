@@ -48,18 +48,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ 
           success: true,
           count: 1,
-          limit: 50,
-          remaining: 49,
+          limit: 3,
+          remaining: 2,
           message: 'Simulation started (new user)'
         });
       }
 
       // Check if user has reached limit (for free users)
       const count = userData.simulation_count || 0;
-      const limit = userData.simulation_limit || 50;
+      const limit = userData.simulation_limit || 3; // Default to 3 for new free users
       const isPaid = userData.subscription_status === 'paid' || userData.subscription_status === 'trial';
+      const isEnterprise = userData.subscription_status === 'enterprise';
       
-      if (!isPaid && count >= limit) {
+      if (!isPaid && !isEnterprise && count >= limit) {
         return NextResponse.json({ 
           success: false,
           error: 'Simulation limit reached',
@@ -85,8 +86,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         success: true,
         count: count + 1,
-        limit: limit,
-        remaining: isPaid ? -1 : Math.max(0, limit - (count + 1))
+        limit: isEnterprise ? -1 : limit,
+        remaining: (isPaid || isEnterprise) ? -1 : Math.max(0, limit - (count + 1))
       });
     }
 

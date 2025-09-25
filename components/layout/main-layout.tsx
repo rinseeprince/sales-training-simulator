@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Home, FileText, Settings, Users, Shield, Menu, LogOut, Moon, Sun, BookOpen, History, DollarSign, Plus, ArrowLeft, ArrowRight, Library } from 'lucide-react'
+import { Home, FileText, Settings, Users, Shield, Menu, LogOut, Moon, Sun, BookOpen, History, DollarSign, Plus, ArrowLeft, ArrowRight, Library, Bot } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
@@ -21,6 +21,7 @@ const navigationSections = [
       { name: 'Scenario Builder', href: '/scenario-builder', icon: FileText, roles: ['rep', 'manager', 'admin'] },
       { name: 'Saved Scenarios', href: '/saved-scenarios', icon: BookOpen, roles: ['rep', 'manager', 'admin'] },
       { name: 'Saved Simulations', href: '/simulations', icon: History, roles: ['rep', 'manager', 'admin'] },
+      { name: 'Ivy', href: '/ivy', icon: Bot, roles: ['rep', 'manager', 'admin'], badge: 'Beta' },
     ]
   },
   {
