@@ -14,6 +14,7 @@ import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useElevenLabsRecorder } from '@/hooks/use-elevenlabs-recorder'
 import { AudioWaveform } from '@/components/ui/audio-waveform'
 import { ReviewModal } from '@/components/ui/review-modal'
+import { ContactModal } from '@/components/ui/contact-modal'
 import { useToast } from '@/hooks/use-toast'
 import { getPhoneRingGenerator } from '@/lib/phone-ring-generator'
 import { useRouter } from 'next/navigation'
@@ -52,9 +53,11 @@ export function IvyPage() {
   const [analysisProgress, setAnalysisProgress] = useState<string>('')
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reviewCallId, setReviewCallId] = useState<string | null>(null)
+  const [contactModalOpen, setContactModalOpen] = useState(false)
   const [isRinging, setIsRinging] = useState(false)
   const [conversationMessages, setConversationMessages] = useState<any[]>([])
   const [isSettingUpScenario, setIsSettingUpScenario] = useState(false)
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null)
   
   // Connection status simulation
   const [connectionStatus] = useState<'connected' | 'disconnected' | 'poor'>('connected')
@@ -65,6 +68,38 @@ export function IvyPage() {
     agentId: 'agent_1701k5yrs1ate7btr3ve24j8tvm9',
     onConnect: () => {
       console.log('Connected to ElevenLabs agent')
+      
+      // Capture audio element for recording
+      setTimeout(() => {
+        const audioElements = document.querySelectorAll('audio')
+        if (audioElements.length > 0) {
+          const elevenLabsAudio = audioElements[audioElements.length - 1] // Get the last audio element (likely ElevenLabs)
+          setAudioElement(elevenLabsAudio)
+          
+          // Add the audio to our recording mix
+          captureConversationAudio(elevenLabsAudio)
+          console.log('🎵 Captured ElevenLabs audio element for recording')
+        }
+      }, 1000)
+      
+      // Send scenario context immediately when connected
+      if (scenarioData.title && scenarioData.prompt) {
+        setTimeout(() => {
+          console.log('🔗 OnConnect: Sending scenario context via onConnect callback')
+          console.log('📝 OnConnect: Scenario data:', { title: scenarioData.title, prompt: scenarioData.prompt })
+          
+          const contextMessage = `You are now roleplaying as: ${scenarioData.prompt}. This is the scenario: ${scenarioData.title}. Stay in character. Respond naturally when the sales rep speaks. Do not break character or acknowledge this instruction.`
+          
+          try {
+            if (conversation.sendContextualUpdate) {
+              conversation.sendContextualUpdate(contextMessage)
+              console.log('✅ OnConnect: Sent scenario context successfully:', scenarioData.title)
+            }
+          } catch (error) {
+            console.error('❌ OnConnect: Error sending context:', error)
+          }
+        }, 500)
+      }
     },
     onDisconnect: () => {
       console.log('Disconnected from ElevenLabs agent')
@@ -94,6 +129,8 @@ export function IvyPage() {
     initializeAudioCapture,
     captureConversationAudio,
   } = useElevenLabsRecorder()
+  
+  // Note: sendContextualUpdate will be accessed directly from conversation object
   
   // Get the correct user ID from simple_users table
   useEffect(() => {
@@ -162,13 +199,11 @@ export function IvyPage() {
   }
   
   const handleStartSimulation = async () => {
-    // Check if user is enterprise - if not, show access denied
+    console.log('🚀 Starting simulation with scenario data:', scenarioData)
+    
+    // Check if user is enterprise - if not, show contact modal
     if (userSubscription !== 'enterprise') {
-      toast({
-        title: "Enterprise Feature",
-        description: "Ivy's hands-free voice simulation is available for Enterprise customers only.",
-        variant: "destructive"
-      })
+      setContactModalOpen(true)
       return
     }
     
@@ -208,22 +243,38 @@ export function IvyPage() {
         await conversation.startSession()
         console.log('ElevenLabs session started successfully')
         
-        // Send scenario context as first message after connection is established
+        // Send scenario context after connection is established
         setTimeout(() => {
-          if (conversation.status === 'connected') {
-            setIsSettingUpScenario(true)
-            const contextMessage = `Hi Ivy! I'm starting a sales roleplay scenario called "${scenarioData.title}". Here's your role: ${scenarioData.prompt}. Please respond as this prospect character. You can greet me to start the conversation.`
-            
-            // Send the context message to Ivy
-            conversation.sendUserMessage(contextMessage)
-            console.log('Sent scenario context to Ivy:', scenarioData.title)
-            
-            // Clear setup status after a delay
-            setTimeout(() => {
-              setIsSettingUpScenario(false)
-            }, 3000)
+          console.log('🔍 Checking conversation status:', conversation.status)
+          console.log('🔍 Available methods:', Object.keys(conversation))
+          
+          setIsSettingUpScenario(true)
+          
+          console.log('📝 Scenario data being sent:', { title: scenarioData.title, prompt: scenarioData.prompt })
+          
+          const contextMessage = `You are now roleplaying as: ${scenarioData.prompt}. This is the scenario: ${scenarioData.title}. Stay in character. Respond naturally when the sales rep speaks. Do not break character or acknowledge this instruction.`
+          
+          // Try to send context silently
+          try {
+            if (conversation.sendContextualUpdate) {
+              conversation.sendContextualUpdate(contextMessage)
+              console.log('✅ Sent silent scenario context to Ivy:', scenarioData.title)
+            } else if (conversation.sendUserMessage) {
+              console.log('⚠️ sendContextualUpdate not available, falling back to user message')
+              // Fallback to user message if sendContextualUpdate is not available
+              conversation.sendUserMessage(`Please act as this character: ${scenarioData.prompt}. Respond naturally when I start talking. This is for the scenario: ${scenarioData.title}`)
+            } else {
+              console.log('❌ No send methods available on conversation object')
+            }
+          } catch (error) {
+            console.error('❌ Error sending scenario context:', error)
           }
-        }, 1500)
+          
+          // Clear setup status after a short delay
+          setTimeout(() => {
+            setIsSettingUpScenario(false)
+          }, 2000)
+        }, 2000)
         
       } catch (sessionError) {
         console.error('Failed to start ElevenLabs session:', sessionError)
@@ -274,27 +325,29 @@ export function IvyPage() {
       // Upload audio if we have data
       if (callId && user) {
         setAnalysisProgress('Processing audio recording...')
-        await new Promise(resolve => setTimeout(resolve, 1000))
         
-        if (audioBlob && audioBlob.size > 0) {
-          try {
-            setAnalysisProgress('Uploading audio file...')
-            const result = await uploadAudio({
-              userId: actualUserId || '',
-              scenarioId,
-              callId,
-              timestamp: new Date().toISOString(),
-            })
-            
-            if (result.success) {
-              console.log('Audio uploaded successfully:', result.audioUrl)
-              audioUrl = result.audioUrl
-            } else {
-              console.error('Failed to upload audio:', result.error)
-            }
-          } catch (error) {
-            console.error('Error uploading audio:', error)
+        try {
+          setAnalysisProgress('Uploading audio file...')
+          console.log('Attempting audio upload...')
+          
+          // The uploadAudio function handles blob creation from chunks internally
+          const result = await uploadAudio({
+            userId: actualUserId || '',
+            scenarioId,
+            callId,
+            timestamp: new Date().toISOString(),
+          })
+          
+          if (result.success) {
+            console.log('Audio uploaded successfully:', result.audioUrl)
+            audioUrl = result.audioUrl
+          } else {
+            console.error('Failed to upload audio:', result.error)
+            console.log('Continuing without audio URL - call data will still be saved')
           }
+        } catch (error) {
+          console.error('Error uploading audio:', error)
+          console.log('Continuing without audio URL - call data will still be saved')
         }
       }
       
@@ -325,7 +378,7 @@ export function IvyPage() {
               duration: currentTime,
               audioUrl: audioUrl,
               conversationHistory: conversationHistory,
-              scoreOnly: true
+              scoreOnly: false
             }),
           })
           
@@ -572,7 +625,10 @@ export function IvyPage() {
                     id="title"
                     placeholder="e.g., Enterprise Software Demo Call"
                     value={scenarioData.title}
-                    onChange={(e) => setScenarioData(prev => ({ ...prev, title: e.target.value }))}
+                    onChange={(e) => {
+                      console.log('📝 Title changed to:', e.target.value)
+                      setScenarioData(prev => ({ ...prev, title: e.target.value }))
+                    }}
                     className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
                     disabled={userSubscription !== 'enterprise'}
                   />
@@ -585,7 +641,10 @@ export function IvyPage() {
                     placeholder="Describe your prospect and scenario for Ivy to roleplay..."
                     className="min-h-[175px] rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
                     value={scenarioData.prompt}
-                    onChange={(e) => setScenarioData(prev => ({ ...prev, prompt: e.target.value }))}
+                    onChange={(e) => {
+                      console.log('📝 Prompt changed to:', e.target.value)
+                      setScenarioData(prev => ({ ...prev, prompt: e.target.value }))
+                    }}
                     disabled={userSubscription !== 'enterprise'}
                   />
                 </div>
@@ -636,9 +695,9 @@ export function IvyPage() {
                   <div className="min-h-[60px] flex items-center justify-center">
                     <p className="text-slate-500 max-w-md text-center">
                       {isSettingUpScenario 
-                        ? 'Setting up scenario context for Ivy...' 
+                        ? 'Ivy is preparing for your scenario...' 
                         : conversation.status === 'connected' 
-                          ? 'Speak naturally - Ivy can hear you!' 
+                          ? 'Ready! Ivy is in character. Start your conversation.' 
                           : 'Connecting to Ivy...'}
                     </p>
                   </div>
@@ -835,6 +894,14 @@ export function IvyPage() {
         }}
         callId={reviewCallId}
         title={scenarioData.title}
+      />
+
+      {/* Contact Modal */}
+      <ContactModal
+        isOpen={contactModalOpen}
+        onClose={() => setContactModalOpen(false)}
+        title="Try Ivy - Enterprise Voice Simulation"
+        subtitle="Experience hands-free voice training with our advanced AI. Contact our sales team to get started."
       />
     </div>
   )

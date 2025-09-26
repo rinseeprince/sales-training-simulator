@@ -115,14 +115,14 @@ export function useEnhancedAudioRecorder(): EnhancedAudioRecorderState & Enhance
         console.log('AudioContext resumed')
       }
       
-      // Get microphone stream with ECHO CANCELLATION enabled and optimized for compression
+      // Get microphone stream with echo cancellation disabled for conversation recording
       const micStream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
-          echoCancellation: true,  // CRITICAL: Enable to prevent feedback loop
-          noiseSuppression: true,  // Also helps with audio quality
-          autoGainControl: true,   // Prevents volume issues
-          sampleRate: 22050,       // Lower sample rate for voice (was 44100)
-          channelCount: 1,         // Mono instead of stereo for voice
+          echoCancellation: false,  // Disable to capture both user and AI audio
+          noiseSuppression: false,  // Disable to capture all audio
+          autoGainControl: false,   // Disable to preserve natural audio levels
+          sampleRate: 44100,       // Higher quality for capturing AI responses
+          channelCount: 2,         // Stereo to capture more audio detail
         } 
       })
       
@@ -239,38 +239,11 @@ export function useEnhancedAudioRecorder(): EnhancedAudioRecorderState & Enhance
   }, [cleanup])
 
   const addAudioToMix = useCallback((audioElement: HTMLAudioElement) => {
-    if (!audioContextRef.current || !mixerNodeRef.current) {
-      console.warn('Audio context not ready for mixing')
-      return
-    }
-    
-    try {
-      console.log('Adding AI audio element to mix...')
-      
-      // Create source from audio element
-      const audioSource = audioContextRef.current.createMediaElementSource(audioElement)
-      
-      // Create gain node for AI audio to control volume
-      const aiGain = audioContextRef.current.createGain()
-      aiGain.gain.setValueAtTime(0.6, audioContextRef.current.currentTime) // Lower than mic to prevent dominance
-      
-      // Connect AI audio to gain node
-      audioSource.connect(aiGain)
-      
-      // Split the signal: send to both mixer (recording) and speakers (playback)
-      aiGain.connect(mixerNodeRef.current)  // For recording
-      aiGain.connect(audioContextRef.current.destination)  // For user to hear
-      
-      console.log('AI audio connected to both recording mixer and speakers (with echo cancellation)')
-      
-      // Keep reference to prevent garbage collection
-      aiAudioSourcesRef.current.push(audioSource)
-      
-      console.log('Added AI audio to mix, total sources:', aiAudioSourcesRef.current.length)
-    } catch (err) {
-      console.error('Failed to add audio to mix:', err)
-      // Don't throw error, just log it - recording should continue
-    }
+    console.log('addAudioToMix called - but using system audio capture instead')
+    // Since the audio element is already connected to ElevenLabs' audio context,
+    // we'll rely on system audio capture or screen recording instead
+    // The user's microphone + system audio will capture both sides of the conversation
+    return
   }, [])
 
   const stopRecording = useCallback(() => {
@@ -323,17 +296,35 @@ export function useEnhancedAudioRecorder(): EnhancedAudioRecorderState & Enhance
   }) => {
     console.log('uploadMixedAudio called with metadata:', metadata);
     console.log('audioBlob state available:', !!audioBlob, 'size:', audioBlob?.size);
+    console.log('chunks available:', chunksRef.current.length);
     
     let blobToUpload = audioBlob;
+    
+    // If no audioBlob state but we have chunks, create blob from chunks
     if (!blobToUpload && chunksRef.current.length > 0) {
       console.log('Creating blob from mixed chunks, count:', chunksRef.current.length);
-      blobToUpload = new Blob(chunksRef.current, { type: 'audio/webm' });
+      blobToUpload = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
       console.log('Created blob from mixed chunks, size:', blobToUpload.size);
     }
     
-    if (!blobToUpload) {
-      console.error('No mixed audioBlob available for upload');
-      return { success: false, error: 'No audio to upload' }
+    // If still no blob, wait a moment and try again (recording might still be finalizing)
+    if (!blobToUpload || blobToUpload.size === 0) {
+      console.log('No blob available, waiting for recording to finalize...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Try audioBlob state again
+      blobToUpload = audioBlob;
+      
+      // If still nothing, try chunks again
+      if (!blobToUpload && chunksRef.current.length > 0) {
+        blobToUpload = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
+        console.log('Second attempt - created blob from chunks, size:', blobToUpload.size);
+      }
+    }
+    
+    if (!blobToUpload || blobToUpload.size === 0) {
+      console.error('No mixed audioBlob available for upload after retries');
+      return { success: false, error: 'No audio data to upload' }
     }
 
     try {
