@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@elevenlabs/react": "^0.7.0",
     "@emotion/is-prop-valid": "latest",
     "@google-cloud/text-to-speech": "^6.2.0",
     "@hookform/resolvers": "^3.9.1",
