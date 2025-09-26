@@ -1,12 +1,11 @@
 'use client';
 
 import React from 'react';
+import { motion } from 'framer-motion';
 import { useSupabaseAuth } from '@/components/supabase-auth-provider';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Check, Star, Zap, Crown, Heart, Rocket, Users, Building, Sparkles, ArrowRight, Mail } from 'lucide-react';
-import Link from 'next/link';
+import { Check, Heart, Rocket, Users, Building, ArrowRight, Mail } from 'lucide-react';
 
 const plans = [
   {
@@ -19,11 +18,10 @@ const plans = [
     iconBg: 'bg-emerald-100',
     features: [
       '3 simulations per month',
-      'Basic AI responses',
-      'Standard scenarios',
-      'Voice streaming',
-      'Basic analytics',
-      'Community support',
+      'GPT4 model',
+      'Custom scenarios',
+      'Analytics',
+      'AI coaching & analysis',
     ],
     buttonText: 'Get Started',
     popular: false,
@@ -40,12 +38,10 @@ const plans = [
     iconBg: 'bg-blue-100',
     features: [
       '50 simulations per month',
-      'Advanced AI responses',
-      'Custom scenarios',
-      'Voice streaming',
-      'Detailed analytics',
+      'Everything in Free',
       'Priority support',
-      'Advanced reporting',
+      'Custom scenarios',
+      'Save simulations for review',
     ],
     buttonText: 'Upgrade to Pro',
     popular: true,
@@ -60,13 +56,14 @@ const plans = [
     iconColor: 'text-purple-600',
     iconBg: 'bg-purple-100',
     features: [
-      'Unlimited simulations',
-      'Custom AI training',
+      'Everything in Pro',
+      'RBAC',
       'Team collaboration',
-      'SLA guarantee',
-      'On-premise deployment',
-      'White-label options',
-      'Dedicated support',
+      '100 simulations per user',
+      '200 minutes IVY use',
+      'Custom AI model',
+      'Dedicated account manager',
+      'Half day sales skills workshop with founder of RepScore',
     ],
     buttonText: 'Book Demo',
     popular: false,
@@ -98,26 +95,42 @@ export function PricingPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="space-y-6">
       {/* Hero Section */}
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 mb-2">
-          Choose Your Training Plan
-        </h1>
-        <p className="text-sm text-slate-500 max-w-xl mx-auto">
-          Start with our free plan or upgrade to Pro for unlimited access to advanced features.
-        </p>
-      </div>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] px-6 py-8"
+      >
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 mb-2">
+            Choose Your Training Plan
+          </h1>
+          <p className="text-sm text-slate-500 max-w-xl mx-auto">
+            Start with our free plan or upgrade to Pro for unlimited access to advanced features.
+          </p>
+        </div>
+      </motion.div>
 
-      <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-        {plans.map((plan) => {
+      {/* Pricing Cards */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="grid gap-6 md:grid-cols-3"
+      >
+        {plans.map((plan, index) => {
           const IconComponent = plan.icon;
           return (
-            <div
+            <motion.div
               key={plan.name}
-              className={`relative bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5 p-8 ${
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 + (index * 0.1) }}
+              className={`relative bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] hover:shadow-[0_1px_2px_rgba(0,0,0,.06),0_16px_32px_rgba(0,0,0,.08)] transition-all duration-200 hover:-translate-y-0.5 p-6 ${
                 plan.popular
-                  ? 'ring-2 ring-primary/20 scale-105 hover:scale-[1.02]'
+                  ? 'ring-2 ring-primary/20 scale-[1.02]'
                   : 'hover:border-slate-300'
               }`}
             >
@@ -136,8 +149,8 @@ export function PricingPage() {
                   <h3 className="text-lg font-semibold text-slate-900 mb-2">{plan.name}</h3>
                   <p className="text-sm text-slate-500">{plan.description}</p>
                 </div>
-                <div className={`w-12 h-12 ${plan.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 ml-4`}>
-                  <IconComponent className={`h-6 w-6 ${plan.iconColor}`} />
+                <div className={`w-10 h-10 ${plan.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 ml-4`}>
+                  <IconComponent className={`h-5 w-5 ${plan.iconColor}`} />
                 </div>
               </div>
 
@@ -165,9 +178,11 @@ export function PricingPage() {
 
               {/* CTA Button */}
               <Button
-                className={`w-full h-12 rounded-xl font-medium transition-all duration-200 ${
+                className={`w-full h-10 rounded-lg font-medium transition-all duration-200 ${
                   plan.popular
-                    ? 'bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm'
+                    ? 'bg-primary hover:bg-primary/90 text-white shadow-sm'
+                    : plan.action === 'contact'
+                    ? 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
                 }`}
                 onClick={() => handleAction(plan)}
@@ -187,47 +202,51 @@ export function PricingPage() {
                   plan.buttonText
                 )}
               </Button>
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
 
-      <div className="text-center mt-12">
-        <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-8 max-w-4xl mx-auto">
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Start Free, Upgrade When Ready</h3>
-              <p className="text-sm text-slate-500 leading-relaxed">
-                Get started with 3 free simulations to experience our platform. Upgrade to Pro when you're ready for unlimited access.
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 ml-6">
-              <Heart className="h-6 w-6 text-primary" />
-            </div>
+      {/* Bottom CTA Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.4 }}
+        className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6"
+      >
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Start Free, Upgrade When Ready</h3>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Get started with 3 free simulations to experience our platform. Upgrade to Pro when you're ready for unlimited access.
+            </p>
           </div>
-          
-          <div className="grid md:grid-cols-3 gap-6 text-sm">
-            <div className="flex items-center justify-center md:justify-start">
-              <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
-                <Check className="h-3 w-3 text-emerald-600" />
-              </div>
-              <span className="text-slate-700">No credit card required</span>
-            </div>
-            <div className="flex items-center justify-center md:justify-start">
-              <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
-                <Check className="h-3 w-3 text-emerald-600" />
-              </div>
-              <span className="text-slate-700">Instant access</span>
-            </div>
-            <div className="flex items-center justify-center md:justify-start">
-              <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
-                <Check className="h-3 w-3 text-emerald-600" />
-              </div>
-              <span className="text-slate-700">Cancel anytime</span>
-            </div>
+          <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 ml-6">
+            <Heart className="h-5 w-5 text-primary" />
           </div>
         </div>
-      </div>
+        
+        <div className="grid md:grid-cols-3 gap-4 text-sm">
+          <div className="flex items-center justify-center md:justify-start">
+            <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
+              <Check className="h-3 w-3 text-emerald-600" />
+            </div>
+            <span className="text-slate-700">No credit card required</span>
+          </div>
+          <div className="flex items-center justify-center md:justify-start">
+            <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
+              <Check className="h-3 w-3 text-emerald-600" />
+            </div>
+            <span className="text-slate-700">Instant access</span>
+          </div>
+          <div className="flex items-center justify-center md:justify-start">
+            <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
+              <Check className="h-3 w-3 text-emerald-600" />
+            </div>
+            <span className="text-slate-700">Cancel anytime</span>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }

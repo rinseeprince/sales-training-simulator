@@ -7,12 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
+import { ContactModal } from '@/components/ui/contact-modal'
+import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { Bot, Sparkles, Mic, MessageSquare, Zap, Clock, Users, Shield, Info, Play, Volume2 } from 'lucide-react'
 
 export function IvyPage() {
+  const { user } = useSupabaseAuth()
   const [isScriptLoaded, setIsScriptLoaded] = useState(false)
   const [showWidget, setShowWidget] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [contactModalOpen, setContactModalOpen] = useState(false)
+  const [userSubscription, setUserSubscription] = useState<'free' | 'paid' | 'enterprise' | null>(null)
 
   useEffect(() => {
     // Check if custom element is already defined (prevents re-registration error)
@@ -61,7 +66,35 @@ export function IvyPage() {
     }
   }, [])
 
+  // Check user subscription status
+  useEffect(() => {
+    const checkSubscription = async () => {
+      if (!user) return
+      
+      try {
+        const response = await fetch(`/api/user-profile?authUserId=${user.id}`)
+        const data = await response.json()
+        
+        if (data.success && data.userProfile) {
+          setUserSubscription(data.userProfile.subscription_status || 'free')
+        }
+      } catch (error) {
+        console.error('Failed to check subscription:', error)
+        setUserSubscription('free') // Default to free on error
+      }
+    }
+
+    checkSubscription()
+  }, [user])
+
   const handleTryIvy = () => {
+    // Check if user is enterprise - if not, show contact modal
+    if (userSubscription !== 'enterprise') {
+      setContactModalOpen(true)
+      return
+    }
+    
+    // Enterprise users can proceed
     setIsLoading(true)
     setTimeout(() => {
       setShowWidget(true)
@@ -351,6 +384,14 @@ export function IvyPage() {
           </Card>
         </motion.div>
       </div>
+      
+      {/* Contact Modal */}
+      <ContactModal
+        isOpen={contactModalOpen}
+        onClose={() => setContactModalOpen(false)}
+        title="Interested in Ivy?"
+        subtitle=""
+      />
     </div>
   )
 } 
