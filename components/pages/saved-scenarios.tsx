@@ -48,6 +48,8 @@ import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { useSimulationLimit } from '@/hooks/use-simulation-limit'
+import { PaywallModal } from '@/components/ui/paywall-modal'
 import { AssignmentModal } from '@/components/ui/assignment-modal'
 import { AssignmentDetailsModal } from '@/components/ui/assignment-details-modal'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -86,6 +88,7 @@ export function SavedScenarios() {
   const router = useRouter()
   const { user } = useSupabaseAuth()
   const { toast } = useToast()
+  const { checkSimulationLimit, isChecking } = useSimulationLimit()
   
   const [scenarios, setScenarios] = useState<SavedScenario[]>([])
   const [assignments, setAssignments] = useState<ScenarioAssignment[]>([])
@@ -104,6 +107,9 @@ export function SavedScenarios() {
   const [selectedScenarios, setSelectedScenarios] = useState<Set<string>>(new Set())
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false)
   const [isBatchDeleting, setIsBatchDeleting] = useState(false)
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false)
+  const [simulationLimit, setSimulationLimit] = useState<any>(null)
+  const [pendingScenario, setPendingScenario] = useState<SavedScenario | null>(null)
   
   // Define load functions with useCallback to prevent recreation
   const loadUserRole = useCallback(async () => {
@@ -228,7 +234,32 @@ export function SavedScenarios() {
     }
   }, [activeTab, user, loadUserRole, loadScenarios, loadAssignments])
   
-  const handleRunScenario = (scenario: SavedScenario) => {
+  const handleRunScenario = async (scenario: SavedScenario) => {
+    // Check simulation limit before proceeding
+    const limitCheck = await checkSimulationLimit();
+    if (limitCheck) {
+      setSimulationLimit(limitCheck);
+      
+      // If user can't simulate, show paywall modal
+      if (!limitCheck.canSimulate) {
+        setPendingScenario(scenario);
+        setIsPaywallOpen(true);
+        return;
+      }
+      
+      // Show warning if approaching limit
+      if (limitCheck.remaining <= 3 && limitCheck.remaining > 0 && !limitCheck.isPaid) {
+        setPendingScenario(scenario);
+        setIsPaywallOpen(true);
+        return;
+      }
+    }
+
+    // Proceed with simulation start
+    startScenario(scenario);
+  }
+
+  const startScenario = (scenario: SavedScenario) => {
     // Store scenario data in localStorage
     localStorage.setItem('selectedScenario', JSON.stringify({
       title: scenario.title,
@@ -242,6 +273,11 @@ export function SavedScenarios() {
     
     // Navigate to scenario builder
     router.push('/scenario-builder')
+  }
+
+  const handlePaywallClose = () => {
+    setIsPaywallOpen(false);
+    setPendingScenario(null);
   }
   
   const handleRunAssignment = (assignment: ScenarioAssignment) => {
@@ -552,10 +588,11 @@ export function SavedScenarios() {
                             <Button
                               size="sm"
                               onClick={() => handleRunScenario(scenario)}
+                              disabled={isChecking}
                               className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
                             >
                               <Play className="h-4 w-4 mr-1" />
-                              Run
+                              {isChecking ? 'Checking...' : 'Run'}
                             </Button>
                             {isManagerOrAdmin && (
                               <Button
@@ -748,6 +785,18 @@ export function SavedScenarios() {
           onClose={() => setAssignmentDetailsModalOpen(false)}
           assignment={assignmentToStart}
           onAssignmentUpdated={loadAssignments}
+        />
+
+        {/* Paywall Modal */}
+        <PaywallModal
+          isOpen={isPaywallOpen}
+          onClose={handlePaywallClose}
+          simulationLimit={simulationLimit}
+          title={simulationLimit?.canSimulate ? "Upgrade to Continue" : "Simulation Limit Reached"}
+          description={simulationLimit?.canSimulate 
+            ? `You have ${simulationLimit?.remaining} simulation${simulationLimit?.remaining === 1 ? '' : 's'} remaining. Upgrade for unlimited access.`
+            : "You've reached your free simulation limit for this month. Upgrade to continue training."
+          }
         />
       </div>
     )

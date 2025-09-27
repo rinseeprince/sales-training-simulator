@@ -15,13 +15,18 @@ import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
 import { REGIONAL_VOICES, getVoicesByRegion } from '@/lib/voice-constants'
+import { useSimulationLimit } from '@/hooks/use-simulation-limit'
+import { PaywallModal } from '@/components/ui/paywall-modal'
 
 
 export function ScenarioBuilder() {
   const router = useRouter()
   const { user } = useSupabaseAuth()
   const { toast } = useToast()
+  const { checkSimulationLimit, isChecking } = useSimulationLimit()
   const [isSaving, setIsSaving] = useState(false)
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false)
+  const [simulationLimit, setSimulationLimit] = useState<any>(null)
   const [scenarioData, setScenarioData] = useState({
     title: '',
     prompt: '',
@@ -90,51 +95,43 @@ export function ScenarioBuilder() {
       return
     }
 
-    // Check simulation limit for free users (just for display, actual increment happens when recording starts)
+    // Check simulation limit before proceeding
     if (user) {
-      try {
-        const response = await fetch(`/api/check-simulation-limit?userId=${user.id}`)
-        const data = await response.json()
+      const limitCheck = await checkSimulationLimit();
+      if (limitCheck) {
+        setSimulationLimit(limitCheck);
         
-        if (!data.canSimulate) {
-          toast({
-            title: "Simulation Limit Reached",
-            description: data.message || "You've reached your free simulation limit. Please upgrade to continue.",
-            variant: "destructive",
-            action: (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => router.push('/pricing')}
-              >
-                Upgrade
-              </Button>
-            )
-          })
-          return
+        // If user can't simulate, show paywall modal
+        if (!limitCheck.canSimulate) {
+          setIsPaywallOpen(true);
+          return;
         }
         
-        // Show remaining simulations for free users (informational only)
-        if (data.remaining && data.remaining > 0 && data.remaining <= 10) {
-          toast({
-            title: "Simulations Remaining",
-            description: `You have ${data.remaining} free simulation${data.remaining === 1 ? '' : 's'} left. Count will be used when you start recording.`,
-          })
+        // Show warning if approaching limit
+        if (limitCheck.remaining <= 3 && limitCheck.remaining > 0 && !limitCheck.isPaid) {
+          setIsPaywallOpen(true);
+          return;
         }
-      } catch (error) {
-        console.error('Failed to check simulation limit:', error)
-        // Continue anyway if check fails - will be enforced when recording starts
       }
     }
 
+    // Proceed with simulation start
+    startSimulation()
+  }
+
+  const startSimulation = () => {
     // Auto-save scenario if saveReuse is enabled
     if (scenarioData.saveReuse) {
-      const saved = await saveScenarioToDatabase()
-      if (!saved) {
-        return // Don't proceed if save failed
-      }
+      saveScenarioToDatabase().then(saved => {
+        if (!saved) return // Don't proceed if save failed
+        proceedToSimulation()
+      })
+    } else {
+      proceedToSimulation()
     }
+  }
 
+  const proceedToSimulation = () => {
     // Save scenario data to localStorage for simulation page
     const assignmentId = localStorage.getItem('currentAssignmentId')
     const simulationData = {
@@ -156,6 +153,10 @@ export function ScenarioBuilder() {
     
     // Navigate to simulation
     router.push('/simulation')
+  }
+
+  const handlePaywallClose = () => {
+    setIsPaywallOpen(false);
   }
 
   const saveScenarioToDatabase = async () => {
@@ -364,11 +365,11 @@ export function ScenarioBuilder() {
                 <div className="border-t border-slate-100 pt-6">
                   <Button
                     onClick={handleStartSimulation}
-                    disabled={!scenarioData.title || !scenarioData.prompt}
+                    disabled={!scenarioData.title || !scenarioData.prompt || isChecking}
                     className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
                   >
                     <Play className="mr-2 h-4 w-4" />
-                    Start Live Simulation
+                    {isChecking ? 'Checking...' : 'Start Live Simulation'}
                   </Button>
                 </div>
               </div>
@@ -461,6 +462,18 @@ export function ScenarioBuilder() {
 
 
       </div>
+
+      {/* Paywall Modal */}
+      <PaywallModal
+        isOpen={isPaywallOpen}
+        onClose={handlePaywallClose}
+        simulationLimit={simulationLimit}
+        title={simulationLimit?.canSimulate ? "Upgrade to Continue" : "Simulation Limit Reached"}
+        description={simulationLimit?.canSimulate 
+          ? `You have ${simulationLimit?.remaining} simulation${simulationLimit?.remaining === 1 ? '' : 's'} remaining. Upgrade for unlimited access.`
+          : "You've reached your free simulation limit for this month. Upgrade to continue training."
+        }
+      />
     </div>
   )
 }

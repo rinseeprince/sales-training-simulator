@@ -15,6 +15,8 @@ import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
 import { ManagerReviewActions } from '@/components/ui/manager-review-actions'
+import { useSimulationLimit } from '@/hooks/use-simulation-limit'
+import { PaywallModal } from '@/components/ui/paywall-modal'
 
 const callData = {
   score: 87,
@@ -327,7 +329,10 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   const searchParams = useSearchParams()
   const router = useRouter()
   const { toast } = useToast()
+  const { checkSimulationLimit, isChecking } = useSimulationLimit()
   const callId = modalCallId || searchParams.get('callId')
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false)
+  const [simulationLimit, setSimulationLimit] = useState<any>(null)
   
   const [actualUserId, setActualUserId] = useState<string | null>(null)
   
@@ -559,41 +564,29 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   const handleStartOver = async () => {
     // Check simulation limit before proceeding
     if (user) {
-      try {
-        // Get the correct user ID from simple_users table (use actualUserId if available)
-        const userId = actualUserId || user.id;
+      const limitCheck = await checkSimulationLimit();
+      if (limitCheck) {
+        setSimulationLimit(limitCheck);
         
-        const response = await fetch(`/api/check-simulation-limit?userId=${userId}`)
-        const data = await response.json()
-        
-        if (!data.canSimulate) {
-          toast({
-            title: "Simulation Limit Reached",
-            description: data.message || "You've reached your free simulation limit. Please upgrade to continue.",
-            variant: "destructive",
-            action: (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => router.push('/pricing')}
-              >
-                Upgrade
-              </Button>
-            )
-          })
-          return
+        // If user can't simulate, show paywall modal
+        if (!limitCheck.canSimulate) {
+          setIsPaywallOpen(true);
+          return;
         }
         
-        // Show remaining simulations for free users (informational only)
-        if (data.remaining && data.remaining > 0 && data.remaining <= 10) {
-          console.log(`You have ${data.remaining} free simulation${data.remaining === 1 ? '' : 's'} left.`)
+        // Show warning if approaching limit
+        if (limitCheck.remaining <= 3 && limitCheck.remaining > 0 && !limitCheck.isPaid) {
+          setIsPaywallOpen(true);
+          return;
         }
-      } catch (error) {
-        console.error('Failed to check simulation limit:', error)
-        // Continue anyway if check fails - will be enforced when recording starts
       }
     }
 
+    // Proceed with simulation start
+    startOverSimulation()
+  }
+
+  const startOverSimulation = () => {
     console.log('🔄 Start Over clicked - Available data:', {
       tempCallData: tempCallData ? {
         scenarioName: tempCallData.scenarioName,
@@ -661,6 +654,10 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
       console.log('🔄 No scenario data available, redirecting to scenario builder');
       router.push('/scenario-builder')
     }
+  }
+
+  const handlePaywallClose = () => {
+    setIsPaywallOpen(false);
   }
 
   // Use temp call data, then real call data, then most recent call, or fallback to demo data
@@ -876,10 +873,11 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
               <Button 
                 variant="outline" 
                 onClick={handleStartOver} 
+                disabled={isChecking}
                 className="rounded-lg border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 <RotateCcw className="mr-2 h-4 w-4" />
-                Start Over
+                {isChecking ? 'Checking...' : 'Start Over'}
               </Button>
               <Button 
                 onClick={handleApprove} 
@@ -1153,6 +1151,18 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
 
         {/* Sticky Footer */}
         <StickyFooter />
+
+        {/* Paywall Modal */}
+        <PaywallModal
+          isOpen={isPaywallOpen}
+          onClose={handlePaywallClose}
+          simulationLimit={simulationLimit}
+          title={simulationLimit?.canSimulate ? "Upgrade to Continue" : "Simulation Limit Reached"}
+          description={simulationLimit?.canSimulate 
+            ? `You have ${simulationLimit?.remaining} simulation${simulationLimit?.remaining === 1 ? '' : 's'} remaining. Upgrade for unlimited access.`
+            : "You've reached your free simulation limit for this month. Upgrade to continue training."
+          }
+        />
       </div>
     </div>
   )

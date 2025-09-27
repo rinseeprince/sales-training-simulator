@@ -49,6 +49,8 @@ import {
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
+import { useSimulationLimit } from '@/hooks/use-simulation-limit'
+import { PaywallModal } from '@/components/ui/paywall-modal'
 
 interface TemplateScenario {
   id: string;
@@ -105,6 +107,7 @@ export function TemplateBrowser({ onSelectTemplate, showQuickStart = true }: Tem
   const { user } = useSupabaseAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const { checkSimulationLimit, isChecking } = useSimulationLimit();
   
   const [templates, setTemplates] = useState<TemplateScenario[]>([]);
   const [categories, setCategories] = useState<TemplateCategory[]>([]);
@@ -115,6 +118,9 @@ export function TemplateBrowser({ onSelectTemplate, showQuickStart = true }: Tem
   const [selectedIndustry, setSelectedIndustry] = useState('all');
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateScenario | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false);
+  const [simulationLimit, setSimulationLimit] = useState<any>(null);
+  const [pendingTemplate, setPendingTemplate] = useState<TemplateScenario | null>(null);
 
   useEffect(() => {
     loadTemplates();
@@ -176,6 +182,31 @@ export function TemplateBrowser({ onSelectTemplate, showQuickStart = true }: Tem
       return;
     }
 
+    // Check simulation limit before proceeding
+    const limitCheck = await checkSimulationLimit();
+    if (limitCheck) {
+      setSimulationLimit(limitCheck);
+      
+      // If user can't simulate, show paywall modal
+      if (!limitCheck.canSimulate) {
+        setPendingTemplate(template);
+        setIsPaywallOpen(true);
+        return;
+      }
+      
+      // Show warning if approaching limit
+      if (limitCheck.remaining <= 3 && limitCheck.remaining > 0 && !limitCheck.isPaid) {
+        setPendingTemplate(template);
+        setIsPaywallOpen(true);
+        return;
+      }
+    }
+
+    // Proceed with simulation start
+    startSimulation(template);
+  };
+
+  const startSimulation = async (template: TemplateScenario) => {
     try {
       // Store scenario data for simulation directly without cloning to user scenarios
       localStorage.setItem('currentScenario', JSON.stringify({
@@ -203,6 +234,11 @@ export function TemplateBrowser({ onSelectTemplate, showQuickStart = true }: Tem
         variant: "destructive"
       });
     }
+  };
+
+  const handlePaywallClose = () => {
+    setIsPaywallOpen(false);
+    setPendingTemplate(null);
   };
 
   // Helper function to get appropriate voice for each template
@@ -474,10 +510,11 @@ export function TemplateBrowser({ onSelectTemplate, showQuickStart = true }: Tem
                           <Button
                             size="sm"
                             onClick={() => handleQuickStart(template)}
+                            disabled={isChecking}
                             className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
                           >
                             <Zap className="h-4 w-4 mr-1" />
-                            Quick Start
+                            {isChecking ? 'Checking...' : 'Quick Start'}
                           </Button>
                         )}
                         <DropdownMenu>
@@ -495,9 +532,12 @@ export function TemplateBrowser({ onSelectTemplate, showQuickStart = true }: Tem
                               <Copy className="h-4 w-4 mr-2" />
                               Clone & Customize
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleQuickStart(template)}>
+                            <DropdownMenuItem 
+                              onClick={() => handleQuickStart(template)}
+                              disabled={isChecking}
+                            >
                               <Play className="h-4 w-4 mr-2" />
-                              Start Simulation
+                              {isChecking ? 'Checking...' : 'Start Simulation'}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -605,14 +645,29 @@ export function TemplateBrowser({ onSelectTemplate, showQuickStart = true }: Tem
                 <Copy className="mr-2 h-4 w-4" />
                 Clone & Customize
               </Button>
-              <Button onClick={() => handleQuickStart(selectedTemplate)}>
+              <Button 
+                onClick={() => handleQuickStart(selectedTemplate)}
+                disabled={isChecking}
+              >
                 <Play className="mr-2 h-4 w-4" />
-                Start Simulation
+                {isChecking ? 'Checking...' : 'Start Simulation'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Paywall Modal */}
+      <PaywallModal
+        isOpen={isPaywallOpen}
+        onClose={handlePaywallClose}
+        simulationLimit={simulationLimit}
+        title={simulationLimit?.canSimulate ? "Upgrade to Continue" : "Simulation Limit Reached"}
+        description={simulationLimit?.canSimulate 
+          ? `You have ${simulationLimit?.remaining} simulation${simulationLimit?.remaining === 1 ? '' : 's'} remaining. Upgrade for unlimited access.`
+          : "You've reached your free simulation limit for this month. Upgrade to continue training."
+        }
+      />
     </div>
   );
 }

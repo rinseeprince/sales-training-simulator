@@ -12,29 +12,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
-const navigationSections = [
-  {
-    title: 'Core',
-    items: [
-      { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['rep', 'manager', 'admin'] },
-      { name: 'Template Library', href: '/templates', icon: Library, roles: ['rep', 'manager', 'admin'] },
-      { name: 'Scenario Builder', href: '/scenario-builder', icon: FileText, roles: ['rep', 'manager', 'admin'] },
-      { name: 'Saved Scenarios', href: '/saved-scenarios', icon: BookOpen, roles: ['rep', 'manager', 'admin'] },
-      { name: 'Saved Simulations', href: '/simulations', icon: History, roles: ['rep', 'manager', 'admin'] },
-      { name: 'Ivy', href: '/ivy', icon: Bot, roles: ['rep', 'manager', 'admin'], badge: 'Beta' },
-    ]
-  },
-  {
-    title: 'Organization',
-    items: [
-      { name: 'Pricing', href: '/pricing', icon: DollarSign, roles: ['rep', 'manager', 'admin'], badge: 'Free' },
-      { name: 'Admin Panel', href: '/admin', icon: Users, roles: ['manager', 'admin'] },
-      { name: 'Compliance', href: '/compliance', icon: Shield, roles: ['admin'] },
-      { name: 'Settings', href: '/settings', icon: Settings, roles: ['rep', 'manager', 'admin'] },
-    ]
-  }
-]
-
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -45,11 +22,60 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   })
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarLoaded, setAvatarLoaded] = useState(false)
+  const [userSubscriptionStatus, setUserSubscriptionStatus] = useState<string | null>(null)
   const { user, logout } = useSupabaseAuth()
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
 
-  // Define loadUserProfile function first
+  // Function to get subscription badge based on status
+  const getSubscriptionBadge = (status: string | null) => {
+    if (!status) return null
+    switch (status) {
+      case 'free':
+        return 'Free'
+      case 'paid':
+        return 'Pro'
+      case 'enterprise':
+        return 'Enterprise'
+      case 'trial':
+        return 'Trial'
+      default:
+        return 'Free'
+    }
+  }
+
+  // Dynamic navigation sections based on user subscription status
+  const navigationSections = [
+    {
+      title: 'Core',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['rep', 'manager', 'admin'] },
+        { name: 'Template Library', href: '/templates', icon: Library, roles: ['rep', 'manager', 'admin'] },
+        { name: 'Scenario Builder', href: '/scenario-builder', icon: FileText, roles: ['rep', 'manager', 'admin'] },
+        { name: 'Saved Scenarios', href: '/saved-scenarios', icon: BookOpen, roles: ['rep', 'manager', 'admin'] },
+        { name: 'Saved Simulations', href: '/simulations', icon: History, roles: ['rep', 'manager', 'admin'] },
+        { name: 'Ivy', href: '/ivy', icon: Bot, roles: ['rep', 'manager', 'admin'], badge: 'Beta' },
+      ]
+    },
+    {
+      title: 'Organization',
+      items: [
+        { 
+          name: 'Pricing', 
+          href: '/pricing', 
+          icon: DollarSign, 
+          roles: ['rep', 'manager', 'admin'], 
+          badge: userSubscriptionStatus === 'free' ? getSubscriptionBadge(userSubscriptionStatus) : null
+        },
+        { name: 'Admin Panel', href: '/admin', icon: Users, roles: ['manager', 'admin'] },
+        { name: 'Compliance', href: '/compliance', icon: Shield, roles: ['admin'] },
+        { name: 'Settings', href: '/settings', icon: Settings, roles: ['rep', 'manager', 'admin'] },
+      ]
+    }
+  ]
+
+  // Define loadUserProfile function with subscription status fetch
   const loadUserProfile = useCallback(async () => {
     if (!user?.id) return
     
@@ -60,17 +86,26 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       if (data.success && data.userProfile) {
         // Add timestamp to prevent caching
         if (data.userProfile.avatar_url) {
-          setAvatarUrl(`${data.userProfile.avatar_url}?t=${Date.now()}`)
+          const newAvatarUrl = `${data.userProfile.avatar_url}?t=${Date.now()}`
+          setAvatarUrl(newAvatarUrl)
+          
+          // Preload the image to make it display faster
+          const img = new Image()
+          img.src = newAvatarUrl
         } else {
           setAvatarUrl(null)
         }
+        setAvatarLoaded(true)
+        
+        // Set subscription status
+        setUserSubscriptionStatus(data.userProfile.subscription_status || 'free')
       }
     } catch (error) {
       console.error('Failed to load user profile:', error)
     }
   }, [user?.id])
 
-  // Load user profile with avatar
+  // Load user profile with avatar and subscription status
   useEffect(() => {
     if (user?.id) {
       loadUserProfile()
@@ -95,9 +130,6 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       localStorage.setItem('sidebarOpen', JSON.stringify(newState))
     }
   }
-
-  // Flatten navigation sections for easy access
-  // const allNavigationItems = navigationSections.flatMap(section => section.items)
 
   return (
     <div className="min-h-screen bg-background">
@@ -366,15 +398,23 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 <AvatarImage 
                   src={avatarUrl || user?.avatar_url || "/placeholder.svg"} 
                   key={avatarUrl || user?.avatar_url}
+                  className="object-cover"
+                  loading="eager"
                 />
-                <AvatarFallback className="bg-primary text-white text-xs">
-                  {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+                <AvatarFallback className="bg-transparent">
+                  {avatarLoaded && !avatarUrl && !user?.avatar_url && (
+                    <div className="bg-primary text-white text-xs w-full h-full flex items-center justify-center rounded-full">
+                      {(user?.name || user?.email || 'U').charAt(0).toUpperCase()}
+                    </div>
+                  )}
                 </AvatarFallback>
               </Avatar>
               {sidebarOpen && (
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-normal text-slate-700 truncate">{user?.name}</p>
-                  <p className="text-xs text-slate-500 capitalize truncate">{user?.subscription_status}</p>
+                  {userSubscriptionStatus && (
+                    <p className="text-xs text-slate-500 capitalize truncate">{userSubscriptionStatus}</p>
+                  )}
                 </div>
               )}
             </div>

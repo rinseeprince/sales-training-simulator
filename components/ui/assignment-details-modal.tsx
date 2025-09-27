@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useSimulationLimit } from '@/hooks/use-simulation-limit'
+import { PaywallModal } from '@/components/ui/paywall-modal'
 import {
   Dialog,
   DialogContent,
@@ -64,7 +66,10 @@ export function AssignmentDetailsModal({
   onAssignmentUpdated 
 }: AssignmentDetailsModalProps) {
   const router = useRouter()
+  const { checkSimulationLimit, isChecking } = useSimulationLimit()
   const [isStarting, setIsStarting] = useState(false)
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false)
+  const [simulationLimit, setSimulationLimit] = useState<any>(null)
 
   const formatDate = (dateString: string) => {
     return format(new Date(dateString), 'PPP')
@@ -72,6 +77,24 @@ export function AssignmentDetailsModal({
 
   const handleStartScenario = async () => {
     if (!assignment?.scenario) return
+
+    // Check simulation limit before proceeding
+    const limitCheck = await checkSimulationLimit();
+    if (limitCheck) {
+      setSimulationLimit(limitCheck);
+      
+      // If user can't simulate, show paywall modal
+      if (!limitCheck.canSimulate) {
+        setIsPaywallOpen(true);
+        return;
+      }
+      
+      // Show warning if approaching limit
+      if (limitCheck.remaining <= 3 && limitCheck.remaining > 0 && !limitCheck.isPaid) {
+        setIsPaywallOpen(true);
+        return;
+      }
+    }
 
     try {
       setIsStarting(true)
@@ -121,6 +144,10 @@ export function AssignmentDetailsModal({
     }
   }
 
+  const handlePaywallClose = () => {
+    setIsPaywallOpen(false);
+  }
+
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       not_started: { label: 'Not Started', variant: 'secondary' as const, icon: Clock },
@@ -145,6 +172,7 @@ export function AssignmentDetailsModal({
     assignment.status !== 'completed'
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[600px] z-[70]">
         <DialogHeader>
@@ -246,13 +274,18 @@ export function AssignmentDetailsModal({
           </Button>
           <Button 
             onClick={handleStartScenario} 
-            disabled={!assignment?.scenario || isStarting}
+            disabled={!assignment?.scenario || isStarting || isChecking}
             className="min-w-[120px] bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 rounded-xl font-medium"
           >
             {isStarting ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
                 Starting...
+              </>
+            ) : isChecking ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                Checking...
               </>
             ) : (
               <>
@@ -264,5 +297,18 @@ export function AssignmentDetailsModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Paywall Modal */}
+    <PaywallModal
+      isOpen={isPaywallOpen}
+      onClose={handlePaywallClose}
+      simulationLimit={simulationLimit}
+      title={simulationLimit?.canSimulate ? "Upgrade to Continue" : "Simulation Limit Reached"}
+      description={simulationLimit?.canSimulate 
+        ? `You have ${simulationLimit?.remaining} simulation${simulationLimit?.remaining === 1 ? '' : 's'} remaining. Upgrade for unlimited access.`
+        : "You've reached your free simulation limit for this month. Upgrade to continue training."
+      }
+    />
+  </>
   )
 }

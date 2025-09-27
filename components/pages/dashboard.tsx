@@ -144,7 +144,6 @@ const savedScenarios = [
 
 export function Dashboard() {
   const { user } = useSupabaseAuth()
-  console.log('Dashboard user object:', user)
   const router = useRouter()
   const [calls, setCalls] = useState<Call[]>([])
   const [scenarios, setScenarios] = useState<Scenario[]>([])
@@ -294,22 +293,13 @@ export function Dashboard() {
   useEffect(() => {
     const fetchManagerData = async () => {
       if (!user || !isManagerView || !['manager', 'admin'].includes(userRole || '')) {
-        console.log('🚫 Manager Dashboard: Skipping fetch', { user: !!user, isManagerView, userRole })
         return
       }
-      
-      console.log('🔄 Manager Dashboard: Starting data fetch...', { 
-        userRole, 
-        isManagerView, 
-        userId: user.id,
-        timestamp: new Date().toISOString()
-      })
       setIsLoadingManagerData(true)
       setManagerDataError(null)
       
       try {
         // Get team metrics with exact same fallback pattern as assign scenario modal
-        console.log('📊 Fetching team metrics...')
         const metricsTimeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('Metrics query timeout')), 5000)
         })
@@ -372,12 +362,10 @@ export function Dashboard() {
         if (metricsError) {
           console.error('❌ Failed to load team metrics:', metricsError)
         } else {
-          console.log('✅ Team metrics loaded:', metricsData)
           setTeamMetrics(metricsData)
         }
         
         // Get team members with exact same fallback pattern as assign scenario modal
-        console.log('👥 Fetching team members...')
         const emailDomain = user.email?.split('@')[1] || ''
         
         const timeoutPromise = new Promise((_, reject) => {
@@ -412,12 +400,10 @@ export function Dashboard() {
           console.error('❌ Failed to load team members:', teamMembersError)
           setManagerDataError('Failed to load team members. Please refresh or try again.')
         } else {
-          console.log('✅ Team members loaded:', teamMembersData?.length || 0, 'members')
           setTeamMembers(teamMembersData || [])
         }
         
         // Get reviews with timeout fallback
-        console.log('📋 Fetching reviews...')
         const reviewsTimeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('Reviews query timeout')), 5000)
         })
@@ -465,7 +451,6 @@ export function Dashboard() {
         if (reviewsError) {
           console.error('❌ Failed to load reviews:', reviewsError)
         } else {
-          console.log('✅ Reviews loaded:', reviewsData?.length || 0, 'reviews')
           setReviews(reviewsData || [])
         }
         
@@ -480,7 +465,6 @@ export function Dashboard() {
     // Add visibility change listener like assign scenario modal
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && isManagerView && user) {
-        console.log('👁️ Tab became visible, refreshing manager data...')
         fetchManagerData()
       }
     }
@@ -681,45 +665,6 @@ export function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Simulation Limit Card (for free users) */}
-      {simulationLimit && !simulationLimit.isPaid && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15 }}
-          className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-6"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Free Plan Usage</h3>
-              <p className="text-sm text-slate-600 mb-3">
-                {simulationLimit.remaining > 0 
-                  ? `You have ${simulationLimit.remaining} simulation${simulationLimit.remaining === 1 ? '' : 's'} remaining out of ${simulationLimit.limit} monthly`
-                  : 'You have reached your monthly simulation limit'}
-              </p>
-              <Progress 
-                value={(simulationLimit.count / simulationLimit.limit) * 100} 
-                className="h-2 mb-3"
-              />
-              <div className="flex items-center gap-4 text-xs text-slate-500">
-                <span>{simulationLimit.count} used</span>
-                <span>•</span>
-                <span>{simulationLimit.remaining > 0 ? `${simulationLimit.remaining} remaining` : 'Limit reached'}</span>
-              </div>
-            </div>
-            <div className="ml-6">
-              <Link href="/pricing">
-                <Button 
-                  variant={simulationLimit.remaining === 0 ? "default" : "outline"}
-                  className="whitespace-nowrap"
-                >
-                  {simulationLimit.remaining === 0 ? 'Upgrade Now' : 'View Plans'}
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </motion.div>
-      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Recent Simulations */}
@@ -998,7 +943,6 @@ export function Dashboard() {
                   <SelectContent>
                     <SelectItem value="all">All Team Members</SelectItem>
                     {(() => {
-                      console.log('🔍 Rendering team members dropdown:', teamMembers?.length || 0, 'members')
                       return teamMembers.map((member) => (
                         <SelectItem key={member.id} value={member.id}>
                           {member.name}
