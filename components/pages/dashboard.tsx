@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Play, FileText, Clock, CheckCircle, Trophy, Target, TrendingUp, Phone, Users } from 'lucide-react'
+import { Play, FileText, Clock, CheckCircle, Trophy, Target, TrendingUp, Phone, Users, Trash2 } from 'lucide-react'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import Link from 'next/link'
 import { useState, useEffect, useCallback } from 'react'
@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Call, User, AssignmentCompletion } from '@/lib/types'
 import { 
   Table,
   TableBody,
@@ -28,13 +29,6 @@ import {
 } from '@/components/ui/table'
 
 // Type definitions
-interface Call {
-  id: string
-  scenario_name: string
-  score: number | null
-  created_at: string
-  duration: string
-}
 
 interface Scenario {
   id: string
@@ -183,6 +177,7 @@ export function Dashboard() {
   const [assignmentFilter, setAssignmentFilter] = useState('pending')
   const [searchQuery, setSearchQuery] = useState('')
   const [dateRange, setDateRange] = useState('30')
+  const [deletingAssignmentIds, setDeletingAssignmentIds] = useState<Set<string>>(new Set())
 
   // Helper function to get auth headers
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -239,8 +234,8 @@ export function Dashboard() {
         const actualUserId = profileData.userProfile.id;
         
         
-        // Fetch calls
-        const callsResponse = await fetch(`/api/calls?userId=${actualUserId}`)
+        // Fetch calls with assignment completion status
+        const callsResponse = await fetch(`/api/calls?userId=${actualUserId}&includeAssignments=true`)
         if (callsResponse.ok) {
           const callsData = await callsResponse.json()
           setCalls(callsData.calls || [])
@@ -464,6 +459,65 @@ export function Dashboard() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [user, isManagerView, userRole, selectedUser, assignmentFilter, dateRange, searchQuery, getAuthHeaders])
+
+  // Delete assignment function
+  const handleDeleteAssignment = async (call: Call, assignmentCompletion: AssignmentCompletion & { assignment_id: string }) => {
+    // Get the current user profile to access the actualUserId
+    if (!user?.id || !assignmentCompletion?.assignment_id) return
+    
+    let currentUserId: string
+    try {
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const profileData = await profileResponse.json()
+      if (!profileData.success) {
+        throw new Error('Failed to get user profile')
+      }
+      currentUserId = profileData.userProfile.id
+    } catch (error) {
+      console.error('Error getting user profile:', error)
+      alert('Failed to get user information. Please try again.')
+      return
+    }
+    
+    // Check if assignment is approved
+    if (assignmentCompletion.review_status !== 'approved') {
+      alert('Only approved assignments can be deleted.')
+      return
+    }
+
+    if (!confirm('Are you sure you want to delete this approved assignment? This action cannot be undone.')) {
+      return
+    }
+
+    const assignmentId = assignmentCompletion.assignment_id
+    setDeletingAssignmentIds(prev => new Set(prev).add(assignmentId))
+
+    try {
+      const response = await fetch(`/api/assignments?assignmentId=${assignmentId}&userId=${currentUserId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to delete assignment')
+      }
+
+      // Remove the call from the local state
+      setCalls(prevCalls => prevCalls.filter(c => c.id !== call.id))
+      
+      // Show success message
+      alert('Assignment deleted successfully!')
+    } catch (error) {
+      console.error('Error deleting assignment:', error)
+      alert('Failed to delete assignment. Please try again.')
+    } finally {
+      setDeletingAssignmentIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(assignmentId)
+        return newSet
+      })
+    }
+  }
 
   // Moved status helper functions inline since they're only used in one place
 
@@ -694,7 +748,18 @@ export function Dashboard() {
               </div>
             ) : (
               calls.slice(0, 3).map((call) => {
-                const status = call.score !== null && call.score >= 90 ? 'certified' : call.score !== null ? 'completed' : 'awaiting_review';
+                // Check if this call has been approved by a manager
+                const callWithAssignments = call as Call & { assignment_completions?: AssignmentCompletion[] }
+                const assignmentCompletion = callWithAssignments.assignment_completions?.[0]
+                const isApproved = assignmentCompletion?.review_status === 'approved'
+                
+                const status = isApproved 
+                  ? 'passed' 
+                  : call.score !== null && call.score >= 90 
+                    ? 'certified' 
+                    : call.score !== null 
+                      ? 'completed' 
+                      : 'awaiting_review';
                 return (
                   <div
                     key={call.id}
@@ -706,7 +771,7 @@ export function Dashboard() {
                   >
                     <div className="flex items-center space-x-3 flex-1 min-w-0">
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{
-                        backgroundColor: status === 'certified' ? '#10b981' : status === 'completed' ? '#048998' : '#f59e0b'
+                        backgroundColor: status === 'passed' ? '#3b82f6' : status === 'certified' ? '#10b981' : status === 'completed' ? '#048998' : '#f59e0b'
                       }}></div>
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-slate-900 truncate">{call.scenario_name}</p>
@@ -733,12 +798,33 @@ export function Dashboard() {
                         </div>
                       )}
                       <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                        status === 'passed' ? 'bg-blue-50 text-blue-700' :
                         status === 'certified' ? 'bg-emerald-50 text-emerald-700' :
                         status === 'completed' ? 'bg-primary/10 text-primary' :
                         'bg-amber-50 text-amber-700'
                       }`}>
-                        {status === 'certified' ? 'Certified' : status === 'completed' ? 'Completed' : 'Pending'}
+                        {status === 'passed' ? 'Passed' : status === 'certified' ? 'Certified' : status === 'completed' ? 'Completed' : 'Pending'}
                       </span>
+                      {/* Delete button for passed assignments */}
+                      {status === 'passed' && assignmentCompletion && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation() // Prevent opening the review modal
+                            handleDeleteAssignment(call, assignmentCompletion)
+                          }}
+                          disabled={deletingAssignmentIds.has(assignmentCompletion.assignment_id)}
+                          className="h-8 w-8 p-0 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all duration-200"
+                          title="Delete approved assignment"
+                        >
+                          {deletingAssignmentIds.has(assignmentCompletion.assignment_id) ? (
+                            <div className="animate-spin rounded-full h-3 w-3 border-b border-slate-400"></div>
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );

@@ -53,6 +53,15 @@ export interface EnhancedScoring {
   readyForRealCustomers: boolean;
 }
 
+export interface AssignmentCompletion {
+  id: string;
+  assignment_id: string;
+  review_status: 'pending' | 'approved' | 'needs_improvement' | 'rejected';
+  reviewer_notes?: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+}
+
 export interface Call {
   id: string;
   rep_id: string;
@@ -72,6 +81,7 @@ export interface Call {
   audio_duration?: number;
   audio_file_size?: number;
   enhanced_scoring?: EnhancedScoring; // Add enhanced scoring data
+  assignment_completions?: AssignmentCompletion[];
   created_at: string;
   updated_at: string;
 }

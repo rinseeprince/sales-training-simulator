@@ -87,13 +87,22 @@ export async function PATCH(
       .from('assignment_completions')
       .update(updateData)
       .eq('id', reviewId)
-      .select()
+      .select(`
+        *,
+        calls (
+          id,
+          scenario_name,
+          rep_id
+        )
+      `)
       .single()
 
     if (updateError) {
       console.error('Error updating assignment completion:', updateError)
       return NextResponse.json({ error: 'Failed to update review' }, { status: 500 })
     }
+
+    // Notification will be created automatically by database trigger
 
     return NextResponse.json({
       success: true,

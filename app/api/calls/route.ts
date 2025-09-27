@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const callId = searchParams.get('callId')
     const userId = searchParams.get('userId')
+    const includeAssignments = searchParams.get('includeAssignments') === 'true'
 
     // Create a fresh Supabase client for this request
     const freshSupabase = createClient(
@@ -27,10 +28,22 @@ export async function GET(request: NextRequest) {
         return errorResponse('userId is required when callId is not provided', 400)
       }
 
-      // Fetch all calls for the user
+      // Fetch all calls for the user with optional assignment completion data
+      let selectQuery = '*, enhanced_scoring'
+      if (includeAssignments) {
+        selectQuery += `, assignment_completions(
+          id,
+          assignment_id,
+          review_status,
+          reviewer_notes,
+          reviewed_at,
+          reviewed_by
+        )`
+      }
+
       const { data: calls, error } = await freshSupabase
         .from('calls')
-        .select('*, enhanced_scoring')
+        .select(selectQuery)
         .eq('rep_id', userId)
         .order('created_at', { ascending: false })
 

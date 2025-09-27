@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast'
 import { ManagerReviewActions } from '@/components/ui/manager-review-actions'
 import { useSimulationLimit } from '@/hooks/use-simulation-limit'
 import { PaywallModal } from '@/components/ui/paywall-modal'
+import { supabaseClient } from '@/lib/supabase-auth'
 
 const callData = {
   score: 87,
@@ -174,6 +175,13 @@ interface CoachingData {
   overallScore?: number;
   scenarioFit?: number;
   readyForRealCustomers?: boolean;
+  insights?: string[];
+  metrics?: {
+    talkRatio?: number;
+  };
+  categoryScores?: {
+    closing?: boolean;
+  };
 }
 
 const CoachingPanel = ({ 
@@ -304,17 +312,28 @@ const StickyFooter = () => {
 interface TempCallData {
   callId: string;
   scenarioName: string;
+  scenario_name?: string; // For compatibility
   scenarioPrompt?: string;
+  scenario_prompt?: string; // For compatibility
   scenarioProspectName?: string;
+  scenario_prospect_name?: string; // For compatibility
   scenarioVoice?: string;
+  scenario_voice?: string; // For compatibility
   duration: string;
   audioUrl: string;
+  audio_url?: string; // For compatibility
   conversationHistory: TranscriptEntry[];
   transcript: TranscriptEntry[];
   enhanced_scoring?: CoachingData;
   enhancedScoring?: CoachingData;
   created_at?: string;
   assignmentId?: string;
+  // Add missing properties for compatibility
+  feedback?: string[];
+  score?: number;
+  talk_ratio?: number;
+  objections_handled?: number;
+  cta_used?: boolean;
 }
 
 interface PostCallReviewProps {
@@ -336,7 +355,7 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   
   const [actualUserId, setActualUserId] = useState<string | null>(null)
   
-  // Get the correct user ID from simple_users table
+  // Get the correct user ID from simple_users table and user role
   useEffect(() => {
     const getUserProfile = async () => {
       if (!user?.id) return;
@@ -347,6 +366,7 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
         
         if (profileData.success) {
           setActualUserId(profileData.userProfile.id);
+          setUserRole(profileData.userProfile.role || 'user');
         }
       } catch (error) {
         console.error('Error getting user profile:', error);
@@ -401,6 +421,8 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   const [isLoadingCoaching, setIsLoadingCoaching] = useState(false)
   const [mostRecentCall, setMostRecentCall] = useState<TempCallData | null>(null)
   const [loadingRecentCall, setLoadingRecentCall] = useState(false)
+  const [userRole, setUserRole] = useState<string>('user')
+  const [isApprovingCall, setIsApprovingCall] = useState(false)
 
   // Check for temporary call data on mount
   useEffect(() => {
@@ -557,8 +579,78 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
     }
   }
 
-  const handleApprove = () => {
-    console.log('Call approved')
+  const handleApprove = async () => {
+    if (!callId || !['manager', 'admin'].includes(userRole)) {
+      toast({
+        title: "Unauthorized",
+        description: "You don't have permission to approve calls.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // If this is a manager review modal, use the existing ManagerReviewActions component
+    if (isManagerReview && onReviewSubmit) {
+      onReviewSubmit({ status: 'approved' })
+      return
+    }
+
+    // For direct approval from post-call review
+    setIsApprovingCall(true)
+    try {
+      // First, find the assignment completion record for this call
+      const response = await fetch(`/api/assignments?callId=${callId}`)
+      if (!response.ok) {
+        throw new Error('Failed to find assignment for this call')
+      }
+      
+      const data = await response.json()
+      const assignment = data.assignments?.[0]
+      
+      if (!assignment?.assignment_completions?.[0]) {
+        throw new Error('No assignment completion found for this call')
+      }
+
+      const completionId = assignment.assignment_completions[0].id
+      
+      // Update the assignment completion status
+      const updateResponse = await fetch(`/api/manager-reviews/${completionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabaseClient.auth.getSession()).data.session?.access_token}`
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          manager_feedback: 'Call approved'
+        })
+      })
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text()
+        console.error('Approve call failed with status:', updateResponse.status, 'Error:', errorText)
+        throw new Error(`Failed to approve call: ${errorText}`)
+      }
+
+      toast({
+        title: "Call Approved",
+        description: "The call has been approved successfully. The user will be notified.",
+      })
+      
+      // Refresh the page or close modal if needed
+      if (isInModal) {
+        window.location.reload()
+      }
+    } catch (error) {
+      console.error('Error approving call:', error)
+      toast({
+        title: "Error",
+        description: "Failed to approve call. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsApprovingCall(false)
+    }
   }
 
   const handleStartOver = async () => {
@@ -665,17 +757,21 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   const hasAudio = tempCallData?.audioUrl || call?.audio_url || mostRecentCall?.audio_url || callData.audioUrl
 
   // Memoize display data to prevent unnecessary re-renders
-  const safeDisplayData = useMemo(() => ({
-    ...displayData,
-    feedback: Array.isArray(displayData?.feedback) ? displayData.feedback : [],
-    transcript: Array.isArray(displayData?.transcript) ? displayData.transcript : [],
-    score: typeof displayData?.score === 'number' ? displayData.score : 0,
-    talk_ratio: typeof displayData?.talk_ratio === 'number' ? displayData.talk_ratio : 50,
-    objections_handled: typeof displayData?.objections_handled === 'number' ? displayData.objections_handled : 0,
-    cta_used: typeof displayData?.cta_used === 'boolean' ? displayData.cta_used : false,
-    duration: typeof displayData?.duration === 'number' ? displayData.duration : 0,
-    enhancedScoring: displayData?.enhanced_scoring || displayData?.enhancedScoring || null // Handle both field names
-  }), [displayData])
+  const safeDisplayData = useMemo(() => {
+    const data = displayData as any // Type assertion for safety
+    return {
+      ...data,
+      feedback: Array.isArray(data?.feedback) ? data.feedback : [],
+      transcript: Array.isArray(data?.transcript) ? data.transcript : [],
+      score: typeof data?.score === 'number' ? data.score : data?.talkRatio?.rep || 0,
+      talk_ratio: typeof data?.talk_ratio === 'number' ? data.talk_ratio : data?.talkRatio?.rep || 50,
+      objections_handled: typeof data?.objections_handled === 'number' ? data.objections_handled : 0,
+      cta_used: typeof data?.cta_used === 'boolean' ? data.cta_used : data?.ctaUsed || false,
+      duration: typeof data?.duration === 'number' ? data.duration : 0,
+      created_at: data?.created_at || data?.date,
+      enhancedScoring: data?.enhanced_scoring || data?.enhancedScoring || null
+    }
+  }, [displayData])
 
   // Load coaching feedback when we have a transcript
   useEffect(() => {
@@ -879,13 +975,26 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
                 <RotateCcw className="mr-2 h-4 w-4" />
                 {isChecking ? 'Checking...' : 'Start Over'}
               </Button>
-              <Button 
-                onClick={handleApprove} 
-                className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
-              >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Approve
-              </Button>
+              {/* Only show approve button for managers and admins */}
+              {['manager', 'admin'].includes(userRole) && (
+                <Button 
+                  onClick={handleApprove} 
+                  disabled={isApprovingCall}
+                  className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
+                >
+                  {isApprovingCall ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                      <span>Approving...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Approve
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </motion.div>

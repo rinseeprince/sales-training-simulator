@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     const assignedBy = searchParams.get('assignedBy')
     const status = searchParams.get('status')
     const domain = searchParams.get('domain')
+    const callId = searchParams.get('callId')
 
     // If domain is provided, fetch users from that domain
     if (domain) {
@@ -45,6 +46,45 @@ export async function GET(req: NextRequest) {
       } catch (err) {
         console.error('Unexpected error:', err)
         return errorResponse(`Failed to fetch users: ${err}`, 500)
+      }
+    }
+
+    // If callId is provided, find assignments by call ID
+    if (callId) {
+      try {
+        const { data: assignments, error } = await supabase
+          .from('scenario_assignments')
+          .select(`
+            *,
+            scenario:scenarios(*),
+            assigner:simple_users!assigned_by(name, email),
+            assignee:simple_users!assigned_to_user(name, email),
+            assignment_completions!inner(
+              id,
+              call_id,
+              completed_at,
+              review_status,
+              reviewer_notes,
+              calls(
+                id,
+                score,
+                scenario_name
+              )
+            )
+          `)
+          .eq('assignment_completions.call_id', callId)
+        
+        if (error) {
+          console.error('Error fetching assignments by call ID:', error)
+          return errorResponse(`Database error: ${error.message}`, 500)
+        }
+
+        return successResponse({
+          assignments: assignments || []
+        })
+      } catch (err) {
+        console.error('Unexpected error fetching by call ID:', err)
+        return errorResponse(`Failed to fetch assignments: ${err}`, 500)
       }
     }
 
@@ -249,6 +289,86 @@ export async function PATCH(req: NextRequest) {
 
   } catch (error) {
     console.error('Update assignment error:', error)
+    return errorResponse('Internal server error', 500)
+  }
+}
+
+// DELETE: Delete assignment (only allowed for passed assignments)
+export async function DELETE(req: NextRequest) {
+  try {
+    const corsResponse = handleCors(req)
+    if (corsResponse) return corsResponse
+
+    const { searchParams } = new URL(req.url)
+    const assignmentId = searchParams.get('assignmentId')
+    const userId = searchParams.get('userId')
+
+    if (!assignmentId || !userId) {
+      return errorResponse('assignmentId and userId are required', 400)
+    }
+
+    // Create a fresh Supabase client
+    const freshSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    // First, check if the assignment exists and belongs to the user
+    const { data: assignment, error: fetchError } = await freshSupabase
+      .from('scenario_assignments')
+      .select(`
+        *,
+        assignment_completions(
+          id,
+          review_status,
+          call_id
+        )
+      `)
+      .eq('id', assignmentId)
+      .eq('assigned_to_user', userId)
+      .single()
+
+    if (fetchError || !assignment) {
+      return errorResponse('Assignment not found or access denied', 404)
+    }
+
+    // Check if the assignment has been completed and approved
+    const completion = assignment.assignment_completions?.[0]
+    if (!completion || completion.review_status !== 'approved') {
+      return errorResponse('Only approved assignments can be deleted', 403)
+    }
+
+    // Delete the assignment completion first (cascade should handle this, but being explicit)
+    if (completion.id) {
+      const { error: completionDeleteError } = await freshSupabase
+        .from('assignment_completions')
+        .delete()
+        .eq('id', completion.id)
+
+      if (completionDeleteError) {
+        console.error('Error deleting assignment completion:', completionDeleteError)
+        return errorResponse('Failed to delete assignment completion', 500)
+      }
+    }
+
+    // Delete the assignment
+    const { error: assignmentDeleteError } = await freshSupabase
+      .from('scenario_assignments')
+      .delete()
+      .eq('id', assignmentId)
+
+    if (assignmentDeleteError) {
+      console.error('Error deleting assignment:', assignmentDeleteError)
+      return errorResponse('Failed to delete assignment', 500)
+    }
+
+    return successResponse({
+      message: 'Assignment deleted successfully',
+      deletedAssignmentId: assignmentId
+    })
+
+  } catch (error) {
+    console.error('Delete assignment error:', error)
     return errorResponse('Internal server error', 500)
   }
 }
