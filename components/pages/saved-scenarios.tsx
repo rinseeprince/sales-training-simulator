@@ -409,11 +409,22 @@ export function SavedScenarios() {
     return matchesSearch
   })
   
-  // Filter assignments based on search
+  // Filter assignments based on search and completion status
   const filteredAssignments = assignments.filter(assignment => {
     const matchesSearch = assignment.scenario?.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          assignment.scenario?.prompt.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
+    // For "assigned" tab: show only non-completed assignments
+    const isCompleted = assignment.assignment_completions && assignment.assignment_completions.length > 0
+    return matchesSearch && !isCompleted
+  })
+
+  // Filter completed assignments for the new tab
+  const filteredCompletedAssignments = assignments.filter(assignment => {
+    const matchesSearch = assignment.scenario?.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         assignment.scenario?.prompt.toLowerCase().includes(searchTerm.toLowerCase())
+    // For "completed" tab: show only completed assignments
+    const isCompleted = assignment.assignment_completions && assignment.assignment_completions.length > 0
+    return matchesSearch && isCompleted
   })
   
   const formatDate = (dateString: string) => {
@@ -482,13 +493,21 @@ export function SavedScenarios() {
       
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-2xl grid-cols-3">
           <TabsTrigger value="my-scenarios">My Scenarios</TabsTrigger>
           <TabsTrigger value="assigned">
             Assigned to Me
-            {assignments.filter(a => a.status !== 'completed').length > 0 && (
+            {assignments.filter(a => !a.assignment_completions || a.assignment_completions.length === 0).length > 0 && (
               <Badge variant="destructive" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center">
-                {assignments.filter(a => a.status !== 'completed').length}
+                {assignments.filter(a => !a.assignment_completions || a.assignment_completions.length === 0).length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="completed">
+            Completed Assignments
+            {assignments.filter(a => a.assignment_completions && a.assignment_completions.length > 0).length > 0 && (
+              <Badge variant="secondary" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center">
+                {assignments.filter(a => a.assignment_completions && a.assignment_completions.length > 0).length}
               </Badge>
             )}
           </TabsTrigger>
@@ -721,6 +740,120 @@ export function SavedScenarios() {
                       </TableCell>
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Completed Assignments Tab */}
+        <TabsContent value="completed" className="space-y-4">
+          {loadingAssignments ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : filteredCompletedAssignments.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-8 w-8 text-slate-400" />
+              </div>
+              <p className="text-slate-500 mb-2">No completed assignments</p>
+              <p className="text-sm text-slate-400">Complete some assigned scenarios to see them here</p>
+            </div>
+          ) : (
+            <div className="border rounded-xl overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead className="font-semibold">Scenario</TableHead>
+                    <TableHead className="font-semibold">Assigned By</TableHead>
+                    <TableHead className="font-semibold">Completed Date</TableHead>
+                    <TableHead className="font-semibold">Score</TableHead>
+                    <TableHead className="font-semibold">Review Status</TableHead>
+                    <TableHead className="font-semibold">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredCompletedAssignments.map((assignment) => {
+                    const completion = assignment.assignment_completions?.[0]
+                    const callScore = completion?.calls?.score || 0
+                    const reviewStatus = completion?.review_status || 'pending'
+                    
+                    return (
+                      <TableRow key={assignment.id} className="hover:bg-slate-50/50">
+                        <TableCell className="font-medium">
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {assignment.scenario?.title || 'Unknown Scenario'}
+                            </p>
+                            <p className="text-sm text-slate-500 line-clamp-1">
+                              {assignment.scenario?.prompt || ''}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-slate-600">
+                            <p className="font-medium">{assignment.assigner?.name || 'Manager'}</p>
+                            <p className="text-sm text-slate-500">{assignment.assigner?.email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {completion?.completed_at ? (
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4 text-slate-400" />
+                              <span className="text-slate-600">
+                                {formatDate(completion.completed_at)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {callScore > 0 ? (
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-900">{callScore}</span>
+                              <Badge 
+                                variant={callScore >= 90 ? "default" : callScore >= 80 ? "secondary" : callScore >= 70 ? "outline" : "destructive"}
+                              >
+                                {callScore >= 90 ? 'Excellent' : callScore >= 80 ? 'Good' : callScore >= 70 ? 'Fair' : 'Needs Work'}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">No Score</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={reviewStatus === 'pending' ? 'outline' : 
+                                   reviewStatus === 'approved' ? 'default' : 
+                                   reviewStatus === 'needs_improvement' ? 'secondary' : 'destructive'}
+                          >
+                            {reviewStatus === 'pending' ? 'Pending Review' :
+                             reviewStatus === 'approved' ? 'Approved' :
+                             reviewStatus === 'needs_improvement' ? 'Needs Improvement' : 'Rejected'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {completion?.call_id && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  router.push(`/review?callId=${completion.call_id}`)
+                                }}
+                                className="text-primary border-primary/20 hover:bg-primary/5"
+                              >
+                                <Play className="h-4 w-4 mr-1" />
+                                View Results
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

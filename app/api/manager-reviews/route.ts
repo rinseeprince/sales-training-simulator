@@ -42,18 +42,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
-    // Simplified query to avoid complex nested joins that might fail
+    // Query assignment_completions instead of call_reviews since that's where completed assignments are tracked
     let query = supabase
-      .from('call_reviews')
+      .from('assignment_completions')
       .select(`
         id,
-        call_id,
         assignment_id,
-        status,
-        score_override,
-        manager_feedback,
+        call_id,
+        completed_by,
+        completed_at,
+        review_status,
+        reviewer_notes,
         reviewed_at,
-        created_at,
+        reviewed_by,
         calls (
           id,
           scenario_name,
@@ -66,57 +67,67 @@ export async function GET(request: NextRequest) {
             name,
             email
           )
+        ),
+        scenario_assignments (
+          id,
+          scenario_id,
+          assigned_by,
+          scenarios (
+            title
+          )
         )
       `)
 
-    // Filter by reviewer (manager sees only their reviews, admin sees all)
+    // Filter by assigned_by (manager sees only assignments they created, admin sees all)
     if (simpleUser.role === 'manager') {
-      query = query.eq('reviewer_id', simpleUser.id)
+      query = query.eq('scenario_assignments.assigned_by', simpleUser.id)
     }
 
-    // Filter by status if specified
+    // Filter by review status if specified
     if (status !== 'all') {
-      query = query.eq('status', status)
+      query = query.eq('review_status', status)
     }
 
-    const { data: reviews, error: reviewsError } = await query
-      .order('created_at', { ascending: false })
+    const { data: completions, error: completionsError } = await query
+      .order('completed_at', { ascending: false })
       .limit(50)
 
-    if (reviewsError) {
-      console.error('Error fetching reviews:', reviewsError)
-      // If call_reviews table doesn't exist or query fails, return empty array
-      console.log('Returning empty reviews array due to query error')
+    if (completionsError) {
+      console.error('Error fetching assignment completions:', completionsError)
       return NextResponse.json({
         success: true,
         reviews: []
       })
     }
 
-    // Process the data to flatten the nested user information
-    const processedReviews = reviews?.map(review => ({
-      ...review,
-      rep: review.calls?.simple_users ? {
-        id: review.calls.simple_users.id,
-        name: review.calls.simple_users.name,
-        email: review.calls.simple_users.email
+    // Process the data to match the expected format for the frontend
+    const processedReviews = completions?.map(completion => ({
+      id: completion.id,
+      assignment_id: completion.assignment_id,
+      call_id: completion.call_id,
+      status: completion.review_status || 'pending',
+      manager_feedback: completion.reviewer_notes,
+      reviewed_at: completion.reviewed_at,
+      created_at: completion.completed_at,
+      calls: completion.calls ? {
+        id: completion.calls.id,
+        scenario_name: completion.calls.scenario_name,
+        score: completion.calls.score,
+        duration: completion.calls.duration,
+        created_at: completion.calls.created_at,
+        rep_id: completion.calls.rep_id,
+        simple_users: completion.calls.simple_users
       } : null,
-      call: review.calls ? {
-        id: review.calls.id,
-        scenario_name: review.calls.scenario_name,
-        score: review.calls.score,
-        duration: review.calls.duration,
-        created_at: review.calls.created_at,
-        rep_id: review.calls.rep_id
-      } : null
+      scenario_assignments: completion.scenario_assignments
     })) || []
 
     // Filter by search term if provided
     const filteredReviews = search
       ? processedReviews.filter(review => 
-          review.call?.scenario_name?.toLowerCase().includes(search.toLowerCase()) ||
-          review.rep?.name?.toLowerCase().includes(search.toLowerCase()) ||
-          review.rep?.email?.toLowerCase().includes(search.toLowerCase())
+          review.calls?.scenario_name?.toLowerCase().includes(search.toLowerCase()) ||
+          review.calls?.simple_users?.name?.toLowerCase().includes(search.toLowerCase()) ||
+          review.calls?.simple_users?.email?.toLowerCase().includes(search.toLowerCase()) ||
+          review.scenario_assignments?.scenarios?.title?.toLowerCase().includes(search.toLowerCase())
         )
       : processedReviews
 

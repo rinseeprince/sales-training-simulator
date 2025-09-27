@@ -40,6 +40,13 @@ export async function GET(req: NextRequest) {
       return errorResponse(`Database error: ${error.message}`, 500)
     }
 
+    // Periodically clean up old read notifications when fetching
+    if (Math.random() < 0.1) {
+      cleanupOldReadNotifications(freshSupabase).catch(err => 
+        console.error('Background cleanup failed:', err)
+      )
+    }
+
     return NextResponse.json({
       success: true,
       notifications: data || [],
@@ -128,6 +135,10 @@ export async function PATCH(req: NextRequest) {
         console.error('Error marking all as read:', error)
         return errorResponse(`Database error: ${error.message}`, 500)
       }
+
+      // Clean up old read notifications immediately
+      await cleanupOldReadNotifications(freshSupabase)
+
     } else if (notificationIds && Array.isArray(notificationIds)) {
       // Mark specific notifications as read
       const { error } = await freshSupabase
@@ -148,6 +159,28 @@ export async function PATCH(req: NextRequest) {
   } catch (error) {
     console.error('Update notifications error:', error)
     return errorResponse('Internal server error', 500)
+  }
+}
+
+// Helper function to clean up old read notifications
+async function cleanupOldReadNotifications(supabase: any) {
+  try {
+    // Calculate 48 hours ago (giving more time since we can't track exact read time)
+    const fortyEightHoursAgo = new Date()
+    fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48)
+    
+    // Delete notifications that were created more than 48 hours ago and are read
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('is_read', true)
+      .lt('created_at', fortyEightHoursAgo.toISOString())
+
+    if (error) {
+      console.error('Error cleaning up old notifications:', error)
+    }
+  } catch (error) {
+    console.error('Error in cleanup function:', error)
   }
 }
 

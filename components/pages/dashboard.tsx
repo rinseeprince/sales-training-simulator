@@ -3,7 +3,6 @@
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { Play, FileText, Clock, CheckCircle, Trophy, Target, TrendingUp, Phone, Users } from 'lucide-react'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import Link from 'next/link'
@@ -19,6 +18,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 // Type definitions
 interface Call {
@@ -156,12 +163,6 @@ export function Dashboard() {
     certifications: 0,
     improvement: 0
   })
-  const [simulationLimit, setSimulationLimit] = useState<{
-    count: number;
-    limit: number;
-    remaining: number;
-    isPaid: boolean;
-  } | null>(null)
   
   // Manager Dashboard State
   const [userRole, setUserRole] = useState<string>('user')
@@ -237,21 +238,6 @@ export function Dashboard() {
 
         const actualUserId = profileData.userProfile.id;
         
-        // Check simulation limit
-        try {
-          const limitResponse = await fetch(`/api/check-simulation-limit?userId=${user.id}`)
-          const limitData = await limitResponse.json()
-          if (limitData.success) {
-            setSimulationLimit({
-              count: limitData.count || 0,
-              limit: limitData.limit || 50,
-              remaining: limitData.remaining === -1 ? -1 : (limitData.remaining || 50),
-              isPaid: limitData.is_paid || false
-            })
-          }
-        } catch (error) {
-          console.error('Failed to check simulation limit:', error)
-        }
         
         // Fetch calls
         const callsResponse = await fetch(`/api/calls?userId=${actualUserId}`)
@@ -1079,61 +1065,111 @@ export function Dashboard() {
               </div>
             )}
             
-            <div className="space-y-4">
-              {isLoadingManagerData ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-4 rounded-lg border border-slate-100">
-                      <div className="flex items-center space-x-3 flex-1">
-                        <div className="w-8 h-8 bg-slate-200 rounded-full skeleton"></div>
-                        <div className="flex-1">
-                          <div className="w-48 h-4 bg-slate-200 rounded skeleton mb-2"></div>
-                          <div className="w-32 h-3 bg-slate-200 rounded skeleton"></div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-16 h-6 bg-slate-200 rounded-full skeleton"></div>
-                        <div className="w-20 h-8 bg-slate-200 rounded skeleton"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : reviews.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-                  <p className="text-sm text-slate-500 mb-2">No reviews pending</p>
-                  <p className="text-xs text-slate-400">All team calls have been reviewed</p>
-                </div>
-              ) : (
-                reviews.slice(0, 10).map((review) => (
-                  <div
-                    key={review.id}
-                    className="flex items-center justify-between p-4 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all duration-150"
-                  >
-                    <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                        <Phone className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-slate-900 truncate">
-                          {review.calls?.simple_users?.name || 'Unknown User'} - {review.scenario_assignments?.scenarios?.title || 'Unknown Scenario'}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {new Date(review.created_at).toLocaleDateString()} • 
-                          Score: {review.calls?.score || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3 flex-shrink-0">
-                      <Badge variant="outline">{review.status}</Badge>
-                      <Button size="sm" variant="outline">
-                        Review
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            {isLoadingManagerData ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : reviews.length === 0 ? (
+              <div className="text-center py-12">
+                <CheckCircle className="h-12 w-12 text-slate-400 mx-auto mb-3" />
+                <p className="text-sm text-slate-500 mb-2">No reviews pending</p>
+                <p className="text-xs text-slate-400">All team calls have been reviewed</p>
+              </div>
+            ) : (
+              <div className="border rounded-xl overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead className="font-semibold">Scenario</TableHead>
+                      <TableHead className="font-semibold">User</TableHead>
+                      <TableHead className="font-semibold">Date</TableHead>
+                      <TableHead className="font-semibold">Score</TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reviews.slice(0, 10).map((review) => (
+                      <TableRow key={review.id} className="hover:bg-slate-50/50">
+                        <TableCell className="font-medium">
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {review.scenario_assignments?.scenarios?.title || 'Unknown Scenario'}
+                            </p>
+                            <p className="text-sm text-slate-500 line-clamp-1">
+                              {review.calls?.transcript ? review.calls.transcript.slice(0, 80) + '...' : 'No transcript available'}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-medium text-primary">
+                                {(review.calls?.simple_users?.name || 'U').charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-slate-900">
+                                {review.calls?.simple_users?.name || 'Unknown User'}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {review.calls?.simple_users?.email || 'No email'}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600">
+                          {new Date(review.created_at).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          {review.calls?.score ? (
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-900">{review.calls.score}</span>
+                              <Badge 
+                                variant={review.calls.score >= 90 ? "default" : review.calls.score >= 80 ? "secondary" : review.calls.score >= 70 ? "outline" : "destructive"}
+                              >
+                                {review.calls.score >= 90 ? 'Excellent' : review.calls.score >= 80 ? 'Good' : review.calls.score >= 70 ? 'Fair' : 'Needs Work'}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">No Score</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={review.status === 'pending' ? 'outline' : 
+                                   review.status === 'approved' ? 'default' : 
+                                   review.status === 'needs_improvement' ? 'secondary' : 'destructive'}
+                          >
+                            {review.status === 'pending' ? 'Pending' :
+                             review.status === 'approved' ? 'Approved' :
+                             review.status === 'needs_improvement' ? 'Needs Work' : 'Rejected'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button 
+                            size="sm" 
+                            className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
+                            onClick={() => {
+                              if (review.calls?.id) {
+                                setSelectedCallId(review.calls.id)
+                                setReviewModalOpen(true)
+                              }
+                            }}
+                          >
+                            Review
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </motion.div>
         </div>
       )}

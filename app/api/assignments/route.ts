@@ -59,7 +59,19 @@ export async function GET(req: NextRequest) {
         *,
         scenario:scenarios(*),
         assigner:simple_users!assigned_by(name, email),
-        assignee:simple_users!assigned_to_user(name, email)
+        assignee:simple_users!assigned_to_user(name, email),
+        assignment_completions(
+          id,
+          call_id,
+          completed_at,
+          review_status,
+          reviewer_notes,
+          calls(
+            id,
+            score,
+            scenario_name
+          )
+        )
       `)
 
     if (userId) {
