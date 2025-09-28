@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
+
     // Try to use the database function, fallback to manual queries if not available
     let metrics = {
       total_calls: 0,
@@ -50,73 +51,67 @@ export async function GET(request: NextRequest) {
       completion_rate: 0
     }
 
-    try {
-      const { data: metricsData, error: metricsError } = await supabase
-        .rpc('get_team_performance_metrics', {
-          manager_id: simpleUser.id,
-          days_back: timeRange
-        })
-
-      if (metricsError) {
-        console.warn('Database function not available, using fallback queries:', metricsError)
-        // Fallback to manual queries
-        metrics = await getMetricsManually(simpleUser, timeRange)
-      } else {
-        metrics = metricsData?.[0] || metrics
-      }
-    } catch (error) {
-      console.warn('Database function failed, using fallback queries:', error)
-      // Fallback to manual queries
-      metrics = await getMetricsManually(simpleUser, timeRange)
-    }
+    // Use manual calculation (more reliable than database function)
+    metrics = await getMetricsManually(simpleUser, timeRange, token)
 
     // Helper function for manual metrics calculation
-    async function getMetricsManually(user: any, days: number) {
+    async function getMetricsManually(user: any, days: number, authToken: string) {
       const dateFilter = new Date()
       dateFilter.setDate(dateFilter.getDate() - days)
 
       // Get team members based on domain matching for managers, all for admins
       let teamMembers = []
+      
+      // Use the auth user's email directly for domain-based team discovery
+      const { data: authUserData } = await supabase.auth.getUser(authToken)
+      
       if (user.role === 'admin') {
-        const { data } = await supabase.from('simple_users').select('id')
+        const { data } = await supabase.from('simple_users').select('id, email, name')
         teamMembers = data || []
-      } else {
-        // For managers, get users with the same email domain
-        const { data: userProfile } = await supabase
-          .from('simple_users')
-          .select('email')
-          .eq('id', user.id)
-          .single()
+      } else if (authUserData?.user?.email) {
+        // Use auth user email directly for domain lookup
+        const domain = authUserData.user.email.split('@')[1]
         
-        if (userProfile?.email) {
-          const domain = userProfile.email.split('@')[1]
-          const { data } = await supabase
-            .from('simple_users')
-            .select('id')
-            .like('email', `%@${domain}`)
-          teamMembers = data || []
+        const { data, error: teamError } = await supabase
+          .from('simple_users')
+          .select('id, email, name, role')
+          .like('email', `%@${domain}`)
+        
+        teamMembers = data || []
+        
+        if (teamError) {
+          console.error('Error fetching team members:', teamError)
         }
       }
       
       const teamIds = teamMembers.map(m => m.id)
 
       // Get calls and assignments for team members
-      const { data: calls } = await supabase
+      const { data: calls, error: callsError } = await supabase
         .from('calls')
-        .select('score, rep_id')
+        .select('score, rep_id, scenario_name, created_at')
         .in('rep_id', teamIds)
         .gte('created_at', dateFilter.toISOString())
 
+      if (callsError) {
+        console.error('Error fetching calls:', callsError)
+      }
+
       // Get assignments and completions for completion rate
-      const { data: assignments } = await supabase
+      const { data: assignments, error: assignmentsError } = await supabase
         .from('scenario_assignments')
         .select(`
           id,
           assigned_to_user,
-          assignment_completions (id)
+          created_at,
+          assignment_completions (id, completed_at)
         `)
         .in('assigned_to_user', teamIds)
         .gte('created_at', dateFilter.toISOString())
+
+      if (assignmentsError) {
+        console.error('Error fetching assignments:', assignmentsError)
+      }
 
       const totalCalls = calls?.length || 0
       const scores = calls?.filter(c => c.score !== null).map(c => c.score) || []

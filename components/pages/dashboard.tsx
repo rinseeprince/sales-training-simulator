@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Call, User, AssignmentCompletion } from '@/lib/types'
+import { useToast } from '@/hooks/use-toast'
 import { 
   Table,
   TableBody,
@@ -27,6 +28,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 // Type definitions
 
@@ -146,6 +157,7 @@ const savedScenarios = [
 export function Dashboard() {
   const { user } = useSupabaseAuth()
   const router = useRouter()
+  const { toast } = useToast()
   const [calls, setCalls] = useState<Call[]>([])
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [loading, setLoading] = useState(true)
@@ -178,6 +190,8 @@ export function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('')
   const [dateRange, setDateRange] = useState('30')
   const [deletingAssignmentIds, setDeletingAssignmentIds] = useState<Set<string>>(new Set())
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [assignmentToDelete, setAssignmentToDelete] = useState<{call: Call, completion: AssignmentCompletion & { assignment_id: string }} | null>(null)
 
   // Helper function to get auth headers
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -273,9 +287,19 @@ export function Dashboard() {
   // Fetch manager data when in manager view with exact same fallback as assign scenario modal
   useEffect(() => {
     const fetchManagerData = async () => {
+      console.log('🔍 CLIENT DEBUG: fetchManagerData called with:', {
+        user: !!user,
+        isManagerView,
+        userRole,
+        hasAccess: ['manager', 'admin'].includes(userRole || '')
+      })
+      
       if (!user || !isManagerView || !['manager', 'admin'].includes(userRole || '')) {
+        console.log('🔍 CLIENT DEBUG: Skipping manager data fetch - conditions not met')
         return
       }
+      
+      console.log('🔍 CLIENT DEBUG: Starting manager data fetch...')
       setIsLoadingManagerData(true)
       setManagerDataError(null)
       
@@ -286,12 +310,36 @@ export function Dashboard() {
         })
         
         const headers = await getAuthHeaders()
+        console.log('🔍 CLIENT DEBUG: Making metrics API call to:', `/api/manager-reviews/metrics?timeRange=${dateRange}`)
+        
+        // DEBUG: First call debug endpoint to see what data exists
+        try {
+          const debugResponse = await fetch('/api/debug-metrics', { headers })
+          if (debugResponse.ok) {
+            const debugData = await debugResponse.json()
+            console.log('🔍 CLIENT DEBUG: Debug endpoint data:', debugData)
+            console.log('🔍 CLIENT DEBUG: Auth user:', debugData.debug?.authUser)
+            console.log('🔍 CLIENT DEBUG: Current user:', debugData.debug?.currentUser)
+            console.log('🔍 CLIENT DEBUG: Domain:', debugData.debug?.domain)
+            console.log('🔍 CLIENT DEBUG: Team members found:', debugData.debug?.teamMembers)
+            console.log('🔍 CLIENT DEBUG: Calls found:', debugData.debug?.calls)
+            console.log('🔍 CLIENT DEBUG: Assignments found:', debugData.debug?.assignments)
+          }
+        } catch (e) {
+          console.log('🔍 CLIENT DEBUG: Debug endpoint failed:', e)
+        }
+        
         const metricsQueryPromise = fetch(`/api/manager-reviews/metrics?timeRange=${dateRange}`, { headers })
           .then(async (response) => {
+            console.log('🔍 CLIENT DEBUG: Metrics API response status:', response.status)
             if (response.ok) {
               const data = await response.json()
+              console.log('🔍 CLIENT DEBUG: Metrics API response data:', data)
+              console.log('🔍 CLIENT DEBUG: Metrics object details:', JSON.stringify(data.metrics, null, 2))
               return { data: data.metrics || {}, error: null }
             } else {
+              const errorText = await response.text()
+              console.error('🔍 CLIENT DEBUG: Metrics API error:', response.status, errorText)
               throw new Error(`Metrics API error: ${response.status}`)
             }
           })
@@ -343,6 +391,7 @@ export function Dashboard() {
         if (metricsError) {
           console.error('❌ Failed to load team metrics:', metricsError)
         } else {
+          console.log('🔍 CLIENT DEBUG: Setting team metrics:', metricsData)
           setTeamMetrics(metricsData)
         }
         
@@ -462,12 +511,33 @@ export function Dashboard() {
 
   // Delete assignment function
   const handleDeleteAssignment = async (call: Call, assignmentCompletion: AssignmentCompletion & { assignment_id: string }) => {
-    // Get the current user profile to access the actualUserId
     if (!user?.id || !assignmentCompletion?.assignment_id) return
     
+    // Check if assignment is approved
+    if (assignmentCompletion.review_status !== 'approved') {
+      toast({
+        title: "Error",
+        description: "Only approved assignments can be deleted.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Store the assignment to delete and open the modal
+    setAssignmentToDelete({call, completion: assignmentCompletion})
+    setDeleteModalOpen(true)
+  }
+
+  // Handle the actual deletion after confirmation
+  const handleDeleteConfirm = async () => {
+    if (!assignmentToDelete) return
+    
+    const { call, completion: assignmentCompletion } = assignmentToDelete
+
+    // Get the current user profile to access the actualUserId
     let currentUserId: string
     try {
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user?.id}`)
       const profileData = await profileResponse.json()
       if (!profileData.success) {
         throw new Error('Failed to get user profile')
@@ -475,17 +545,13 @@ export function Dashboard() {
       currentUserId = profileData.userProfile.id
     } catch (error) {
       console.error('Error getting user profile:', error)
-      alert('Failed to get user information. Please try again.')
-      return
-    }
-    
-    // Check if assignment is approved
-    if (assignmentCompletion.review_status !== 'approved') {
-      alert('Only approved assignments can be deleted.')
-      return
-    }
-
-    if (!confirm('Are you sure you want to delete this approved assignment? This action cannot be undone.')) {
+      toast({
+        title: "Error",
+        description: "Failed to get user information. Please try again.",
+        variant: "destructive"
+      })
+      setDeleteModalOpen(false)
+      setAssignmentToDelete(null)
       return
     }
 
@@ -506,10 +572,22 @@ export function Dashboard() {
       setCalls(prevCalls => prevCalls.filter(c => c.id !== call.id))
       
       // Show success message
-      alert('Assignment deleted successfully!')
+      toast({
+        title: "Success",
+        description: "Assignment deleted successfully!",
+        variant: "default"
+      })
+      
+      // Close the modal
+      setDeleteModalOpen(false)
+      setAssignmentToDelete(null)
     } catch (error) {
       console.error('Error deleting assignment:', error)
-      alert('Failed to delete assignment. Please try again.')
+      toast({
+        title: "Error",
+        description: "Failed to delete assignment. Please try again.",
+        variant: "destructive"
+      })
     } finally {
       setDeletingAssignmentIds(prev => {
         const newSet = new Set(prev)
@@ -560,7 +638,10 @@ export function Dashboard() {
                 <span>My Dashboard</span>
               </button>
               <button
-                onClick={() => setIsManagerView(true)}
+                onClick={() => {
+                  console.log('🔍 CLIENT DEBUG: Team Review button clicked, switching to manager view')
+                  setIsManagerView(true)
+                }}
                 className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                   isManagerView 
                     ? 'bg-white text-slate-900 shadow-sm' 
@@ -1270,6 +1351,33 @@ export function Dashboard() {
         callId={selectedCallId}
         title={selectedCallId ? calls.find(c => c.id === selectedCallId)?.scenario_name : undefined}
       />
+
+      {/* Delete Assignment Confirmation Dialog */}
+      <AlertDialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Approved Assignment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this approved assignment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setDeleteModalOpen(false)
+              setAssignmentToDelete(null)
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={assignmentToDelete ? deletingAssignmentIds.has(assignmentToDelete.completion.assignment_id) : false}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {assignmentToDelete && deletingAssignmentIds.has(assignmentToDelete.completion.assignment_id) ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
