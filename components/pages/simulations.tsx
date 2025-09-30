@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -84,36 +84,48 @@ export function Simulations() {
   const { toast } = useToast()
 
   // Fetch simulations
-  useEffect(() => {
-    const fetchSimulations = async () => {
-      if (!user) return
-      
-      try {
-        // Get the correct user ID from simple_users table
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-        const profileData = await profileResponse.json();
-        
-        if (!profileData.success) {
-          console.error('Failed to get user profile:', profileData.error);
-          return;
-        }
-
-        const actualUserId = profileData.userProfile.id;
-        
-        const response = await fetch(`/api/calls?userId=${actualUserId}`)
-        if (response.ok) {
-          const data = await response.json()
-          setSimulations(data.calls || [])
-        }
-      } catch (error) {
-        console.error('Error fetching simulations:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
+  const fetchSimulations = useCallback(async () => {
+    if (!user) return
     
-    fetchSimulations()
+    setLoading(true)
+    try {
+      // Get the correct user ID from simple_users table
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.success) {
+        console.error('Failed to get user profile:', profileData.error);
+        return;
+      }
+
+      // Use the new organization-based API client
+      const { api } = await import('@/lib/api-client')
+      const data = await api.getCalls()
+      setSimulations(data.calls || [])
+    } catch (error) {
+      console.error('Error fetching simulations:', error)
+    } finally {
+      setLoading(false)
+    }
   }, [user])
+
+  useEffect(() => {
+    fetchSimulations()
+  }, [fetchSimulations])
+
+  // Listen for user data refresh events (tab switching)
+  useEffect(() => {
+    const handleUserDataRefresh = () => {
+      console.log('Simulations: Refreshing data due to tab switch')
+      fetchSimulations()
+    }
+
+    window.addEventListener('userDataRefresh', handleUserDataRefresh)
+    
+    return () => {
+      window.removeEventListener('userDataRefresh', handleUserDataRefresh)
+    }
+  }, [fetchSimulations])
 
   // Filter and sort simulations
   const filteredSimulations = simulations

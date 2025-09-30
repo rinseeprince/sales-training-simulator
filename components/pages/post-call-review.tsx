@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { TranscriptEntry } from '@/lib/types'
@@ -382,32 +382,45 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   })
 
   // Fetch most recent call if no callId is provided
-  useEffect(() => {
-    const fetchMostRecentCall = async () => {
-      if (callId || !actualUserId) return; // Only fetch if no callId and we have userId
-      
-      setLoadingRecentCall(true);
-      setMostRecentCall(null); // Reset state to prevent flash
-      try {
-        const response = await fetch(`/api/calls?userId=${actualUserId}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.calls && data.calls.length > 0) {
-            setMostRecentCall(data.calls[0]); // Most recent call (already sorted by created_at desc)
-          } else {
-            setMostRecentCall(null);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching most recent call:', error);
+  const fetchMostRecentCall = useCallback(async () => {
+    if (callId || !actualUserId) return; // Only fetch if no callId and we have userId
+    
+    setLoadingRecentCall(true);
+    setMostRecentCall(null); // Reset state to prevent flash
+    try {
+      // Use the new organization-based API client
+      const { api } = await import('@/lib/api-client')
+      const data = await api.getCalls()
+      if (data.calls && data.calls.length > 0) {
+        setMostRecentCall(data.calls[0]); // Most recent call (already sorted by created_at desc)
+      } else {
         setMostRecentCall(null);
-      } finally {
-        setLoadingRecentCall(false);
       }
-    };
-
-    fetchMostRecentCall();
+    } catch (error) {
+      console.error('Error fetching most recent call:', error);
+      setMostRecentCall(null);
+    } finally {
+      setLoadingRecentCall(false);
+    }
   }, [callId, actualUserId]);
+
+  useEffect(() => {
+    fetchMostRecentCall();
+  }, [fetchMostRecentCall]);
+
+  // Listen for user data refresh events (tab switching)
+  useEffect(() => {
+    const handleUserDataRefresh = () => {
+      console.log('PostCallReview: Refreshing most recent call due to tab switch')
+      fetchMostRecentCall()
+    }
+
+    window.addEventListener('userDataRefresh', handleUserDataRefresh)
+    
+    return () => {
+      window.removeEventListener('userDataRefresh', handleUserDataRefresh)
+    }
+  }, [fetchMostRecentCall])
   
   const [managerComments, setManagerComments] = useState('')
   const [certificationLevel, setCertificationLevel] = useState('')

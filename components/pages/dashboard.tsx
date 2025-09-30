@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ReviewModal } from '@/components/ui/review-modal'
 import { supabaseClient } from '@/lib/supabase-auth'
+import { api } from '@/lib/api-client'
 import {
   Select,
   SelectContent,
@@ -231,58 +232,69 @@ export function Dashboard() {
   }, [user, loadUserRole])
 
   // Fetch calls and scenarios data
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return
-      
-      try {
-        // Get the correct user ID from simple_users table
-        const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-        const profileData = await profileResponse.json();
-        
-        if (!profileData.success) {
-          console.error('Failed to get user profile:', profileData.error);
-          return;
-        }
-
-        const actualUserId = profileData.userProfile.id;
-        
-        
-        // Fetch calls with assignment completion status
-        const callsResponse = await fetch(`/api/calls?userId=${actualUserId}&includeAssignments=true`)
-        if (callsResponse.ok) {
-          const callsData = await callsResponse.json()
-          setCalls(callsData.calls || [])
-          
-          // Calculate stats
-          const totalCalls = callsData.calls?.length || 0
-          const scores = callsData.calls?.map((call: Call) => call.score).filter((score: number | null) => score !== null) || []
-          const averageScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0
-          const certifications = callsData.calls?.filter((call: Call) => call.score !== null && call.score >= 90).length || 0
-          
-          setStats({
-            totalCalls,
-            averageScore,
-            certifications,
-            improvement: 0 // TODO: Calculate improvement over time
-          })
-        }
-        
-        // Fetch scenarios
-        const scenariosResponse = await fetch(`/api/scenarios?userId=${actualUserId}`)
-        if (scenariosResponse.ok) {
-          const scenariosData = await scenariosResponse.json()
-          setScenarios(scenariosData.scenarios || [])
-        }
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
+  const fetchData = useCallback(async () => {
+    if (!user) return
     
-    fetchData()
+    setLoading(true)
+    try {
+      // Get the correct user ID from simple_users table
+      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData.success) {
+        console.error('Failed to get user profile:', profileData.error);
+        return;
+      }
+
+      const actualUserId = profileData.userProfile.id;
+      
+      
+      // Fetch calls with assignment completion status using organization API
+      const { api } = await import('@/lib/api-client')
+      const callsData = await api.getCalls(true) // includeAssignments = true
+      setCalls(callsData.calls || [])
+      
+      // Calculate stats
+      const totalCalls = callsData.calls?.length || 0
+      const scores = callsData.calls?.map((call: Call) => call.score).filter((score: number | null) => score !== null) || []
+      const averageScore = scores.length > 0 ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0
+      const certifications = callsData.calls?.filter((call: Call) => call.score !== null && call.score >= 90).length || 0
+      
+      setStats({
+        totalCalls,
+        averageScore,
+        certifications,
+        improvement: 0 // TODO: Calculate improvement over time
+      })
+      
+      // Fetch scenarios using organization API
+      const scenariosData = await api.getScenarios(false) // Don't include shared for dashboard
+      setScenarios(scenariosData.scenarios || [])
+      console.log('Dashboard: Loaded', scenariosData.scenarios?.length || 0, 'scenarios for org:', scenariosData.organization?.name)
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+    } finally {
+      setLoading(false)
+    }
   }, [user])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // Listen for user data refresh events (tab switching)
+  useEffect(() => {
+    const handleUserDataRefresh = () => {
+      console.log('Dashboard: Refreshing data due to tab switch')
+      fetchData()
+    }
+
+    window.addEventListener('userDataRefresh', handleUserDataRefresh)
+    
+    return () => {
+      window.removeEventListener('userDataRefresh', handleUserDataRefresh)
+    }
+  }, [fetchData])
   
   // Fetch manager data when in manager view with exact same fallback as assign scenario modal
   useEffect(() => {

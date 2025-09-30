@@ -1,95 +1,92 @@
-import { NextRequest } from 'next/server'
-import { errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors } from '@/lib/api-utils'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server'
+import { withOrganizationAuth } from '@/lib/organization-middleware'
 
-export async function GET(request: NextRequest) {
-  try {
-    // Handle CORS
-    const corsResponse = handleCors(request)
-    if (corsResponse) return corsResponse
+export const GET = withOrganizationAuth(
+  async (request) => {
+    try {
+      const { searchParams } = new URL(request.url)
+      const callId = searchParams.get('callId')
+      const includeAssignments = searchParams.get('includeAssignments') === 'true'
 
-    // Validate environment variables
-    validateEnvVars()
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
 
-    const { searchParams } = new URL(request.url)
-    const callId = searchParams.get('callId')
-    const userId = searchParams.get('userId')
-    const includeAssignments = searchParams.get('includeAssignments') === 'true'
+      // If no callId provided, fetch calls for organization (filtered by role)
+      if (!callId) {
+        let selectQuery = '*, enhanced_scoring'
+        if (includeAssignments) {
+          selectQuery += `, assignment_completions(
+            id,
+            assignment_id,
+            review_status,
+            reviewer_notes,
+            reviewed_at,
+            reviewed_by
+          )`
+        }
 
-    // Create a fresh Supabase client for this request
-    const freshSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+        let query = supabase
+          .from('calls')
+          .select(selectQuery)
+          .eq('organization_id', request.organization.id)
+          .order('created_at', { ascending: false })
 
-    // If no callId provided, fetch all calls for the user (for dashboard)
-    if (!callId) {
-      if (!userId) {
-        return errorResponse('userId is required when callId is not provided', 400)
+        // Users see only their own calls, managers/admins see all organization calls
+        if (request.user.role === 'user') {
+          query = query.eq('rep_id', request.user.id)
+        }
+
+        const { data: calls, error } = await query
+
+        if (error) {
+          console.error('Calls fetch error:', error)
+          return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 })
+        }
+
+        return NextResponse.json({
+          success: true,
+          calls: calls || [],
+          total: calls?.length || 0,
+          organization: request.organization
+        })
       }
 
-      // Fetch all calls for the user with optional assignment completion data
-      let selectQuery = '*, enhanced_scoring'
-      if (includeAssignments) {
-        selectQuery += `, assignment_completions(
-          id,
-          assignment_id,
-          review_status,
-          reviewer_notes,
-          reviewed_at,
-          reviewed_by
-        )`
-      }
-
-      const { data: calls, error } = await freshSupabase
+      // Fetch specific call by ID within organization
+      let query = supabase
         .from('calls')
-        .select(selectQuery)
-        .eq('rep_id', userId)
-        .order('created_at', { ascending: false })
+        .select('*, enhanced_scoring')
+        .eq('id', callId)
+        .eq('organization_id', request.organization.id)
+
+      // Users can only see their own calls, managers/admins can see all organization calls
+      if (request.user.role === 'user') {
+        query = query.eq('rep_id', request.user.id)
+      }
+
+      const { data: call, error } = await query.single()
 
       if (error) {
-        console.error('Supabase fetch error:', error)
-        return errorResponse(`Database error: ${error.message}`, 500)
+        console.error('Call fetch error:', error)
+        if (error.code === 'PGRST116') {
+          return NextResponse.json({ error: 'Call not found' }, { status: 404 })
+        }
+        return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 })
       }
 
-      return successResponse({
-        calls: calls || [],
-        total: calls?.length || 0
-      }, 200, corsHeaders)
+      return NextResponse.json({
+        success: true,
+        call,
+        organization: request.organization
+      })
+
+    } catch (error) {
+      console.error('Fetch call error:', error)
+      return NextResponse.json({ 
+        error: error instanceof Error ? error.message : 'Internal server error' 
+      }, { status: 500 })
     }
-
-    // Fetch specific call by ID
-    let query = freshSupabase
-      .from('calls')
-      .select('*, enhanced_scoring')
-      .eq('id', callId)
-
-    // Add user filter if provided
-    if (userId) {
-      query = query.eq('rep_id', userId)
-    }
-
-    const { data: call, error } = await query.single()
-
-    if (error) {
-      console.error('Supabase fetch error:', error)
-      if (error.code === 'PGRST116') {
-        return errorResponse('Call not found', 404)
-      }
-      return errorResponse(`Database error: ${error.message}`, 500)
-    }
-
-    return successResponse(call, 200, corsHeaders)
-
-  } catch (error) {
-    console.error('Fetch call error:', error)
-    return errorResponse(
-      error instanceof Error ? error.message : 'Internal server error',
-      500
-    )
   }
-}
-
-export async function OPTIONS(_request: NextRequest) {
-  return new Response(null, { status: 200, headers: corsHeaders })
-} 
+) 

@@ -31,16 +31,9 @@ export function useSimulationLimit(): UseSimulationLimitReturn {
 
     setIsChecking(true)
     try {
-      const response = await fetch(`/api/check-simulation-limit?userId=${user.id}`)
-      const data = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to check simulation limit')
-      }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Simulation limit check failed')
-      }
+      // Use the new organization-based API client
+      const { apiRequest } = await import('@/lib/api-client')
+      const data = await apiRequest('/api/check-simulation-limit')
 
       return {
         canSimulate: data.canSimulate || false,

@@ -11,7 +11,7 @@ export function useCallData({ callId, userId }: UseCallDataProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const fetchCall = async () => {
     if (!callId) {
       setCall(null)
       return
@@ -33,56 +33,62 @@ export function useCallData({ callId, userId }: UseCallDataProps) {
       }
     }
 
-    const fetchCall = async () => {
-      setLoading(true)
-      setError(null)
+    setLoading(true)
+    setError(null)
 
-      try {
-        const params = new URLSearchParams({ callId })
-        if (userId) {
-          params.append('userId', userId)
-        }
+    try {
+      // Use the new organization-based API client
+      const { apiRequest } = await import('@/lib/api-client')
+      
+      // Create an AbortController for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-        // Create an AbortController for timeout
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-
-        const response = await fetch(`/api/calls?${params}`, {
-          signal: controller.signal
-        })
-        
-        clearTimeout(timeoutId)
-        
-        if (!response.ok) {
-          const errorData = await response.json()
-          // If call not found and we might have temp data, don't treat as error
-          if (response.status === 404) {
-            setCall(null)
-            setError(null) // Don't set error for not found calls
-            return
-          }
-          throw new Error(errorData.error || 'Failed to fetch call data')
-        }
-
-        const callData = await response.json()
-        setCall(callData)
-      } catch (err) {
-        if (err instanceof Error) {
-          if (err.name === 'AbortError') {
-            setError('Request timed out. Please refresh the page and try again.')
-          } else {
-            setError(err.message)
-          }
-        } else {
-          setError('Failed to fetch call data')
-        }
-      } finally {
-        setLoading(false)
+      const callData = await apiRequest(`/api/calls?callId=${callId}`, {
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+      
+      // The new API returns { success: true, call: {...} }
+      if (callData.success && callData.call) {
+        setCall(callData.call)
+      } else {
+        setCall(null)
+        setError(null) // Don't set error for not found calls
       }
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          setError('Request timed out. Please refresh the page and try again.')
+        } else {
+          setError(err.message)
+        }
+      } else {
+        setError('Failed to fetch call data')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchCall()
+  }, [callId])
+
+  // Listen for user data refresh events (tab switching)
+  useEffect(() => {
+    const handleUserDataRefresh = () => {
+      console.log('useCallData: Refreshing call data due to tab switch')
+      fetchCall()
     }
 
-    fetchCall()
-  }, [callId, userId])
+    window.addEventListener('userDataRefresh', handleUserDataRefresh)
+    
+    return () => {
+      window.removeEventListener('userDataRefresh', handleUserDataRefresh)
+    }
+  }, [callId])
 
   return { call, loading, error }
 } 

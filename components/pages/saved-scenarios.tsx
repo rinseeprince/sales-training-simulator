@@ -47,6 +47,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
 import { useToast } from '@/hooks/use-toast'
+import { api } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { useSimulationLimit } from '@/hooks/use-simulation-limit'
 import { PaywallModal } from '@/components/ui/paywall-modal'
@@ -82,6 +83,15 @@ interface ScenarioAssignment {
     name: string
     email: string
   }
+  assignment_completions?: Array<{
+    id: string
+    completed_at: string
+    call_id?: string
+    review_status?: 'pending' | 'approved' | 'needs_improvement' | 'rejected'
+    calls?: {
+      score: number
+    }
+  }>
 }
 
 export function SavedScenarios() {
@@ -135,28 +145,18 @@ export function SavedScenarios() {
     try {
       setLoadingScenarios(true)
       
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`)
-      const profileData = await profileResponse.json()
-      
-      if (!profileData.success) {
-        throw new Error('Failed to get user profile')
-      }
-      
-      const actualUserId = profileData.userProfile.id
-      
-      const response = await fetch(`/api/scenarios?userId=${actualUserId}`)
-      
-      if (!response.ok) {
-        throw new Error('Failed to load scenarios')
-      }
-      
-      const data = await response.json()
+      const data = await api.getScenarios(true)
       setScenarios(data.scenarios || [])
+      
+      if (data.organization) {
+        sessionStorage.setItem('currentOrganization', JSON.stringify(data.organization))
+      }
+      
     } catch (error) {
       console.error('Error loading scenarios:', error)
       toast({
         title: "Error",
-        description: "Failed to load saved scenarios",
+        description: error instanceof Error ? error.message : "Failed to load saved scenarios",
         variant: "destructive",
       })
     } finally {
@@ -215,24 +215,26 @@ export function SavedScenarios() {
     } else {
       loadAssignments()
     }
-    
-    // Reload data when tab becomes visible
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && user) {
-        if (activeTab === 'my-scenarios') {
-          loadScenarios()
-        } else {
-          loadAssignments()
-        }
+  }, [activeTab, user, loadUserRole, loadScenarios, loadAssignments])
+
+  // Listen for user data refresh events (tab switching from auth provider)
+  useEffect(() => {
+    const handleUserDataRefresh = () => {
+      console.log('SavedScenarios: Refreshing data due to tab switch')
+      loadUserRole()
+      if (activeTab === 'my-scenarios') {
+        loadScenarios()
+      } else {
+        loadAssignments()
       }
     }
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    window.addEventListener('userDataRefresh', handleUserDataRefresh)
     
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('userDataRefresh', handleUserDataRefresh)
     }
-  }, [activeTab, user, loadUserRole, loadScenarios, loadAssignments])
+  }, [activeTab, loadUserRole, loadScenarios, loadAssignments])
   
   const handleRunScenario = async (scenario: SavedScenario) => {
     // Check simulation limit before proceeding

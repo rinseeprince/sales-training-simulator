@@ -4,6 +4,42 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { useRouter } from 'next/navigation';
 import { supabaseClient, getCurrentUser, signUpWithEmail, signInWithEmail, signOut, resendVerificationEmail, resetPassword, AuthUser, AuthResponse } from '@/lib/supabase-auth';
 
+/**
+ * Store backup tokens for when Supabase client fails
+ */
+function storeBackupTokens(accessToken: string, refreshToken?: string): void {
+  try {
+    const tokenData = {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      stored_at: Date.now()
+    };
+    
+    const tokenString = JSON.stringify(tokenData);
+    
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('backup_auth_token', tokenString);
+      window.sessionStorage.setItem('backup_auth_token', tokenString);
+    }
+  } catch (error) {
+    console.warn('Failed to store backup tokens:', error);
+  }
+}
+
+/**
+ * Clear backup tokens on logout
+ */
+function clearBackupTokens(): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('backup_auth_token');
+      window.sessionStorage.removeItem('backup_auth_token');
+    }
+  } catch (error) {
+    console.warn('Failed to clear backup tokens:', error);
+  }
+}
+
 interface SupabaseAuthContext {
   user: AuthUser | null;
   isLoading: boolean;
@@ -34,12 +70,9 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
    */
   const loadUser = useCallback(async (): Promise<void> => {
     try {
-      console.log('AUTH PROVIDER: Starting loadUser...');
       const user = await getCurrentUser();
-      console.log('AUTH PROVIDER: getCurrentUser returned:', user ? 'USER FOUND' : 'NO USER');
       setUser(user);
     } catch (error) {
-      console.error('AUTH PROVIDER: Failed to load user:', error);
       setUser(null);
     }
   }, []);
@@ -50,13 +83,14 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        console.log('AUTH PROVIDER: Initializing authentication...');
-        
         // First, try to restore session from Supabase
         const { data: { session } } = await supabaseClient.auth.getSession();
-        console.log('AUTH PROVIDER: Initial session check:', session ? 'Session found' : 'No session');
         
         if (session) {
+          // Store tokens for backup
+          if (session.access_token) {
+            storeBackupTokens(session.access_token, session.refresh_token);
+          }
           // If we have a session, load the user immediately
           await loadUser();
         }
@@ -64,13 +98,18 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
         // Set up auth state listener
         const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
           async (event, session) => {
-            console.log('Auth state changed:', event, session?.user?.email);
+            // Store tokens whenever we get a valid session
+            if (session?.access_token) {
+              storeBackupTokens(session.access_token, session.refresh_token);
+            }
             
             if (event === 'SIGNED_IN' && session?.user) {
               const user = await getCurrentUser();
               setUser(user);
             } else if (event === 'SIGNED_OUT') {
               setUser(null);
+              // Clear stored tokens on sign out
+              clearBackupTokens();
             } else if (event === 'TOKEN_REFRESHED' && session?.user) {
               const user = await getCurrentUser();
               setUser(user);
@@ -86,13 +125,11 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
           await loadUser();
         }
         
-        console.log('AUTH PROVIDER: Setting isLoading to false');
         setIsLoading(false);
 
         // Cleanup subscription
         return () => subscription.unsubscribe();
       } catch (error) {
-        console.error('AUTH PROVIDER: Error during initialization:', error);
         setIsLoading(false);
       }
     };
@@ -105,14 +142,12 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
         // Refresh the session when tab becomes visible
         supabaseClient.auth.getSession().then(({ data: { session } }) => {
           if (session) {
-            loadUser().then(() => {
-              // User data refreshed
-            }).catch(err => {
-              console.error('Error refreshing user:', err)
+            refreshUser().catch(() => {
+              // Silent fail
             })
           }
-        }).catch(err => {
-          console.error('Error getting session:', err)
+        }).catch(() => {
+          // Silent fail
         })
       }
     };
@@ -130,7 +165,22 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
   const signUp = useCallback(async (email: string, password: string, name?: string): Promise<AuthResponse> => {
     const response = await signUpWithEmail(email, password, name);
     
-    // Don't set user state here - let them verify email first
+    // If sign up was successful and user is immediately confirmed, store tokens
+    if (response.success && response.user?.email_verified) {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session?.access_token) {
+          storeBackupTokens(session.access_token, session.refresh_token);
+        }
+      } catch (error) {
+        // Silent fail
+      }
+    }
+    
+    // Don't set user state here - let them verify email first unless already verified
+    if (response.success && response.user?.email_verified) {
+      setUser(response.user);
+    }
     
     return response;
   }, []);
@@ -143,6 +193,16 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
     
     if (response.success && response.user) {
       setUser(response.user);
+      
+      // Immediately store tokens after successful sign in
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session?.access_token) {
+          storeBackupTokens(session.access_token, session.refresh_token);
+        }
+      } catch (error) {
+        // Silent fail
+      }
     }
     
     return response;
@@ -154,11 +214,8 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
   const logout = useCallback(async (): Promise<void> => {
     // Prevent multiple concurrent logout attempts
     if (isLoading) {
-      console.log('🚪 Logout already in progress, ignoring');
       return;
     }
-
-    console.log('🚪 Starting logout process...');
     setIsLoading(true);
     
     try {
@@ -174,9 +231,8 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
       
       try {
         const result = await Promise.race([logoutPromise, timeoutPromise]);
-        console.log('✅ Logout result:', result);
       } catch (timeoutError) {
-        console.warn('⚠️ Logout API timeout, proceeding with local cleanup:', timeoutError);
+        // Timeout, proceed with local cleanup
       }
       
       // Force clear all auth-related storage
@@ -196,17 +252,13 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
           document.cookie = `${cookie}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
         });
       } catch (storageError) {
-        console.warn('⚠️ Storage cleanup error:', storageError);
+        // Silent fail
       }
-      
-      console.log('🔄 Redirecting to home page...');
       
       // Use window.location for more reliable navigation
       window.location.href = '/';
       
     } catch (error) {
-      console.error('❌ Logout error:', error);
-      
       // Even if everything fails, clear state and redirect
       setUser(null);
       
@@ -214,7 +266,6 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
       try {
         router.push('/');
       } catch (routerError) {
-        console.error('Router failed, using window.location:', routerError);
         window.location.href = '/';
       }
     } finally {
@@ -238,10 +289,13 @@ export function SupabaseAuthProvider({ children }: SupabaseAuthProviderProps) {
   }, []);
 
   /**
-   * Refresh user data
+   * Refresh user data and trigger app-wide data refresh
    */
   const refreshUser = useCallback(async (): Promise<void> => {
     await loadUser();
+    
+    // Trigger custom event to notify components to refetch data
+    window.dispatchEvent(new CustomEvent('userDataRefresh'));
   }, [loadUser]);
 
   const value: SupabaseAuthContext = {

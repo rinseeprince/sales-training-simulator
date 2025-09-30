@@ -24,13 +24,51 @@ if (!supabaseAnonKey) {
   throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is required');
 }
 
+// Custom storage adapter that handles tab switching better
+const customStorage = {
+  getItem: (key: string) => {
+    if (typeof window === 'undefined') return null;
+    try {
+      // Try localStorage first
+      const item = window.localStorage.getItem(key);
+      if (item) return item;
+      
+      // Fallback to sessionStorage
+      return window.sessionStorage.getItem(key);
+    } catch (error) {
+      console.warn('Storage access failed:', error);
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      // Store in both localStorage and sessionStorage for redundancy
+      window.localStorage.setItem(key, value);
+      window.sessionStorage.setItem(key, value);
+    } catch (error) {
+      console.warn('Storage write failed:', error);
+    }
+  },
+  removeItem: (key: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+    } catch (error) {
+      console.warn('Storage removal failed:', error);
+    }
+  }
+};
+
 // Initialize Supabase client for client-side operations
 export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storage: customStorage,
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    flowType: 'pkce' // Use PKCE flow for better security and reliability
   },
   realtime: {
     params: {
@@ -62,11 +100,7 @@ export interface AuthResponse {
 
 // Auth functions
 export async function signUpWithEmail(email: string, password: string, name?: string): Promise<AuthResponse> {
-  console.log('signUpWithEmail called with:', { email, name });
-  
   const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback?next=/dashboard`;
-  console.log('Using redirect URL:', redirectUrl);
-  console.log('Supabase client initialized with URL:', supabaseUrl?.substring(0, 20) + '...');
   
   try {
     // Try to sign up with minimal options to avoid trigger issues
@@ -79,7 +113,6 @@ export async function signUpWithEmail(email: string, password: string, name?: st
     });
 
     if (error) {
-      console.error('Supabase signup error:', error);
       
       // Check if this is a user already exists error
       if (error.message.includes('already registered') || 
@@ -119,7 +152,18 @@ export async function signUpWithEmail(email: string, password: string, name?: st
 
     if (data.user) {
       // Auth user created successfully - return immediately
-      console.log('Supabase auth user created successfully:', data.user.email);
+      
+      // Try to get session immediately after sign up and store tokens
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session?.access_token) {
+          // Import the token storage function from api-client
+          const { storeAuthToken } = await import('./api-client');
+          storeAuthToken(session.access_token, session.refresh_token);
+        }
+      } catch (error) {
+        // Silent fail
+      }
       
       return {
         success: true,
@@ -142,7 +186,6 @@ export async function signUpWithEmail(email: string, password: string, name?: st
     };
 
   } catch (error: unknown) {
-    console.error('Sign up error:', error);
     return {
       success: false,
       message: 'An error occurred during sign up',
@@ -168,7 +211,6 @@ export async function signInWithEmail(email: string, password: string): Promise<
 
     if (data.user) {
       // User signed in successfully
-      console.log('User signed in successfully:', data.user.email);
 
       return {
         success: true,
@@ -189,7 +231,6 @@ export async function signInWithEmail(email: string, password: string): Promise<
     };
 
   } catch (error: unknown) {
-    console.error('Sign in error:', error);
     return {
       success: false,
       message: 'An error occurred during sign in',
@@ -216,7 +257,6 @@ export async function signOut(): Promise<AuthResponse> {
     };
 
   } catch (error) {
-    console.error('Sign out error:', error);
     return {
       success: false,
       message: 'An error occurred during sign out',
@@ -242,7 +282,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       .single();
     
     if (profileError) {
-      console.warn('Profile not found for user:', user.email, profileError.message);
+      // Profile not found, continue with basic user data
     }
     profile = data;
 
@@ -258,7 +298,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     };
 
   } catch (error) {
-    console.error('Get current user error:', error);
     return null;
   }
 }
@@ -287,7 +326,6 @@ export async function resendVerificationEmail(email: string): Promise<AuthRespon
     };
 
   } catch (error) {
-    console.error('Resend verification error:', error);
     return {
       success: false,
       message: 'An error occurred while sending verification email',
@@ -316,7 +354,6 @@ export async function resetPassword(email: string): Promise<AuthResponse> {
     };
 
   } catch (error) {
-    console.error('Reset password error:', error);
     return {
       success: false,
       message: 'An error occurred while sending password reset email',
