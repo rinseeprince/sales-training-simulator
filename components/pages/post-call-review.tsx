@@ -423,6 +423,14 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   }, [fetchMostRecentCall])
   
   const [managerComments, setManagerComments] = useState('')
+  const [isSavingFeedback, setIsSavingFeedback] = useState(false)
+  const [feedbackComments, setFeedbackComments] = useState<Array<{
+    id: string;
+    content: string;
+    createdAt: string;
+    manager: { name: string; email: string };
+  }>>([])
+  const [isAddingComment, setIsAddingComment] = useState(false)
   const [certificationLevel, setCertificationLevel] = useState('')
   const [isEditingName, setIsEditingName] = useState(false)
   const [simulationName, setSimulationName] = useState('')
@@ -436,6 +444,38 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   const [loadingRecentCall, setLoadingRecentCall] = useState(false)
   const [userRole, setUserRole] = useState<string>('user')
   const [isApprovingCall, setIsApprovingCall] = useState(false)
+  const [feedbackLoaded, setFeedbackLoaded] = useState(false)
+
+  // Load existing call comments
+  useEffect(() => {
+    const loadCallComments = async () => {
+      if (!callId || feedbackLoaded) return;
+      
+      try {
+        const { apiRequest } = await import('@/lib/api-client');
+        const response = await apiRequest(`/api/call-comments?callId=${callId}`);
+        
+        if (response.success && response.comments) {
+          const formattedComments = response.comments.map((comment: any) => ({
+            id: comment.id,
+            content: comment.content,
+            createdAt: comment.created_at,
+            manager: {
+              name: comment.author?.name || 'Manager',
+              email: comment.author?.email || ''
+            }
+          }));
+          setFeedbackComments(formattedComments);
+        }
+      } catch (error) {
+        console.error('Error loading call comments:', error);
+      } finally {
+        setFeedbackLoaded(true);
+      }
+    };
+    
+    loadCallComments();
+  }, [callId, feedbackLoaded]);
 
   // Check for temporary call data on mount
   useEffect(() => {
@@ -690,6 +730,56 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
     // Proceed with simulation start
     startOverSimulation()
   }
+
+  const handleSaveManagerFeedback = async () => {
+    if (!callId || !managerComments.trim()) return;
+    
+    setIsSavingFeedback(true);
+    try {
+      const { apiRequest } = await import('@/lib/api-client');
+      const response = await apiRequest('/api/call-comments', {
+        method: 'POST',
+        body: JSON.stringify({
+          callId,
+          content: managerComments.trim()
+        })
+      });
+      
+      if (response.success && response.comment) {
+        toast({
+          title: "Comment Added",
+          description: "Your feedback has been added successfully.",
+        });
+        
+        // Add the new comment to the list
+        const newComment = {
+          id: response.comment.id,
+          content: response.comment.content,
+          createdAt: response.comment.created_at,
+          manager: {
+            name: response.comment.author?.name || 'You',
+            email: response.comment.author?.email || ''
+          }
+        };
+        setFeedbackComments(prev => [...prev, newComment]);
+        
+        // Clear the input and close add comment mode
+        setManagerComments('');
+        setIsAddingComment(false);
+      } else {
+        throw new Error(response.error || 'Failed to add comment');
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add comment. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSavingFeedback(false);
+    }
+  };
 
   const startOverSimulation = () => {
     console.log('🔄 Start Over clicked - Available data:', {
@@ -1140,29 +1230,126 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
               </div>
             </div>
 
-            {/* Manager Notes */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-[0_4px_20px_rgba(0,0,0,0.08)] p-6">
-              <div className="flex items-center space-x-3 mb-6">
-                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center">
-                  <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+            {/* Manager Feedback Section */}
+            {(feedbackComments.length > 0 || ['manager', 'admin'].includes(userRole)) && (
+              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-[0_4px_20px_rgba(0,0,0,0.08)] p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/50 rounded-lg flex items-center justify-center">
+                      <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Manager Feedback</h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        {feedbackComments.length === 0 ? 'No feedback yet' : `${feedbackComments.length} comment${feedbackComments.length === 1 ? '' : 's'}`}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Add Comment Button for Managers */}
+                  {['manager', 'admin'].includes(userRole) && !isAddingComment && (
+                    <Button 
+                      onClick={() => setIsAddingComment(true)}
+                      size="sm"
+                      className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
+                    >
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Add Comment
+                    </Button>
+                  )}
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Manager Notes</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Add feedback and observations</p>
+                
+                {/* Comment Thread */}
+                <div className="space-y-4">
+                  {/* Existing Comments */}
+                  {feedbackComments.map((comment) => (
+                    <div key={comment.id} className="border border-slate-200 dark:border-slate-600 rounded-lg p-4 bg-slate-50 dark:bg-slate-700/50">
+                      <div className="flex items-start space-x-3">
+                        <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-white text-sm font-medium">
+                            {comment.manager?.name?.charAt(0) || 'M'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {comment.manager?.name || 'Manager'}
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {new Date(comment.createdAt).toLocaleDateString()} at {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="text-slate-700 dark:text-slate-300 text-sm whitespace-pre-wrap leading-relaxed">
+                            {comment.content}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Add New Comment Form */}
+                  {isAddingComment && ['manager', 'admin'].includes(userRole) && (
+                    <div className="border border-slate-200 dark:border-slate-600 rounded-lg p-4 bg-white dark:bg-slate-800">
+                      <div className="flex items-start space-x-3">
+                        <div className="w-8 h-8 bg-teal-500 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-white text-sm font-medium">You</span>
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-3">
+                          <Textarea
+                            placeholder="Add your feedback and observations about this call..."
+                            value={managerComments}
+                            onChange={(e) => setManagerComments(e.target.value)}
+                            className="min-h-[120px] rounded-lg border-slate-200 focus:ring-teal-500 focus:border-teal-500 dark:border-slate-600 dark:bg-slate-700 resize-none"
+                            disabled={isSavingFeedback}
+                            autoFocus
+                          />
+                          <div className="flex items-center space-x-2">
+                            <Button 
+                              onClick={handleSaveManagerFeedback}
+                              disabled={isSavingFeedback || !managerComments.trim()}
+                              size="sm"
+                              className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-medium"
+                            >
+                              {isSavingFeedback ? (
+                                <div className="flex items-center space-x-2">
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                                  <span>Posting...</span>
+                                </div>
+                              ) : (
+                                'Post Comment'
+                              )}
+                            </Button>
+                            <Button 
+                              onClick={() => {
+                                setIsAddingComment(false);
+                                setManagerComments('');
+                              }}
+                              variant="outline"
+                              size="sm"
+                              disabled={isSavingFeedback}
+                              className="px-4 py-2 rounded-lg font-medium"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Empty State */}
+                  {feedbackComments.length === 0 && !isAddingComment && (
+                    <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                      <MessageSquare className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                      <p className="text-sm">No manager feedback yet</p>
+                      {['manager', 'admin'].includes(userRole) && (
+                        <p className="text-xs mt-1">Be the first to leave feedback on this call</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="space-y-4">
-                <Textarea
-                  placeholder="Add your comments about this call..."
-                  value={managerComments}
-                  onChange={(e) => setManagerComments(e.target.value)}
-                  className="min-h-[200px] rounded-lg border-slate-200 focus:ring-teal-500 focus:border-teal-500 dark:border-slate-600 dark:bg-slate-700"
-                />
-                <Button className="w-full bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm py-2.5 rounded-xl font-medium">
-                  Save Comments
-                </Button>
-              </div>
-            </div>
+            )}
           </motion.div>
 
           {/* Sidebar */}
