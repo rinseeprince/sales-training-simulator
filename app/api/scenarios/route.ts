@@ -113,13 +113,7 @@ export const POST = withOrganizationAuth(
         prospect_name: prospectName,
         duration: duration || null,
         voice: voice || null,
-        persona: persona || 'potential customer',
-        difficulty: difficulty || 'medium',
-        industry: industry || 'general',
-        tags: tags || [],
-        settings: settings || {},
         created_by: req.user.id,
-        voice_settings: settings?.voiceSettings || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };

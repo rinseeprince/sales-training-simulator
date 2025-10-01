@@ -223,4 +223,12 @@ export const api = {
     const params = includeAssignments ? '?includeAssignments=true' : '';
     return apiRequest(`/api/calls${params}`);
   },
+  
+  // Save a call with organization context
+  async saveCall(callData: any) {
+    return apiRequest('/api/save-call', {
+      method: 'POST',
+      body: JSON.stringify(callData),
+    });
+  },
 };

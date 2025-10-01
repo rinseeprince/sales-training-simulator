@@ -181,27 +181,25 @@ export function ScenarioBuilder() {
     setIsSaving(true)
     
     try {
-      // Get the correct user ID from simple_users table
-      const profileResponse = await fetch(`/api/user-profile?authUserId=${user.id}`);
-      const profileData = await profileResponse.json();
+      // Get auth token for API request
+      const { getAuthToken } = await import('@/lib/api-client');
+      const token = await getAuthToken();
       
-      if (!profileData.success) {
-        throw new Error('Failed to get user profile: ' + profileData.error);
+      if (!token) {
+        throw new Error('Not authenticated - please sign in again');
       }
 
-      const actualUserId = profileData.userProfile.id;
-      
       const response = await fetch('/api/scenarios', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           title: scenarioData.title,
           prompt: scenarioData.prompt,
           prospectName: scenarioData.prospectName,
           voice: scenarioData.voice,
-          userId: actualUserId
         }),
       })
 

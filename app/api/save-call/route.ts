@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors, openai } from '@/lib/api-utils';
 import { SaveCallRequestBody, SaveCallResponse, TranscriptEntry, EnhancedScoring } from '@/lib/types';
-
 export async function POST(req: NextRequest) {
   try {
     // Handle CORS
@@ -43,9 +42,15 @@ export async function POST(req: NextRequest) {
     });
 
     // Validate required fields
-    if (!transcript || !repId || !scenarioName) {
+    if (!repId || !scenarioName) {
       console.error('Missing required fields:', { transcript: !!transcript, repId: !!repId, scenarioName: !!scenarioName });
-      return errorResponse('transcript, repId, and scenarioName are required');
+      return errorResponse('repId and scenarioName are required');
+    }
+    
+    // Transcript can be empty array, but should be defined
+    if (transcript === undefined || transcript === null) {
+      console.error('Transcript is undefined or null');
+      return errorResponse('transcript is required (can be empty array)');
     }
 
     // Use simplified AI-only scoring
@@ -310,9 +315,25 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
     // Save to database only if not scoreOnly
     let data = null;
     if (!scoreOnly) {
+      // Get user's organization_id from simple_users table
+      let organizationId = null;
+      try {
+        const { data: userProfile } = await supabase
+          .from('simple_users')
+          .select('organization_id')
+          .eq('id', repId)
+          .single();
+        
+        organizationId = userProfile?.organization_id;
+        console.log('Save call: Got organization_id for user:', { repId, organizationId });
+      } catch (error) {
+        console.warn('Save call: Could not get organization_id for user:', repId, error);
+      }
+
       const callData = {
         id: callId, // Use the provided call ID
         rep_id: repId,
+        organization_id: organizationId, // Add organization context
         scenario_name: scenarioName,
         scenario_prompt: scenario_prompt || scenarioPrompt, // Support both field names
         scenario_prospect_name: scenario_prospect_name,

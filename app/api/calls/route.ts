@@ -31,13 +31,26 @@ export const GET = withOrganizationAuth(
         let query = supabase
           .from('calls')
           .select(selectQuery)
-          .eq('organization_id', request.organization.id)
-          .order('created_at', { ascending: false })
+
+        console.log('Calls API: Filtering calls for user:', {
+          userId: request.user.id,
+          userRole: request.user.role,
+          organizationId: request.organization.id,
+          userEmail: request.user.email
+        });
 
         // Users see only their own calls, managers/admins see all organization calls
         if (request.user.role === 'user') {
-          query = query.eq('rep_id', request.user.id)
+          // For users, show calls that belong to their organization OR calls that don't have organization_id but belong to them (legacy calls)
+          query = query
+            .eq('rep_id', request.user.id)
+            .or(`organization_id.eq.${request.organization.id},organization_id.is.null`)
+        } else {
+          // For managers/admins, show all organization calls
+          query = query.eq('organization_id', request.organization.id)
         }
+        
+        query = query.order('created_at', { ascending: false })
 
         const { data: calls, error } = await query
 
@@ -45,6 +58,17 @@ export const GET = withOrganizationAuth(
           console.error('Calls fetch error:', error)
           return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 })
         }
+
+        console.log('Calls API: Query result:', {
+          callsFound: calls?.length || 0,
+          calls: calls?.map(call => ({
+            id: call.id,
+            rep_id: call.rep_id,
+            organization_id: call.organization_id,
+            scenario_name: call.scenario_name,
+            created_at: call.created_at
+          })) || []
+        });
 
         return NextResponse.json({
           success: true,
@@ -59,11 +83,16 @@ export const GET = withOrganizationAuth(
         .from('calls')
         .select('*, enhanced_scoring')
         .eq('id', callId)
-        .eq('organization_id', request.organization.id)
 
       // Users can only see their own calls, managers/admins can see all organization calls
       if (request.user.role === 'user') {
-        query = query.eq('rep_id', request.user.id)
+        // For users, show calls that belong to their organization OR calls that don't have organization_id but belong to them (legacy calls)
+        query = query
+          .eq('rep_id', request.user.id)
+          .or(`organization_id.eq.${request.organization.id},organization_id.is.null`)
+      } else {
+        // For managers/admins, only show organization calls
+        query = query.eq('organization_id', request.organization.id)
       }
 
       const { data: call, error } = await query.single()
