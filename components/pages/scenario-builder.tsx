@@ -143,10 +143,8 @@ export function ScenarioBuilder() {
       timestamp: Date.now()
     }
     
-    // Clear assignment ID after using it
-    if (assignmentId) {
-      localStorage.removeItem('currentAssignmentId')
-    }
+    // Don't clear assignment ID here - it needs to persist for re-runs
+    // Assignment ID will be cleared after successful save in post-call-review
     console.log('🔍 Saving to localStorage:', simulationData);
     console.log('🔍 scenarioData.prospectName:', scenarioData.prospectName);
     localStorage.setItem('currentScenario', JSON.stringify(simulationData))

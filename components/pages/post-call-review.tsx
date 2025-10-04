@@ -617,6 +617,11 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
         setCallSaved(true)
         // Remove temp data since call is now saved in database
         sessionStorage.removeItem(`temp_call_${callId}`)
+        // Clear assignment ID now that the call has been successfully saved
+        if (tempCallData.assignmentId) {
+          localStorage.removeItem('currentAssignmentId')
+          console.log('Assignment ID cleared after successful save')
+        }
         // Navigate to saved simulations page
         router.push('/simulations')
       } else {
@@ -808,10 +813,18 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
         prompt: tempCallData.scenarioPrompt || 'Restart this sales simulation scenario',
         prospectName: tempCallData.scenarioProspectName || 'Prospect',
         voice: tempCallData.scenarioVoice || 'alloy',
+        assignmentId: tempCallData.assignmentId, // Preserve assignment ID for re-runs
         timestamp: Date.now()
       }
       console.log('🔄 Using temp call data, setting scenario:', scenarioData);
       localStorage.setItem('currentScenario', JSON.stringify(scenarioData))
+      
+      // Set assignment ID in localStorage if this is an assignment re-run
+      if (tempCallData.assignmentId) {
+        localStorage.setItem('currentAssignmentId', tempCallData.assignmentId)
+        console.log('🔄 Assignment ID preserved for re-run:', tempCallData.assignmentId)
+      }
+      
       console.log('🔄 Scenario saved to localStorage, navigating to /simulation');
       // Verify the scenario was saved
       const savedScenario = localStorage.getItem('currentScenario');
