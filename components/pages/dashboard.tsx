@@ -299,19 +299,9 @@ export function Dashboard() {
   // Fetch manager data when in manager view with exact same fallback as assign scenario modal
   useEffect(() => {
     const fetchManagerData = async () => {
-      console.log('🔍 CLIENT DEBUG: fetchManagerData called with:', {
-        user: !!user,
-        isManagerView,
-        userRole,
-        hasAccess: ['manager', 'admin'].includes(userRole || '')
-      })
-      
       if (!user || !isManagerView || !['manager', 'admin'].includes(userRole || '')) {
-        console.log('🔍 CLIENT DEBUG: Skipping manager data fetch - conditions not met')
         return
       }
-      
-      console.log('🔍 CLIENT DEBUG: Starting manager data fetch...')
       setIsLoadingManagerData(true)
       setManagerDataError(null)
       
@@ -322,36 +312,14 @@ export function Dashboard() {
         })
         
         const headers = await getAuthHeaders()
-        console.log('🔍 CLIENT DEBUG: Making metrics API call to:', `/api/manager-reviews/metrics?timeRange=${dateRange}`)
-        
-        // DEBUG: First call debug endpoint to see what data exists
-        try {
-          const debugResponse = await fetch('/api/debug-metrics', { headers })
-          if (debugResponse.ok) {
-            const debugData = await debugResponse.json()
-            console.log('🔍 CLIENT DEBUG: Debug endpoint data:', debugData)
-            console.log('🔍 CLIENT DEBUG: Auth user:', debugData.debug?.authUser)
-            console.log('🔍 CLIENT DEBUG: Current user:', debugData.debug?.currentUser)
-            console.log('🔍 CLIENT DEBUG: Domain:', debugData.debug?.domain)
-            console.log('🔍 CLIENT DEBUG: Team members found:', debugData.debug?.teamMembers)
-            console.log('🔍 CLIENT DEBUG: Calls found:', debugData.debug?.calls)
-            console.log('🔍 CLIENT DEBUG: Assignments found:', debugData.debug?.assignments)
-          }
-        } catch (e) {
-          console.log('🔍 CLIENT DEBUG: Debug endpoint failed:', e)
-        }
         
         const metricsQueryPromise = fetch(`/api/manager-reviews/metrics?timeRange=${dateRange}`, { headers })
           .then(async (response) => {
-            console.log('🔍 CLIENT DEBUG: Metrics API response status:', response.status)
             if (response.ok) {
               const data = await response.json()
-              console.log('🔍 CLIENT DEBUG: Metrics API response data:', data)
-              console.log('🔍 CLIENT DEBUG: Metrics object details:', JSON.stringify(data.metrics, null, 2))
               return { data: data.metrics || {}, error: null }
             } else {
-              const errorText = await response.text()
-              console.error('🔍 CLIENT DEBUG: Metrics API error:', response.status, errorText)
+              console.error('Metrics API error:', response.status)
               throw new Error(`Metrics API error: ${response.status}`)
             }
           })
@@ -403,7 +371,6 @@ export function Dashboard() {
         if (metricsError) {
           console.error('❌ Failed to load team metrics:', metricsError)
         } else {
-          console.log('🔍 CLIENT DEBUG: Setting team metrics:', metricsData)
           setTeamMetrics(metricsData)
         }
         
@@ -651,7 +618,6 @@ export function Dashboard() {
               </button>
               <button
                 onClick={() => {
-                  console.log('🔍 CLIENT DEBUG: Team Review button clicked, switching to manager view')
                   setIsManagerView(true)
                 }}
                 className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${

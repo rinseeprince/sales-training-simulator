@@ -39,7 +39,6 @@ export function ReviewModal({ isOpen, onClose, callId, title, isManagerReview, o
     } else if (!isOpen) {
       // Don't manipulate URL when closing - let parent handle navigation
       // This prevents conflicts with router.push() calls
-      console.log('📝 Review modal closed, letting parent handle navigation')
     }
   }, [isOpen, callId])
 

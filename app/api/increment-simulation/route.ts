@@ -48,15 +48,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ 
           success: true,
           count: 1,
-          limit: 3,
-          remaining: 2,
+          limit: 2,
+          remaining: 1,
           message: 'Simulation started (new user)'
         });
       }
 
       // Check if user has reached limit (for free users)
       const count = userData.simulation_count || 0;
-      const limit = userData.simulation_limit || 3; // Default to 3 for new free users
+      const limit = userData.simulation_limit || 2; // Default to 2 for new free users
       const isPaid = userData.subscription_status === 'paid' || userData.subscription_status === 'trial';
       const isEnterprise = userData.subscription_status === 'enterprise';
       
