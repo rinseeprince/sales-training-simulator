@@ -41,6 +41,8 @@ export function IvyPage() {
     prompt: '',
     timestamp: 0
   })
+  const [saveReuse, setSaveReuse] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   
   // Simulation state
   const [isSimulationActive, setIsSimulationActive] = useState(false)
@@ -192,10 +194,105 @@ export function IvyPage() {
     return () => clearInterval(interval)
   }, [])
 
+  // Load selected IVY scenario from localStorage
+  useEffect(() => {
+    const selectedIvyScenario = localStorage.getItem('selectedIvyScenario')
+    if (selectedIvyScenario) {
+      try {
+        const parsed = JSON.parse(selectedIvyScenario)
+        setScenarioData({
+          title: parsed.title,
+          prompt: parsed.prompt,
+          timestamp: parsed.timestamp || Date.now()
+        })
+        setSaveReuse(false) // Don't auto-save when loading existing scenario
+        
+        // If this is an assignment, store the assignment ID
+        if (parsed.assignmentId) {
+          localStorage.setItem('currentAssignmentId', parsed.assignmentId)
+        }
+        
+        localStorage.removeItem('selectedIvyScenario')
+      } catch (error) {
+        console.error('Failed to load selected IVY scenario:', error)
+      }
+    }
+  }, [user])
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const saveScenarioToDatabase = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to save scenarios.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!scenarioData.title || !scenarioData.prompt) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in the scenario title and description.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    setIsSaving(true)
+    
+    try {
+      // Get auth token for API request
+      const { getAuthToken } = await import('@/lib/api-client');
+      const token = await getAuthToken();
+      
+      if (!token) {
+        throw new Error('Not authenticated - please sign in again');
+      }
+
+      const response = await fetch('/api/scenarios', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: scenarioData.title,
+          prompt: scenarioData.prompt,
+          prospectName: 'Ivy', // Default prospect name for IVY scenarios
+          voice: 'ivy-voice', // Identifier for IVY voice scenarios
+          scenarioType: 'ivy', // Add identifier for IVY scenarios
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        toast({
+          title: "Scenario Saved",
+          description: "Your IVY scenario has been saved successfully.",
+        })
+        console.log('IVY Scenario saved:', result)
+        return true
+      } else {
+        const error = await response.text()
+        throw new Error(error)
+      }
+    } catch (error) {
+      console.error('Failed to save IVY scenario:', error)
+      toast({
+        title: "Save Failed",
+        description: error instanceof Error ? error.message : "Failed to save scenario. Please try again.",
+        variant: "destructive",
+      })
+      return false
+    } finally {
+      setIsSaving(false)
+    }
   }
   
   const handleStartSimulation = async () => {
@@ -215,6 +312,12 @@ export function IvyPage() {
         variant: "destructive",
       })
       return
+    }
+
+    // Auto-save scenario if saveReuse is enabled
+    if (saveReuse) {
+      const saved = await saveScenarioToDatabase()
+      if (!saved) return // Don't proceed if save failed
     }
 
     try {
@@ -320,6 +423,9 @@ export function IvyPage() {
       stopAudioRecording()
       console.log('Audio recording stopped')
       
+      // Get assignment ID before any potential cleanup
+      const currentAssignmentId = localStorage.getItem('currentAssignmentId')
+      
       let audioUrl = null
       
       // Upload audio if we have data
@@ -363,6 +469,11 @@ export function IvyPage() {
             timestamp: msg.timestamp
           }))
           
+          // Use the assignment ID we retrieved earlier
+          if (currentAssignmentId) {
+            console.log('🎯 IVY: Saving call for assignment:', currentAssignmentId)
+          }
+          
           // Save call data and get scoring
           const saveResponse = await fetch('/api/save-call', {
             method: 'POST',
@@ -378,6 +489,7 @@ export function IvyPage() {
               duration: currentTime,
               audioUrl: audioUrl,
               conversationHistory: conversationHistory,
+              assignmentId: currentAssignmentId || undefined, // Include assignment ID if exists
               scoreOnly: false
             }),
           })
@@ -402,6 +514,12 @@ export function IvyPage() {
               ctaUsed: saveResult.cta_used || false,
               sentiment: saveResult.sentiment || 'neutral',
               enhancedScoring: saveResult.enhancedScoring || null
+            }
+            
+            // Clear assignment ID if this was an assignment (call was successfully saved)
+            if (currentAssignmentId) {
+              localStorage.removeItem('currentAssignmentId')
+              console.log('✅ IVY Assignment completed and ID cleared:', currentAssignmentId)
             }
           }
           
@@ -614,8 +732,21 @@ export function IvyPage() {
             /* Scenario Builder */
             <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-slate-900 mb-1">Setup Your Scenario</h3>
-                <p className="text-sm text-slate-500">Create your sales scenario for Ivy to roleplay</p>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-1">Setup Your Scenario</h3>
+                    <p className="text-sm text-slate-500">Create your sales scenario for Ivy to roleplay</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="save-reuse"
+                      checked={saveReuse}
+                      onCheckedChange={(checked) => setSaveReuse(checked)}
+                      disabled={userSubscription !== 'enterprise'}
+                    />
+                    <Label htmlFor="save-reuse" className="text-sm text-slate-700">Save for reuse</Label>
+                  </div>
+                </div>
               </div>
               
               <div className="space-y-6">
@@ -652,11 +783,11 @@ export function IvyPage() {
                 <div className="border-t border-slate-100 pt-6">
                   <Button
                     onClick={handleStartSimulation}
-                    disabled={!scenarioData.title || !scenarioData.prompt || userSubscription !== 'enterprise'}
+                    disabled={!scenarioData.title || !scenarioData.prompt || userSubscription !== 'enterprise' || isSaving}
                     className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
                   >
                     <Play className="mr-2 h-4 w-4" />
-                    Start Voice Simulation
+                    {isSaving ? 'Saving...' : 'Start Voice Simulation'}
                   </Button>
                 </div>
               </div>
@@ -739,11 +870,11 @@ export function IvyPage() {
                 ) : (
                   <Button
                     onClick={handleStartSimulation}
-                    disabled={!scenarioData.title || !scenarioData.prompt || userSubscription !== 'enterprise'}
+                    disabled={!scenarioData.title || !scenarioData.prompt || userSubscription !== 'enterprise' || isSaving}
                     className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
                   >
                     <Play className="mr-2 h-4 w-4" />
-                    Start Call
+                    {isSaving ? 'Saving...' : 'Start Call'}
                   </Button>
                 )
               ) : (
@@ -805,6 +936,14 @@ export function IvyPage() {
           {/* Settings */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)] p-6">
             <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-700">Save for Reuse</span>
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
+                  saveReuse ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {saveReuse ? 'Yes' : 'No'}
+                </span>
+              </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="subtitles" className="text-sm text-slate-700">Show Status</Label>
                 <Switch

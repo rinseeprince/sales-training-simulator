@@ -42,7 +42,9 @@ import {
   AlertCircle,
   Calendar,
   User,
-  X
+  X,
+  Bot,
+  Mic
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseAuth } from '@/components/supabase-auth-provider'
@@ -236,6 +238,10 @@ export function SavedScenarios() {
     }
   }, [activeTab, loadUserRole, loadScenarios, loadAssignments])
   
+  const isIvyScenario = (scenario: SavedScenario) => {
+    return scenario.voice === 'ivy-voice' || scenario.prospect_name === 'Ivy'
+  }
+
   const handleRunScenario = async (scenario: SavedScenario) => {
     // Check simulation limit before proceeding
     const limitCheck = await checkSimulationLimit();
@@ -262,19 +268,27 @@ export function SavedScenarios() {
   }
 
   const startScenario = (scenario: SavedScenario) => {
-    // Store scenario data in localStorage
-    localStorage.setItem('selectedScenario', JSON.stringify({
-      title: scenario.title,
-      prompt: scenario.prompt,
-      prospectName: scenario.prospect_name,
-      duration: scenario.duration,
-      voice: scenario.voice,
-      enableStreaming: true,
-      timestamp: Date.now()
-    }))
-    
-    // Navigate to scenario builder
-    router.push('/scenario-builder')
+    if (isIvyScenario(scenario)) {
+      // For IVY scenarios, store data and navigate to IVY page
+      localStorage.setItem('selectedIvyScenario', JSON.stringify({
+        title: scenario.title,
+        prompt: scenario.prompt,
+        timestamp: Date.now()
+      }))
+      router.push('/ivy')
+    } else {
+      // For regular scenarios, store data and navigate to scenario builder
+      localStorage.setItem('selectedScenario', JSON.stringify({
+        title: scenario.title,
+        prompt: scenario.prompt,
+        prospectName: scenario.prospect_name,
+        duration: scenario.duration,
+        voice: scenario.voice,
+        enableStreaming: true,
+        timestamp: Date.now()
+      }))
+      router.push('/scenario-builder')
+    }
   }
 
   const handlePaywallClose = () => {
@@ -594,11 +608,25 @@ export function SavedScenarios() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <User className="h-4 w-4 text-slate-400" />
-                            <span className="text-slate-600">
-                              {scenario.prospect_name || 'Default'}
-                            </span>
+                          <div className="flex items-center gap-2">
+                            {isIvyScenario(scenario) ? (
+                              <>
+                                <div className="flex items-center gap-1">
+                                  <Bot className="h-4 w-4 text-blue-600" />
+                                  <span className="text-slate-600">IVY Voice</span>
+                                </div>
+                                <Badge className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs px-2 py-0.5">
+                                  Voice AI
+                                </Badge>
+                              </>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <User className="h-4 w-4 text-slate-400" />
+                                <span className="text-slate-600">
+                                  {scenario.prospect_name || 'Default'}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-slate-600">
@@ -612,8 +640,17 @@ export function SavedScenarios() {
                               disabled={isChecking}
                               className="bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-4 py-2 rounded-xl font-medium"
                             >
-                              <Play className="h-4 w-4 mr-1" />
-                              {isChecking ? 'Checking...' : 'Run'}
+                              {isIvyScenario(scenario) ? (
+                                <>
+                                  <Mic className="h-4 w-4 mr-1" />
+                                  {isChecking ? 'Checking...' : 'Voice Call'}
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-4 w-4 mr-1" />
+                                  {isChecking ? 'Checking...' : 'Run'}
+                                </>
+                              )}
                             </Button>
                             {isManagerOrAdmin && (
                               <Button

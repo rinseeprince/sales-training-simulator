@@ -19,7 +19,9 @@ import {
   Calendar,
   MessageSquare,
   Clock,
-  Building
+  Building,
+  Bot,
+  Mic
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -75,6 +77,10 @@ export function AssignmentDetailsModal({
     return format(new Date(dateString), 'PPP')
   }
 
+  const isIvyScenario = (scenario: SavedScenario) => {
+    return scenario.voice === 'ivy-voice' || scenario.prospect_name === 'Ivy'
+  }
+
   const handleStartScenario = async () => {
     if (!assignment?.scenario) return
 
@@ -117,25 +123,36 @@ export function AssignmentDetailsModal({
         }
       }
 
-      // Store scenario data for simulation (read-only for assignments)
-      localStorage.setItem('currentScenario', JSON.stringify({
-        title: assignment.scenario.title,
-        prompt: assignment.scenario.prompt,
-        prospectName: assignment.scenario.prospect_name,
-        duration: assignment.scenario.duration,
-        voice: assignment.scenario.voice,
-        assignmentId: assignment.id,
-        isAssignment: true, // Flag to indicate this is an assignment
-        enableStreaming: true,
-        timestamp: Date.now()
-      }))
-
       // Store assignment ID separately for tracking
       localStorage.setItem('currentAssignmentId', assignment.id)
 
-      // Close modal and navigate directly to simulation
-      onClose()
-      router.push('/simulation')
+      if (isIvyScenario(assignment.scenario)) {
+        // For IVY scenarios, store in IVY format and navigate to IVY page
+        localStorage.setItem('selectedIvyScenario', JSON.stringify({
+          title: assignment.scenario.title,
+          prompt: assignment.scenario.prompt,
+          assignmentId: assignment.id,
+          isAssignment: true,
+          timestamp: Date.now()
+        }))
+        onClose()
+        router.push('/ivy')
+      } else {
+        // For regular scenarios, store scenario data for simulation
+        localStorage.setItem('currentScenario', JSON.stringify({
+          title: assignment.scenario.title,
+          prompt: assignment.scenario.prompt,
+          prospectName: assignment.scenario.prospect_name,
+          duration: assignment.scenario.duration,
+          voice: assignment.scenario.voice,
+          assignmentId: assignment.id,
+          isAssignment: true, // Flag to indicate this is an assignment
+          enableStreaming: true,
+          timestamp: Date.now()
+        }))
+        onClose()
+        router.push('/simulation')
+      }
 
     } catch (error) {
       console.error('Error starting assignment:', error)
@@ -236,14 +253,26 @@ export function AssignmentDetailsModal({
                   </p>
                 </div>
 
-                {assignment.scenario?.prospect_name && (
-                  <div className="flex items-center gap-2">
-                    <Building className="h-4 w-4 text-slate-400" />
-                    <span className="text-sm text-slate-600">
-                      <span className="font-medium">Prospect:</span> {assignment.scenario.prospect_name}
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {isIvyScenario(assignment.scenario) ? (
+                    <>
+                      <Bot className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm text-slate-600">
+                        <span className="font-medium">Type:</span> IVY Voice Simulation
+                      </span>
+                      <Badge className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs px-2 py-0.5">
+                        Voice AI
+                      </Badge>
+                    </>
+                  ) : assignment.scenario?.prospect_name ? (
+                    <>
+                      <Building className="h-4 w-4 text-slate-400" />
+                      <span className="text-sm text-slate-600">
+                        <span className="font-medium">Prospect:</span> {assignment.scenario.prospect_name}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
 
                 {assignment.scenario?.duration && (
                   <div className="flex items-center gap-2">
@@ -289,8 +318,17 @@ export function AssignmentDetailsModal({
               </>
             ) : (
               <>
-                <Play className="h-4 w-4 mr-2" />
-                Start Scenario
+                {assignment?.scenario && isIvyScenario(assignment.scenario) ? (
+                  <>
+                    <Mic className="h-4 w-4 mr-2" />
+                    Start Voice Call
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Scenario
+                  </>
+                )}
               </>
             )}
           </Button>
