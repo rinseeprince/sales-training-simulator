@@ -17,6 +17,8 @@ import { useToast } from '@/hooks/use-toast'
 import { ManagerReviewActions } from '@/components/ui/manager-review-actions'
 import { useSimulationLimit } from '@/hooks/use-simulation-limit'
 import { PaywallModal } from '@/components/ui/paywall-modal'
+import { EnhancedCoachingPanel } from '@/components/ui/enhanced-coaching-panel'
+import { SimpleCoachingPanel } from '@/components/ui/simple-coaching-panel'
 import { supabaseClient } from '@/lib/supabase-auth'
 
 const callData = {
@@ -439,7 +441,12 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   const [isSavingCall, setIsSavingCall] = useState(false)
   const [callSaved, setCallSaved] = useState(false)
   const [coachingFeedback, setCoachingFeedback] = useState<CoachingData | null>(null)
+  const [enhancedCoachingFeedback, setEnhancedCoachingFeedback] = useState<any>(null)
+  const [simpleCoachingFeedback, setSimpleCoachingFeedback] = useState<string | null>(null)
   const [isLoadingCoaching, setIsLoadingCoaching] = useState(false)
+  const [isLoadingEnhancedCoaching, setIsLoadingEnhancedCoaching] = useState(false)
+  const [isLoadingSimpleCoaching, setIsLoadingSimpleCoaching] = useState(false)
+  const [coachingMode, setCoachingMode] = useState<'standard' | 'enhanced' | 'simple'>('simple')
   const [mostRecentCall, setMostRecentCall] = useState<TempCallData | null>(null)
   const [loadingRecentCall, setLoadingRecentCall] = useState(false)
   const [userRole, setUserRole] = useState<string>('user')
@@ -921,6 +928,92 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
     
     loadCoachingFeedback();
   }, [safeDisplayData.transcript, safeDisplayData.enhancedScoring, coachingFeedback, isLoadingCoaching]);
+
+  // Load enhanced coaching feedback when enabled
+  useEffect(() => {
+    const loadEnhancedCoaching = async () => {
+      if (!useEnhancedCoaching || !safeDisplayData.transcript || safeDisplayData.transcript.length === 0 || 
+          isLoadingEnhancedCoaching || enhancedCoachingFeedback) return;
+      
+      console.log('🎯 Loading enhanced coaching feedback...');
+      setIsLoadingEnhancedCoaching(true);
+      
+      try {
+        const response = await fetch('/api/enhanced-coaching', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            transcript: safeDisplayData.transcript,
+            scenarioContext: {
+              industry: 'Technology',
+              productType: 'Software',
+              dealSize: 'Medium',
+              salesStage: 'Discovery',
+              competitiveContext: []
+            },
+            repProfile: {
+              experience: 'mid',
+              strengths: [],
+              developmentAreas: []
+            }
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Enhanced coaching loaded:', data);
+          setEnhancedCoachingFeedback(data.enhancedCoaching);
+        } else {
+          console.error('Enhanced coaching API error:', response.status);
+        }
+      } catch (error) {
+        console.error('Error loading enhanced coaching feedback:', error);
+      } finally {
+        setIsLoadingEnhancedCoaching(false);
+      }
+    };
+    
+    loadEnhancedCoaching();
+  }, [coachingMode === 'enhanced', safeDisplayData.transcript, enhancedCoachingFeedback, isLoadingEnhancedCoaching]);
+
+  // Load simple coaching feedback when enabled
+  useEffect(() => {
+    const loadSimpleCoaching = async () => {
+      if (coachingMode !== 'simple' || !safeDisplayData.transcript || safeDisplayData.transcript.length === 0 || 
+          isLoadingSimpleCoaching || simpleCoachingFeedback) return;
+      
+      console.log('🎯 Loading simple coaching feedback...');
+      setIsLoadingSimpleCoaching(true);
+      
+      try {
+        const response = await fetch('/api/simple-coaching', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            transcript: safeDisplayData.transcript
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Simple coaching loaded');
+          setSimpleCoachingFeedback(data.feedback);
+        } else {
+          console.error('Simple coaching API error:', response.status);
+        }
+      } catch (error) {
+        console.error('Error loading simple coaching feedback:', error);
+      } finally {
+        setIsLoadingSimpleCoaching(false);
+      }
+    };
+    
+    loadSimpleCoaching();
+  }, [coachingMode, safeDisplayData.transcript, simpleCoachingFeedback, isLoadingSimpleCoaching]);
   
   // Debug logging (only when explicitly needed)
   // useEffect(() => {
@@ -1205,25 +1298,66 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
                       <p className="text-sm text-slate-600 dark:text-slate-400">Personalized feedback and insights</p>
                     </div>
                   </div>
-                  <Badge variant="secondary" className="bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/50 dark:text-teal-300 dark:border-teal-700">
-                    GPT-4 Analysis
-                  </Badge>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="secondary" className="bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/50 dark:text-teal-300 dark:border-teal-700">
+                      {coachingMode === 'simple' ? 'AI Coaching' : coachingMode === 'enhanced' ? 'Enhanced Analysis' : 'Standard Analysis'}
+                    </Badge>
+                    <select 
+                      value={coachingMode}
+                      onChange={(e) => setCoachingMode(e.target.value as 'standard' | 'enhanced' | 'simple')}
+                      className="text-xs h-6 px-2 rounded border border-slate-300 bg-white"
+                    >
+                      <option value="simple">Simple</option>
+                      <option value="standard">Standard</option>
+                      <option value="enhanced">Enhanced</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               
               <div className="p-6">
-                {isLoadingCoaching ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-center space-y-3">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto"></div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Analyzing your performance...</p>
+                {coachingMode === 'simple' ? (
+                  <SimpleCoachingPanel 
+                    feedback={simpleCoachingFeedback} 
+                    isLoading={isLoadingSimpleCoaching}
+                    onRefresh={() => {
+                      setSimpleCoachingFeedback(null)
+                      // Trigger reload by changing state
+                      setIsLoadingSimpleCoaching(false)
+                    }}
+                  />
+                ) : coachingMode === 'enhanced' ? (
+                  isLoadingEnhancedCoaching ? (
+                    <EnhancedCoachingPanel feedback={null} isLoading={true} />
+                  ) : enhancedCoachingFeedback ? (
+                    <EnhancedCoachingPanel feedback={enhancedCoachingFeedback} />
+                  ) : (
+                    <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                      <Lightbulb className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                      <p>Enhanced coaching analysis will appear here</p>
+                      <Button 
+                        onClick={() => window.location.reload()} 
+                        variant="outline" 
+                        size="sm" 
+                        className="mt-4"
+                      >
+                        Retry Analysis
+                      </Button>
                     </div>
-                  </div>
-                ) : safeDisplayData?.enhancedScoring || coachingFeedback ? (
-                  <CoachingPanel data={safeDisplayData.enhancedScoring || coachingFeedback} />
+                  )
                 ) : (
-                  <div className="space-y-4">
-                    {safeDisplayData.feedback.length > 0 ? safeDisplayData.feedback.map((item: string, index: number) => (
+                  isLoadingCoaching ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center space-y-3">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto"></div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Analyzing your performance...</p>
+                      </div>
+                    </div>
+                  ) : safeDisplayData?.enhancedScoring || coachingFeedback ? (
+                    <CoachingPanel data={safeDisplayData.enhancedScoring || coachingFeedback} />
+                  ) : (
+                    <div className="space-y-4">
+                      {safeDisplayData.feedback.length > 0 ? safeDisplayData.feedback.map((item: string, index: number) => (
                       <div key={index} className="flex items-start space-x-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-700">
                         {index < 2 ? (
                           <CheckCircle className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
@@ -1237,8 +1371,9 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
                         <Lightbulb className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
                         <p>No coaching feedback available yet</p>
                       </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )
                 )}
               </div>
             </div>
