@@ -61,6 +61,7 @@ interface SavedScenario {
   id: string
   title: string
   prompt: string
+  name?: string
   prospect_name?: string
   duration?: string
   voice?: string
@@ -273,6 +274,7 @@ export function SavedScenarios() {
       localStorage.setItem('selectedIvyScenario', JSON.stringify({
         title: scenario.title,
         prompt: scenario.prompt,
+        coachName: scenario.name || 'Ivy Scenario Builder',
         timestamp: Date.now()
       }))
       router.push('/ivy')

@@ -1,10 +1,10 @@
-# 🤖 Ivy - AI Voice Simulation System
+# 🤖 Ivy Scenario Builder - AI Voice Simulation System
 
-Ivy is an enterprise-grade AI voice simulation system built for sales training and practice. She provides hands-free, real-time voice conversations using advanced AI technology.
+Ivy Scenario Builder is an enterprise-grade AI voice simulation system built for sales training and practice. She provides hands-free, real-time voice conversations using advanced AI technology.
 
 ## 🎯 Overview
 
-Ivy simulates realistic sales prospects through voice conversations, allowing sales representatives to practice their skills in a natural, conversational environment. The system uses ElevenLabs for voice generation and OpenAI for conversation intelligence.
+Ivy Scenario Builder simulates realistic sales prospects through voice conversations, allowing sales representatives to practice their skills in a natural, conversational environment. The system uses ElevenLabs for voice generation and OpenAI for conversation intelligence.
 
 ## 🏗️ Architecture
 
@@ -59,7 +59,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 ### ElevenLabs Agent Configuration
 
-Ivy uses a pre-configured ElevenLabs agent:
+Ivy Scenario Builder uses a pre-configured ElevenLabs agent:
 - **Agent ID**: `agent_1701k5yrs1ate7btr3ve24j8tvm9`
 - **Voice Model**: Professional, conversational tone
 - **Response Time**: Optimized for real-time conversation
@@ -68,7 +68,7 @@ Ivy uses a pre-configured ElevenLabs agent:
 
 ### How It Works
 
-Ivy uses a sophisticated "silent context" system to establish character roles without the user hearing setup instructions.
+Ivy Scenario Builder uses a sophisticated "silent context" system to establish character roles without the user hearing setup instructions.
 
 #### 1. Context Message Structure
 
@@ -84,7 +84,7 @@ The context is delivered using ElevenLabs' `sendContextualUpdate` method:
 // Primary method - silent context delivery
 if (conversation.sendContextualUpdate) {
   conversation.sendContextualUpdate(contextMessage)
-  console.log('✅ Sent silent scenario context to Ivy:', scenarioData.title)
+  console.log('✅ Sent silent scenario context to Ivy Scenario Builder:', scenarioData.title)
 }
 
 // Fallback method if primary fails
@@ -116,7 +116,7 @@ graph TD
     C --> D[Send Silent Context]
     D --> E[Character Established]
     E --> F[User Begins Speaking]
-    F --> G[Ivy Responds In Character]
+    F --> G[Ivy Scenario Builder Responds In Character]
 ```
 
 ## 🗣️ Voice Conversation Flow
@@ -195,7 +195,7 @@ Prompt: "You are a Marketing Manager at a growing startup. You receive many cold
 ### Main Controls
 
 - **Scenario Builder**: Text inputs for title and character prompt
-- **Voice Status**: Real-time indicators showing Ivy's speaking/listening state
+- **Voice Status**: Real-time indicators showing Ivy Scenario Builder's speaking/listening state
 - **Timer**: Call duration tracking
 - **Audio Waveform**: Visual feedback of conversation activity
 
@@ -209,7 +209,7 @@ if (userSubscription !== 'enterprise') {
 }
 ```
 
-Ivy is restricted to Enterprise customers only, with contact modal for upgrade requests.
+Ivy Scenario Builder is restricted to Enterprise customers only, with contact modal for upgrade requests.
 
 ## 🔄 Call Lifecycle
 
@@ -296,7 +296,7 @@ npm install
 npm run dev
 ```
 
-### 5. Access Ivy
+### 5. Access Ivy Scenario Builder
 
 Navigate to `/ivy` route to access the voice simulation interface.
 
@@ -324,7 +324,7 @@ Navigate to `/ivy` route to access the voice simulation interface.
 Enable detailed logging by checking console output:
 ```typescript
 console.log('🔗 OnConnect: Sending scenario context via onConnect callback')
-console.log('✅ Sent silent scenario context to Ivy:', scenarioData.title)
+console.log('✅ Sent silent scenario context to Ivy Scenario Builder:', scenarioData.title)
 console.log('🎵 Captured ElevenLabs audio element for recording')
 ```
 
@@ -367,4 +367,4 @@ console.log('🎵 Captured ElevenLabs audio element for recording')
 
 ---
 
-*Ivy represents the future of sales training - providing realistic, accessible, and effective voice-based practice opportunities for sales professionals.*
+*Ivy Scenario Builder represents the future of sales training - providing realistic, accessible, and effective voice-based practice opportunities for sales professionals.*

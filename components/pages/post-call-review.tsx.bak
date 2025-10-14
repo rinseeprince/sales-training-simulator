@@ -601,9 +601,7 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
           scenario_prospect_name: tempCallData.scenarioProspectName,
           scenario_voice: tempCallData.scenarioVoice,
           // Pass existing enhanced scoring to prevent regeneration
-          existingEnhancedScoring: tempCallData.enhanced_scoring || tempCallData.enhancedScoring,
-          // Include coaching feedback for saving
-          coachingFeedback: simpleCoachingFeedback
+          existingEnhancedScoring: tempCallData.enhanced_scoring || tempCallData.enhancedScoring
         }),
       })
       
@@ -887,7 +885,6 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
     return {
       ...data,
       feedback: Array.isArray(data?.feedback) ? data.feedback : [],
-      coaching_feedback: typeof data?.feedback === 'string' ? data.feedback : null,
       transcript: Array.isArray(data?.transcript) ? data.transcript : [],
       score: typeof data?.score === 'number' ? data.score : data?.talkRatio?.rep || 0,
       talk_ratio: typeof data?.talk_ratio === 'number' ? data.talk_ratio : data?.talkRatio?.rep || 50,
@@ -984,14 +981,7 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
   // Load simple coaching feedback when enabled
   useEffect(() => {
     const loadSimpleCoaching = async () => {
-      // First check if we have saved coaching feedback 
-      if (safeDisplayData.coaching_feedback && !simpleCoachingFeedback) {
-        console.log('📖 Using saved coaching feedback from feedback field');
-        setSimpleCoachingFeedback(safeDisplayData.coaching_feedback);
-        return;
-      }
-      
-      if (!safeDisplayData.transcript || safeDisplayData.transcript.length === 0 || 
+      if (coachingMode !== 'simple' || !safeDisplayData.transcript || safeDisplayData.transcript.length === 0 || 
           isLoadingSimpleCoaching || simpleCoachingFeedback) return;
       
       console.log('🎯 Loading simple coaching feedback...');
@@ -1023,7 +1013,7 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
     };
     
     loadSimpleCoaching();
-  }, [safeDisplayData.transcript, safeDisplayData.coaching_feedback, simpleCoachingFeedback, isLoadingSimpleCoaching]);
+  }, [coachingMode, safeDisplayData.transcript, simpleCoachingFeedback, isLoadingSimpleCoaching]);
   
   // Debug logging (only when explicitly needed)
   // useEffect(() => {
@@ -1323,6 +1313,34 @@ export function PostCallReview({ modalCallId, isInModal = false, isManagerReview
                     setIsLoadingSimpleCoaching(false)
                   }}
                 />
+                    <div className="flex items-center justify-center py-12">
+                      <div className="text-center space-y-3">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto"></div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Analyzing your performance...</p>
+                      </div>
+                    </div>
+                  ) : safeDisplayData?.enhancedScoring || coachingFeedback ? (
+                    <CoachingPanel data={safeDisplayData.enhancedScoring || coachingFeedback} />
+                  ) : (
+                    <div className="space-y-4">
+                      {safeDisplayData.feedback.length > 0 ? safeDisplayData.feedback.map((item: string, index: number) => (
+                      <div key={index} className="flex items-start space-x-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-700">
+                        {index < 2 ? (
+                          <CheckCircle className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <TrendingUp className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                        )}
+                        <p className="text-sm text-slate-700 dark:text-slate-300">{item}</p>
+                      </div>
+                    )) : (
+                      <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                        <Lightbulb className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                        <p>No coaching feedback available yet</p>
+                      </div>
+                      )}
+                    </div>
+                  )
+                )}
               </div>
             </div>
 

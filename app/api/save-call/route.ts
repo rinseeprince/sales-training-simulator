@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
       audioUrl,
       conversationHistory = [],
       scoreOnly = false,
-      existingEnhancedScoring = null
+      existingEnhancedScoring = null,
+      coachingFeedback = null
     } = body;
 
     console.log('Received save call request:', { 
@@ -344,7 +345,7 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         objections_handled: objectionsHandled,
         cta_used: ctaUsed,
         sentiment: sentiment,
-        feedback: feedback,
+        feedback: coachingFeedback || feedback, // Save coaching feedback or fallback to existing feedback
         duration: duration,
         audio_url: audioUrl,
         enhanced_scoring: enhancedScoring, // Save the detailed feedback
@@ -360,7 +361,7 @@ CRITICAL: Base your analysis ONLY on the actual conversation above. If the call 
         duration: callData.duration,
         score: callData.score,
         enhanced_scoring: callData.enhanced_scoring ? 'PRESENT' : 'MISSING',
-        enhanced_scoring_data: callData.enhanced_scoring
+        feedback: callData.feedback ? 'PRESENT' : 'MISSING'
       });
 
       const { data: dbData, error } = await supabase

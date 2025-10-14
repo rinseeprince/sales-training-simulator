@@ -189,7 +189,7 @@ export function ContactModal({ isOpen, onClose, title, subtitle }: ContactModalP
                   
                   <h3 className="text-xl font-bold text-slate-900 mb-2">Message Sent!</h3>
                   <p className="text-slate-600 mb-6">
-                    Thanks for your interest in Ivy. Our team will get back to you within 24 hours.
+                    Thanks for your interest in Ivy Scenario Builder. Our team will get back to you within 24 hours.
                   </p>
                   
                   <div className="bg-emerald-50 rounded-lg p-4">

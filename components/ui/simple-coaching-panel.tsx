@@ -106,9 +106,6 @@ export function SimpleCoachingPanel({ feedback, isLoading = false, onRefresh }: 
         </div>
         
         <div className="flex items-center space-x-2">
-          <Badge variant="secondary" className="bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-900/50 dark:text-teal-300 dark:border-teal-700">
-            GPT-4 Analysis
-          </Badge>
           <Button
             variant="ghost"
             size="sm"

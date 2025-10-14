@@ -53,9 +53,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['rep', 'manager', 'admin'] },
         { name: 'Template Library', href: '/templates', icon: Library, roles: ['rep', 'manager', 'admin'] },
         { name: 'Scenario Builder', href: '/scenario-builder', icon: FileText, roles: ['rep', 'manager', 'admin'] },
+        { name: 'Ivy Scenario Builder', href: '/ivy', icon: Bot, roles: ['rep', 'manager', 'admin'] },
         { name: 'Saved Scenarios', href: '/saved-scenarios', icon: BookOpen, roles: ['rep', 'manager', 'admin'] },
         { name: 'Saved Simulations', href: '/simulations', icon: History, roles: ['rep', 'manager', 'admin'] },
-        { name: 'Ivy', href: '/ivy', icon: Bot, roles: ['rep', 'manager', 'admin'] },
         { name: 'Coach Ivy', href: '/coach-ivy', icon: UserCheck, roles: ['rep', 'manager', 'admin'] },
       ]
     },

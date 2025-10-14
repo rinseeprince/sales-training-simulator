@@ -41,6 +41,7 @@ interface SavedScenario {
   id: string
   title: string
   prompt: string
+  name?: string
   prospect_name?: string
   voice?: string
 }

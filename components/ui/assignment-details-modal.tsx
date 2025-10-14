@@ -32,6 +32,7 @@ interface SavedScenario {
   id: string
   title: string
   prompt: string
+  name?: string
   prospect_name?: string
   duration?: string
   voice?: string
@@ -131,6 +132,7 @@ export function AssignmentDetailsModal({
         localStorage.setItem('selectedIvyScenario', JSON.stringify({
           title: assignment.scenario.title,
           prompt: assignment.scenario.prompt,
+          coachName: assignment.scenario.name || 'Ivy Scenario Builder',
           assignmentId: assignment.id,
           isAssignment: true,
           timestamp: Date.now()

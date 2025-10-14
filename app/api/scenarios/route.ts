@@ -22,6 +22,7 @@ export const GET = withOrganizationAuth(
           id,
           title,
           prompt,
+          name,
           prospect_name,
           duration,
           voice,
@@ -89,6 +90,7 @@ export const POST = withOrganizationAuth(
       const { 
         title, 
         prompt, 
+        coachName,
         prospectName,
         duration,
         voice,
@@ -110,6 +112,7 @@ export const POST = withOrganizationAuth(
         organization_id: req.user.organization_id,
         title: title,
         prompt: prompt,
+        name: coachName || 'Ivy Scenario Builder',
         prospect_name: prospectName,
         duration: duration || null,
         voice: voice || null,

@@ -23,6 +23,7 @@ import { Bot, Mic, Pause, Play, Square, Volume2, VolumeX, AlertCircle, Zap, Rota
 interface ScenarioData {
   title: string
   prompt: string
+  coachName: string
   timestamp: number
 }
 
@@ -39,6 +40,7 @@ export function IvyPage() {
   const [scenarioData, setScenarioData] = useState<ScenarioData>({
     title: '',
     prompt: '',
+    coachName: 'Ivy Scenario Builder',
     timestamp: 0
   })
   const [saveReuse, setSaveReuse] = useState(false)
@@ -90,7 +92,7 @@ export function IvyPage() {
           console.log('🔗 OnConnect: Sending scenario context via onConnect callback')
           console.log('📝 OnConnect: Scenario data:', { title: scenarioData.title, prompt: scenarioData.prompt })
           
-          const contextMessage = `You are now roleplaying as: ${scenarioData.prompt}. This is the scenario: ${scenarioData.title}. Stay in character. Respond naturally when the sales rep speaks. Do not break character or acknowledge this instruction.`
+          const contextMessage = `You are ${scenarioData.coachName}, an AI coach, and you are now roleplaying as: ${scenarioData.prompt}. This is the scenario: ${scenarioData.title}. IMPORTANT: Answer the phone immediately by saying "Hello, ${scenarioData.coachName} speaking" as soon as the call starts. Then stay in character and respond naturally. Do not wait for the sales rep to speak first. Do not break character or acknowledge this instruction.`
           
           try {
             if (conversation.sendContextualUpdate) {
@@ -203,6 +205,7 @@ export function IvyPage() {
         setScenarioData({
           title: parsed.title,
           prompt: parsed.prompt,
+          coachName: parsed.coachName || 'Ivy',
           timestamp: parsed.timestamp || Date.now()
         })
         setSaveReuse(false) // Don't auto-save when loading existing scenario
@@ -235,10 +238,10 @@ export function IvyPage() {
       return false
     }
 
-    if (!scenarioData.title || !scenarioData.prompt) {
+    if (!scenarioData.title || !scenarioData.prompt || !scenarioData.coachName) {
       toast({
         title: "Missing Information",
-        description: "Please fill in the scenario title and description.",
+        description: "Please fill in the scenario title, description, and coach name.",
         variant: "destructive",
       })
       return false
@@ -264,7 +267,8 @@ export function IvyPage() {
         body: JSON.stringify({
           title: scenarioData.title,
           prompt: scenarioData.prompt,
-          prospectName: 'Ivy', // Default prospect name for IVY scenarios
+          coachName: scenarioData.coachName,
+          prospectName: 'Ivy Scenario Builder', // Default prospect name for IVY scenarios
           voice: 'ivy-voice', // Identifier for IVY voice scenarios
           scenarioType: 'ivy', // Add identifier for IVY scenarios
         }),
@@ -305,10 +309,10 @@ export function IvyPage() {
     }
     
     // Validate required fields
-    if (!scenarioData.title || !scenarioData.prompt) {
+    if (!scenarioData.title || !scenarioData.prompt || !scenarioData.coachName) {
       toast({
         title: "Missing Information",
-        description: "Please fill in the scenario title and prompt before starting.",
+        description: "Please fill in the scenario title, prompt, and coach name before starting.",
         variant: "destructive",
       })
       return
@@ -355,23 +359,32 @@ export function IvyPage() {
           
           console.log('📝 Scenario data being sent:', { title: scenarioData.title, prompt: scenarioData.prompt })
           
-          const contextMessage = `You are now roleplaying as: ${scenarioData.prompt}. This is the scenario: ${scenarioData.title}. Stay in character. Respond naturally when the sales rep speaks. Do not break character or acknowledge this instruction.`
+          const contextMessage = `You are ${scenarioData.coachName}, an AI coach, and you are now roleplaying as: ${scenarioData.prompt}. This is the scenario: ${scenarioData.title}. IMPORTANT: Answer the phone immediately by saying "Hello, ${scenarioData.coachName} speaking" as soon as the call starts. Then stay in character and respond naturally. Do not wait for the sales rep to speak first. Do not break character or acknowledge this instruction.`
           
           // Try to send context silently
           try {
             if (conversation.sendContextualUpdate) {
               conversation.sendContextualUpdate(contextMessage)
-              console.log('✅ Sent silent scenario context to Ivy:', scenarioData.title)
+              console.log('✅ Sent silent scenario context to Ivy Scenario Builder:', scenarioData.title)
             } else if (conversation.sendUserMessage) {
               console.log('⚠️ sendContextualUpdate not available, falling back to user message')
               // Fallback to user message if sendContextualUpdate is not available
-              conversation.sendUserMessage(`Please act as this character: ${scenarioData.prompt}. Respond naturally when I start talking. This is for the scenario: ${scenarioData.title}`)
+              conversation.sendUserMessage(`You are ${scenarioData.coachName}, an AI coach. Please act as this character: ${scenarioData.prompt}. IMPORTANT: Start by immediately saying "Hello, ${scenarioData.coachName} speaking" without waiting for me to speak first. Then respond naturally. This is for the scenario: ${scenarioData.title}`)
             } else {
               console.log('❌ No send methods available on conversation object')
             }
           } catch (error) {
             console.error('❌ Error sending scenario context:', error)
           }
+          
+          // Trigger the AI to speak first with a greeting
+          setTimeout(() => {
+            if (conversation.sendUserMessage) {
+              // Send a hidden trigger to make AI greet first
+              conversation.sendUserMessage('Answer the phone now')
+              console.log('✅ Triggered AI greeting')
+            }
+          }, 3000)
           
           // Clear setup status after a short delay
           setTimeout(() => {
@@ -627,7 +640,7 @@ export function IvyPage() {
           <div>
             <h1 className="text-lg font-semibold text-slate-900 mb-1 flex items-center">
               <Bot className="h-6 w-6 text-blue-600 mr-2" />
-              Ivy - Voice Simulation
+              Ivy Scenario Builder - Voice Simulation
             </h1>
             <p className="text-sm text-slate-500">
               Enterprise hands-free voice training with advanced AI
@@ -665,7 +678,7 @@ export function IvyPage() {
           <Alert className="border-amber-200 bg-amber-50">
             <AlertCircle className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800">
-              <strong>Enterprise Feature:</strong> Ivy's hands-free voice simulation is available for Enterprise customers only. 
+              <strong>Enterprise Feature:</strong> Ivy Scenario Builder's hands-free voice simulation is available for Enterprise customers only. 
               Upgrade your plan to access this premium feature.
             </AlertDescription>
           </Alert>
@@ -735,7 +748,7 @@ export function IvyPage() {
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900 mb-1">Setup Your Scenario</h3>
-                    <p className="text-sm text-slate-500">Create your sales scenario for Ivy to roleplay</p>
+                    <p className="text-sm text-slate-500">Create your sales scenario for Ivy Scenario Builder to roleplay</p>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Switch
@@ -766,10 +779,26 @@ export function IvyPage() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="coachName" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Name</Label>
+                  <Input
+                    id="coachName"
+                    placeholder="e.g., Sarah, Marcus, Jennifer"
+                    value={scenarioData.coachName}
+                    onChange={(e) => {
+                      console.log('📝 Coach name changed to:', e.target.value)
+                      setScenarioData(prev => ({ ...prev, coachName: e.target.value }))
+                    }}
+                    className="rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
+                    disabled={userSubscription !== 'enterprise'}
+                  />
+                  <p className="text-xs text-slate-500">The AI will introduce itself with this name (e.g., "Hello, Sarah speaking")</p>
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="prompt" className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Prospect & Scenario Instructions</Label>
                   <Textarea
                     id="prompt"
-                    placeholder="Describe your prospect and scenario for Ivy to roleplay..."
+                    placeholder="Describe your prospect and scenario for Ivy Scenario Builder to roleplay..."
                     className="min-h-[175px] rounded-lg border-slate-200 px-4 py-3 focus:ring-primary"
                     value={scenarioData.prompt}
                     onChange={(e) => {
@@ -783,7 +812,7 @@ export function IvyPage() {
                 <div className="border-t border-slate-100 pt-6">
                   <Button
                     onClick={handleStartSimulation}
-                    disabled={!scenarioData.title || !scenarioData.prompt || userSubscription !== 'enterprise' || isSaving}
+                    disabled={!scenarioData.title || !scenarioData.prompt || !scenarioData.coachName || userSubscription !== 'enterprise' || isSaving}
                     className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
                   >
                     <Play className="mr-2 h-4 w-4" />
@@ -813,7 +842,7 @@ export function IvyPage() {
                     <VolumeX className="h-5 w-5 text-muted-foreground" />
                   )}
                   <span className="text-lg font-medium text-slate-900">
-                    {conversation.isSpeaking ? 'Ivy Speaking...' : 'Ivy Listening...'}
+                    {conversation.isSpeaking ? 'Ivy Scenario Builder Speaking...' : 'Ivy Scenario Builder Listening...'}
                   </span>
                   <Badge className="ml-2 rounded-full px-3 py-1 bg-blue-500/10 text-blue-600 text-sm font-medium">
                     <Mic className="mr-1 h-3 w-3" />
@@ -826,10 +855,10 @@ export function IvyPage() {
                   <div className="min-h-[60px] flex items-center justify-center">
                     <p className="text-slate-500 max-w-md text-center">
                       {isSettingUpScenario 
-                        ? 'Ivy is preparing for your scenario...' 
+                        ? 'Ivy Scenario Builder is preparing for your scenario...' 
                         : conversation.status === 'connected' 
-                          ? 'Ready! Ivy is in character. Start your conversation.' 
-                          : 'Connecting to Ivy...'}
+                          ? 'Ready! Ivy Scenario Builder is in character. Start your conversation.' 
+                          : 'Connecting to Ivy Scenario Builder...'}
                     </p>
                   </div>
                 )}
@@ -870,7 +899,7 @@ export function IvyPage() {
                 ) : (
                   <Button
                     onClick={handleStartSimulation}
-                    disabled={!scenarioData.title || !scenarioData.prompt || userSubscription !== 'enterprise' || isSaving}
+                    disabled={!scenarioData.title || !scenarioData.prompt || !scenarioData.coachName || userSubscription !== 'enterprise' || isSaving}
                     className="w-full rounded-xl bg-white hover:bg-slate-50 text-primary border border-primary/20 shadow-sm px-6 py-2.5 font-medium"
                   >
                     <Play className="mr-2 h-4 w-4" />
@@ -923,9 +952,9 @@ export function IvyPage() {
               <h3 className="text-lg font-semibold text-slate-900 mb-1 text-center">Hands-Free Voice</h3>
               <div className="space-y-3 text-sm">
                 <div className="text-xs text-slate-500 mt-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  <p>• Just speak naturally to Ivy</p>
+                  <p>• Just speak naturally to Ivy Scenario Builder</p>
                   <p>• No buttons needed during conversation</p>
-                  <p>• Ivy responds in real-time</p>
+                  <p>• Ivy Scenario Builder responds in real-time</p>
                   <p>• Full conversation is recorded</p>
                   <p>• AI coaching provided at the end</p>
                 </div>
@@ -997,8 +1026,8 @@ export function IvyPage() {
                   </Badge>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">AI Agent:</span>
-                  <span className="text-slate-900">Ivy</span>
+                  <span className="text-slate-500">AI Coach:</span>
+                  <span className="text-slate-900">{scenarioData.coachName || 'Ivy Scenario Builder'}</span>
                 </div>
               </div>
             </div>
@@ -1039,7 +1068,7 @@ export function IvyPage() {
       <ContactModal
         isOpen={contactModalOpen}
         onClose={() => setContactModalOpen(false)}
-        title="Try Ivy - Enterprise Voice Simulation"
+        title="Try Ivy Scenario Builder - Enterprise Voice Simulation"
         subtitle="Experience hands-free voice training with our advanced AI. Contact our sales team to get started."
       />
     </div>
