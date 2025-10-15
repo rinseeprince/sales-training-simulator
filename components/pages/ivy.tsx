@@ -866,7 +866,7 @@ export function IvyPage() {
                     <VolumeX className="h-5 w-5 text-muted-foreground" />
                   )}
                   <span className="text-lg font-medium text-slate-900">
-                    {conversation.isSpeaking ? 'Ivy Scenario Builder Speaking...' : 'Ivy Scenario Builder Listening...'}
+                    {/* Text indicator removed during simulation */}
                   </span>
                   <Badge className="ml-2 rounded-full px-3 py-1 bg-blue-500/10 text-blue-600 text-sm font-medium">
                     <Mic className="mr-1 h-3 w-3" />
