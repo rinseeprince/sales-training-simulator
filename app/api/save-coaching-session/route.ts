@@ -285,6 +285,32 @@ IMPORTANT GUIDELINES:
 
     console.log('Coaching session saved successfully:', dbData.id);
 
+    // Manually increment simulation count using our dual-tracking API
+    console.log('📊 Incrementing simulation count for coaching session...');
+    try {
+      const incrementResponse = await fetch(new URL('/api/increment-simulation', req.url), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': req.headers.get('authorization') || '',
+          'cookie': req.headers.get('cookie') || ''
+        },
+        body: JSON.stringify({ userId: userId })
+      });
+
+      const incrementData = await incrementResponse.json();
+      
+      if (!incrementData.success) {
+        console.error('Failed to increment simulation count for coaching session:', incrementData.error);
+        // Don't fail the save, just log the error
+      } else {
+        console.log('✅ Simulation count incremented for coaching session');
+      }
+    } catch (incrementError) {
+      console.error('Error incrementing simulation count for coaching session:', incrementError);
+      // Don't fail the save, just log the error
+    }
+
     return successResponse({
       sessionId: sessionId,
       coachingSummary: coachingSummary,

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { authenticateWithOrganization, incrementOrganizationUsage } from '@/lib/organization-middleware';
+import { authenticateUser } from '@/lib/supabase-auth-middleware';
 
 function createSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -26,9 +28,111 @@ export async function POST(request: NextRequest) {
 
     console.log('Incrementing simulation count for user:', userId);
 
+    // Check if this is an organization user
+    const orgAuthRequest = await authenticateWithOrganization(request);
+    
+    if (orgAuthRequest) {
+      // Organization user - implement dual tracking
+      console.log('🏢 Organization user incrementing simulation:', { 
+        userId: orgAuthRequest.user.id, 
+        orgId: orgAuthRequest.organization.id 
+      });
+      
+      const supabaseAdmin = createSupabaseAdmin();
+      
+      // Get current user data
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('simple_users')
+        .select('simulation_count, simulation_limit')
+        .eq('id', orgAuthRequest.user.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error('Failed to find organization user for increment:', userError);
+        return NextResponse.json({ 
+          success: false,
+          error: 'User not found'
+        }, { status: 404 });
+      }
+
+      const userCount = userData.simulation_count || 0;
+      const userLimit = userData.simulation_limit || 10;
+
+      // Check individual user limit
+      if (userCount >= userLimit) {
+        return NextResponse.json({ 
+          success: false,
+          error: 'Personal simulation limit reached',
+          count: userCount,
+          limit: userLimit,
+          remaining: 0
+        });
+      }
+
+      // Check organization limits using existing function
+      const { checkOrganizationLimits } = await import('@/lib/organization-middleware');
+      const orgLimits = await checkOrganizationLimits(orgAuthRequest.organization.id, 'simulations');
+      
+      if (!orgLimits.allowed) {
+        return NextResponse.json({ 
+          success: false,
+          error: 'Organization simulation limit reached',
+          count: userCount,
+          limit: userLimit,
+          remaining: Math.max(0, userLimit - userCount),
+          orgCount: orgLimits.current,
+          orgLimit: orgLimits.max,
+          orgRemaining: 0
+        });
+      }
+
+      // Increment both counters
+      // 1. Increment individual user count
+      const { error: updateError } = await supabaseAdmin
+        .from('simple_users')
+        .update({ 
+          simulation_count: userCount + 1,
+          last_simulation_at: new Date().toISOString()
+        })
+        .eq('id', orgAuthRequest.user.id);
+
+      if (updateError) {
+        console.error('Failed to update user simulation count:', updateError);
+        return NextResponse.json({ 
+          success: false,
+          error: 'Failed to update user count'
+        }, { status: 500 });
+      }
+
+      // 2. Increment organization usage
+      await incrementOrganizationUsage(orgAuthRequest.organization.id, 1);
+
+      return NextResponse.json({ 
+        success: true,
+        count: userCount + 1,
+        limit: userLimit,
+        remaining: Math.max(0, userLimit - (userCount + 1)),
+        orgCount: orgLimits.current + 1,
+        orgLimit: orgLimits.max,
+        orgRemaining: Math.max(0, orgLimits.max - (orgLimits.current + 1))
+      });
+    }
+    
+    // Free user - use existing logic
+    const freeUserAuth = await authenticateUser(request);
+    
+    if (!freeUserAuth) {
+      return NextResponse.json({ 
+        success: false,
+        error: 'Unauthorized - please sign in'
+      }, { status: 401 });
+    }
+
+    console.log('🆓 Free user incrementing simulation:', { userId: freeUserAuth.user.id });
+
     const supabaseAdmin = createSupabaseAdmin();
 
-    // First try the database function
+    // First try the database function for free users
     const { data: rpcData, error: rpcError } = await supabaseAdmin
       .rpc('increment_simulation_count', { user_id: userId });
 
@@ -44,23 +148,20 @@ export async function POST(request: NextRequest) {
 
       if (queryError || !userData) {
         console.error('Failed to find user for increment:', queryError);
-        // For new users, still allow the simulation but log the issue
         return NextResponse.json({ 
           success: true,
           count: 1,
-          limit: 2,
-          remaining: 1,
+          limit: 10,
+          remaining: 9,
           message: 'Simulation started (new user)'
         });
       }
 
-      // Check if user has reached limit (for free users)
+      // Check if user has reached limit (10 for all users)
       const count = userData.simulation_count || 0;
-      const limit = userData.simulation_limit || 2; // Default to 2 for new free users
-      const isPaid = userData.subscription_status === 'paid' || userData.subscription_status === 'trial';
-      const isEnterprise = userData.subscription_status === 'enterprise';
+      const limit = userData.simulation_limit || 10;
       
-      if (!isPaid && !isEnterprise && count >= limit) {
+      if (count >= limit) {
         return NextResponse.json({ 
           success: false,
           error: 'Simulation limit reached',
@@ -86,8 +187,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         success: true,
         count: count + 1,
-        limit: isEnterprise ? -1 : limit,
-        remaining: (isPaid || isEnterprise) ? -1 : Math.max(0, limit - (count + 1))
+        limit: limit,
+        remaining: Math.max(0, limit - (count + 1))
       });
     }
 

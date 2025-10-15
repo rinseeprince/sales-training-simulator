@@ -12,6 +12,7 @@ import { AudioWaveform } from '@/components/ui/audio-waveform'
 import { CoachingReportModal } from '@/components/ui/coaching-report-modal'
 import { ContactModal } from '@/components/ui/contact-modal'
 import { useToast } from '@/hooks/use-toast'
+import { useSimulationLimit } from '@/hooks/use-simulation-limit'
 import { getPhoneRingGenerator } from '@/lib/phone-ring-generator'
 import { useRouter } from 'next/navigation'
 import { Bot, Mic, Pause, Play, Square, Volume2, VolumeX, AlertCircle, Zap, RotateCcw, WifiOff, Wifi, MessageSquare, User } from 'lucide-react'
@@ -27,6 +28,7 @@ export function CoachIvyPage() {
   const { user } = useSupabaseAuth()
   const router = useRouter()
   const { toast } = useToast()
+  const { checkSimulationLimit } = useSimulationLimit()
   
   // Subscription and access control
   const [userSubscription, setUserSubscription] = useState<'free' | 'paid' | 'enterprise' | null>(null)
@@ -147,6 +149,28 @@ export function CoachIvyPage() {
   
   const handleStartSession = async () => {
     console.log('🚀 Starting Coach Ivy session')
+    
+    // Check simulation limits first
+    console.log('🔍 Checking simulation limits for Coach Ivy...')
+    const limitData = await checkSimulationLimit()
+    
+    if (!limitData) {
+      toast({
+        title: "Error",
+        description: "Unable to verify simulation limits. Please try again.",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    if (!limitData.canSimulate) {
+      toast({
+        title: "Simulation Limit Reached",
+        description: limitData.message || "You've reached your simulation limit. Upgrade to continue practicing!",
+        variant: "destructive"
+      })
+      return
+    }
     
     // Check if user is enterprise - if not, show contact modal
     if (userSubscription !== 'enterprise') {

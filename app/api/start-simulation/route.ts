@@ -1,12 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai, errorResponse, successResponse, validateEnvVars, corsHeaders, handleCors } from '@/lib/api-utils';
 import { generateGoogleTTSAudio } from '@/lib/google-tts';
+import { authenticateWithOrganization } from '@/lib/organization-middleware';
+import { authenticateUser } from '@/lib/supabase-auth-middleware';
 
 export async function POST(req: NextRequest) {
   try {
     // Handle CORS
     const corsResponse = handleCors(req);
     if (corsResponse) return corsResponse;
+
+    // Check authentication and simulation limits
+    const orgAuthRequest = await authenticateWithOrganization(req);
+    
+    // Use the unified check-simulation-limit endpoint for both org and free users
+    const checkLimitResponse = await fetch(new URL('/api/check-simulation-limit', req.url), {
+      method: 'GET',
+      headers: {
+        'authorization': req.headers.get('authorization') || '',
+        'cookie': req.headers.get('cookie') || ''
+      }
+    });
+    
+    if (checkLimitResponse.ok) {
+      const limitData = await checkLimitResponse.json();
+      if (!limitData.canSimulate) {
+        return errorResponse(limitData.message || 'Simulation limit reached');
+      }
+    } else {
+      return errorResponse('Unable to verify simulation limits. Please try again.');
+    }
 
     // Validate environment variables
     validateEnvVars();

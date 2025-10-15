@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const orgAuthRequest = await authenticateWithOrganization(request);
     
     if (orgAuthRequest) {
-      // User has organization - use organization-based limits
+      // User has organization - check BOTH organization AND individual limits
       const organization = orgAuthRequest.organization;
       const user = orgAuthRequest.user;
       
@@ -31,39 +31,57 @@ export async function GET(request: NextRequest) {
         tier: organization.subscription_tier 
       });
       
-      // Check if this is an enterprise organization
-      const isEnterprise = organization.subscription_tier === 'enterprise';
+      // Check organization simulation limits
+      const orgLimits = await checkOrganizationLimits(organization.id, 'simulations');
       
-      if (isEnterprise) {
-        // Enterprise users get unlimited simulations
+      // Check individual user limits from simple_users table
+      const supabase = createSupabaseAdmin();
+      const { data: userData, error: userError } = await supabase
+        .from('simple_users')
+        .select('simulation_count, simulation_limit')
+        .eq('id', user.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error('Failed to fetch user data for org user:', userError);
         return NextResponse.json({ 
-          success: true,
-          canSimulate: true,
-          count: 0,
-          limit: -1,
-          remaining: -1,
-          is_paid: true,
-          message: 'Enterprise account - unlimited simulations'
-        });
+          success: false,
+          error: 'Failed to fetch user limits'
+        }, { status: 500 });
       }
-      
-      // For non-enterprise organizations, check organization simulation limits
-      const limits = await checkOrganizationLimits(organization.id, 'simulations');
-      
-      const canSimulate = limits.allowed;
-      const count = limits.current;
-      const limit = limits.max;
-      const remaining = Math.max(0, limit - count);
+
+      const userCount = userData.simulation_count || 0;
+      const userLimit = userData.simulation_limit || 10;
+      const userCanSimulate = userCount < userLimit;
+      const userRemaining = Math.max(0, userLimit - userCount);
+
+      // Both limits must allow simulation
+      const canSimulate = orgLimits.allowed && userCanSimulate;
       const isPaid = organization.subscription_tier === 'paid' || organization.subscription_tier === 'trial';
+      
+      // Determine which limit is more restrictive for display
+      let message = null;
+      if (!canSimulate) {
+        if (!orgLimits.allowed && !userCanSimulate) {
+          message = `Both organization and personal simulation limits reached. Org: ${orgLimits.current}/${orgLimits.max}, Personal: ${userCount}/${userLimit}`;
+        } else if (!orgLimits.allowed) {
+          message = `Organization simulation limit reached (${orgLimits.current}/${orgLimits.max}). Please contact your admin.`;
+        } else {
+          message = `Personal simulation limit reached (${userCount}/${userLimit}). You've used all your monthly simulations.`;
+        }
+      }
       
       return NextResponse.json({ 
         success: true,
         canSimulate,
-        count,
-        limit,
-        remaining,
+        count: userCount, // Show user's personal count
+        limit: userLimit, // Show user's personal limit
+        remaining: userRemaining, // Show user's remaining
+        orgCount: orgLimits.current,
+        orgLimit: orgLimits.max,
+        orgRemaining: Math.max(0, orgLimits.max - orgLimits.current),
         is_paid: isPaid,
-        message: !canSimulate ? 'Your organization has reached its simulation limit for this month. Please contact your admin or upgrade.' : null
+        message
       });
     }
     
