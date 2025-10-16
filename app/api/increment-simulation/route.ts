@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { authenticateWithOrganization, incrementOrganizationUsage } from '@/lib/organization-middleware';
+import { authenticateWithOrganization } from '@/lib/organization-middleware';
 import { authenticateUser } from '@/lib/supabase-auth-middleware';
 
 function createSupabaseAdmin() {
@@ -69,24 +69,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Check organization limits using existing function
-      const { checkOrganizationLimits } = await import('@/lib/organization-middleware');
-      const orgLimits = await checkOrganizationLimits(orgAuthRequest.organization.id, 'simulations');
-      
-      if (!orgLimits.allowed) {
-        return NextResponse.json({ 
-          success: false,
-          error: 'Organization simulation limit reached',
-          count: userCount,
-          limit: userLimit,
-          remaining: Math.max(0, userLimit - userCount),
-          orgCount: orgLimits.current,
-          orgLimit: orgLimits.max,
-          orgRemaining: 0
-        });
-      }
-
-      // Increment both counters
+      // Only increment user counter (no organization tracking)
       // 1. Increment individual user count
       const { error: updateError } = await supabaseAdmin
         .from('simple_users')
@@ -104,16 +87,11 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
       }
 
-      // 2. Increment organization usage
-      await incrementOrganizationUsage(orgAuthRequest.organization.id, 1);
-
       return NextResponse.json({ 
         success: true,
         count: userCount + 1,
         limit: userLimit,
         remaining: Math.max(0, userLimit - (userCount + 1)),
-        orgCount: orgLimits.current + 1,
-        orgLimit: orgLimits.max,
         orgRemaining: Math.max(0, orgLimits.max - (orgLimits.current + 1))
       });
     }

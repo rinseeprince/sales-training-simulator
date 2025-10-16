@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withOrganizationAuth, authenticateWithOrganization } from '@/lib/organization-middleware';
-import { checkOrganizationLimits } from '@/lib/organization-middleware';
+import { authenticateWithOrganization } from '@/lib/organization-middleware';
 import { authenticateUser } from '@/lib/supabase-auth-middleware';
 import { createClient } from '@supabase/supabase-js';
 
@@ -21,7 +20,7 @@ export async function GET(request: NextRequest) {
     const orgAuthRequest = await authenticateWithOrganization(request);
     
     if (orgAuthRequest) {
-      // User has organization - check BOTH organization AND individual limits
+      // User has organization - check ONLY individual limits
       const organization = orgAuthRequest.organization;
       const user = orgAuthRequest.user;
       
@@ -30,9 +29,6 @@ export async function GET(request: NextRequest) {
         orgId: organization.id,
         tier: organization.subscription_tier 
       });
-      
-      // Check organization simulation limits
-      const orgLimits = await checkOrganizationLimits(organization.id, 'simulations');
       
       // Check individual user limits from simple_users table
       const supabase = createSupabaseAdmin();
@@ -52,34 +48,22 @@ export async function GET(request: NextRequest) {
 
       const userCount = userData.simulation_count || 0;
       const userLimit = userData.simulation_limit || 10;
-      const userCanSimulate = userCount < userLimit;
+      const canSimulate = userCount < userLimit;
       const userRemaining = Math.max(0, userLimit - userCount);
-
-      // Both limits must allow simulation
-      const canSimulate = orgLimits.allowed && userCanSimulate;
-      const isPaid = organization.subscription_tier === 'paid' || organization.subscription_tier === 'trial';
+      const isPaid = organization.subscription_tier === 'paid' || organization.subscription_tier === 'trial' || organization.subscription_tier === 'enterprise';
       
-      // Determine which limit is more restrictive for display
+      // Simple message for user limits only
       let message = null;
       if (!canSimulate) {
-        if (!orgLimits.allowed && !userCanSimulate) {
-          message = `Both organization and personal simulation limits reached. Org: ${orgLimits.current}/${orgLimits.max}, Personal: ${userCount}/${userLimit}`;
-        } else if (!orgLimits.allowed) {
-          message = `Organization simulation limit reached (${orgLimits.current}/${orgLimits.max}). Please contact your admin.`;
-        } else {
-          message = `Personal simulation limit reached (${userCount}/${userLimit}). You've used all your monthly simulations.`;
-        }
+        message = `Personal simulation limit reached (${userCount}/${userLimit}). You've used all your simulations.`;
       }
       
       return NextResponse.json({ 
         success: true,
         canSimulate,
-        count: userCount, // Show user's personal count
-        limit: userLimit, // Show user's personal limit
-        remaining: userRemaining, // Show user's remaining
-        orgCount: orgLimits.current,
-        orgLimit: orgLimits.max,
-        orgRemaining: Math.max(0, orgLimits.max - orgLimits.current),
+        count: userCount,
+        limit: userLimit,
+        remaining: userRemaining,
         is_paid: isPaid,
         message
       });
